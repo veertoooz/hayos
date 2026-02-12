@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="wallpaperApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Wallpaper</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full">
+  <div class="max-w-5xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-xl font-semibold" x-text="t('title')"></h1>
+          <p class="text-sm opacity-70" x-text="t('description')"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5">
+      <div class="text-sm">
+        <span class="font-semibold" x-text="`${t('statusLabel')}:`"></span>
+        <span x-text="status"></span>
+      </div>
+      <div class="mt-2 text-sm">
+        <span class="font-semibold" x-text="`${t('themeLabel')}:`"></span>
+        <span x-text="osTheme || '(not resolved)'"></span>
+      </div>
+      <div class="mt-2 text-sm">
+        <span class="font-semibold" x-text="`${t('languageLabel')}:`"></span>
+        <span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span>
+      </div>
+      <div class="mt-2 text-sm" x-show="user">
+        <span class="font-semibold" x-text="`${t('userLabel')}:`"></span>
+        <span x-text="user?.email || user?.displayName || user?.uid"></span>
+      </div>
+      <div class="mt-3 text-error text-sm" x-show="error" x-text="error"></div>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5" x-show="!loading">
+      <h2 class="font-semibold mb-3" x-text="t('wallpaperTitle')"></h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <template x-for="preset in presets" :key="preset.id">
+          <button
+            class="card border border-base-300 overflow-hidden text-left"
+            :class="selectedPresetId === preset.id ? 'ring ring-primary ring-offset-1' : ''"
+            @click="selectPreset(preset)"
+            type="button"
+          >
+            <div class="h-20" :style="`background:${preset.value}`"></div>
+            <div class="p-2 text-sm font-medium" x-text="preset.name"></div>
+          </button>
+        </template>
+      </div>
+
+      <div class="divider my-5" x-text="t('liveSectionTitle')"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <template x-for="provider in liveProviders" :key="provider.id">
+          <button
+            class="card border border-base-300 p-3 text-left"
+            :class="wallpaperMode === 'live' && selectedLiveProviderId === provider.id ? 'ring ring-primary ring-offset-1' : ''"
+            @click="selectLiveProvider(provider.id)"
+            type="button"
+          >
+            <div class="font-medium" x-text="provider.name"></div>
+            <div class="text-xs opacity-70" x-text="provider.id"></div>
+          </button>
+        </template>
+        <div class="text-sm opacity-70" x-show="liveProviders.length === 0" x-text="t('noLiveProviders')"></div>
+      </div>
+
+      <div class="mt-5 flex flex-col gap-3 md:flex-row md:items-center">
+        <label class="form-control w-full md:max-w-sm">
+          <div class="label"><span class="label-text" x-text="t('uploadLabel')"></span></div>
+          <input type="file" accept="image/*" class="file-input file-input-bordered w-full" @change="onUpload($event)" />
+        </label>
+
+        <label class="form-control w-full md:max-w-[220px]">
+          <div class="label"><span class="label-text" x-text="t('fitLabel')"></span></div>
+          <select class="select select-bordered" x-model="fitMode">
+            <option value="cover">Cover</option>
+            <option value="contain">Contain</option>
+            <option value="fill">Fill</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="mt-5 card border border-base-300 bg-base-100 overflow-hidden">
+        <div class="h-40" :style="previewStyle"></div>
+      </div>
+
+      <div class="mt-5 flex gap-2 flex-wrap">
+        <button class="btn btn-primary" :disabled="saving || (wallpaperMode === 'live' && !selectedLiveProviderId)" @click="saveWallpaper()" x-text="t('applyBtn')"></button>
+        <button class="btn" :disabled="saving" @click="resetWallpaper()" x-text="t('resetBtn')"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function wallpaperApp() {
+      const parseWallpaper = (value) => {
+        if (typeof value === 'string') {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        }
+        if (value && typeof value === 'object') {
+          return value;
+        }
+        return null;
+      };
+
+      const defaultWallpaper = {
+        type: 'gradient',
+        value: 'linear-gradient(135deg, #fca311, #ff4d6d 45%, #5a189a)',
+        fit: 'cover',
+      };
+
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'wallpaper',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        saving: false,
+        selectedPresetId: 'sunrise',
+        wallpaperMode: 'static',
+        selectedLiveProviderId: '',
+        fitMode: 'cover',
+        draftWallpaper: { ...defaultWallpaper },
+        liveProviders: [],
+        presets: [
+          {
+            id: 'sunrise',
+            name: 'Sunrise',
+            value: 'linear-gradient(135deg, #fca311, #ff4d6d 45%, #5a189a)',
+          },
+          {
+            id: 'ocean',
+            name: 'Ocean',
+            value: 'linear-gradient(160deg, #0f172a, #1d4ed8 45%, #06b6d4)',
+          },
+          {
+            id: 'forest',
+            name: 'Forest',
+            value: 'linear-gradient(140deg, #14532d, #3f6212 45%, #0f766e)',
+          },
+        ],
+        i18n: {
+          en: {
+            pageTitle: 'Wallpaper',
+            title: 'Wallpaper',
+            description: 'Choose desktop background from presets or upload an image.',
+            statusLabel: 'Status',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            wallpaperTitle: 'Wallpaper Settings',
+            liveSectionTitle: 'Live Wallpapers',
+            noLiveProviders: 'No live wallpaper providers found.',
+            uploadLabel: 'Upload image',
+            fitLabel: 'Fit',
+            applyBtn: 'Apply',
+            resetBtn: 'Reset default',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusReady: 'Ready',
+            statusSaving: 'Saving...',
+            statusSaved: 'Saved',
+            statusFailed: 'Failed',
+            imageTypeError: 'Please choose an image file.',
+            imageSizeError: 'Image is too large. Max 4MB.',
+          },
+          hy: {
+            pageTitle: 'Պաստառ',
+            title: 'Պաստառ',
+            description: 'Ընտրիր աշխատասեղանի ֆոն՝ preset-ներից կամ նկարի բեռնումով։',
+            statusLabel: 'Կարգավիճակ',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            wallpaperTitle: 'Պաստառի կարգավորումներ',
+            liveSectionTitle: 'Կենդանի պաստառներ',
+            noLiveProviders: 'Կենդանի պաստառի մատակարար չի գտնվել։',
+            uploadLabel: 'Նկարի բեռնում',
+            fitLabel: 'Տեղավորում',
+            applyBtn: 'Կիրառել',
+            resetBtn: 'Վերականգնել default',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusReady: 'Պատրաստ է',
+            statusSaving: 'Պահվում է...',
+            statusSaved: 'Պահվեց',
+            statusFailed: 'Սխալ',
+            imageTypeError: 'Խնդրում ենք ընտրել նկարի ֆայլ։',
+            imageSizeError: 'Նկարը մեծ է։ Առավելագույնը 4MB։',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        get previewStyle() {
+          if (this.wallpaperMode === 'live') {
+            return 'background:linear-gradient(135deg,var(--color-primary),var(--color-accent));';
+          }
+          if (this.draftWallpaper.type === 'image') {
+            const size = this.fitMode === 'fill' ? '100% 100%' : this.fitMode;
+            return `background-image:url('${this.draftWallpaper.value}');background-size:${size};background-position:center;background-repeat:no-repeat;`;
+          }
+          return `background:${this.draftWallpaper.value};`;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'wallpaper';
+            this.client = new HayOSClient(this.appId);
+
+            this.status = this.t('statusAuthCheck');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            await this.loadOsTheme();
+            await this.loadLiveProviders();
+            const current = await this.client.getModuleValue('ui.wallpaper');
+            const parsedCurrent = parseWallpaper(current);
+            if (parsedCurrent && parsedCurrent.type === 'liveApp' && typeof parsedCurrent.appId === 'string') {
+              this.wallpaperMode = 'live';
+              this.selectedLiveProviderId = parsedCurrent.appId;
+            } else if (parsedCurrent && typeof parsedCurrent.value === 'string') {
+              this.wallpaperMode = 'static';
+              this.draftWallpaper = {
+                type: parsedCurrent.type === 'image' ? 'image' : 'gradient',
+                value: parsedCurrent.value,
+                fit: parsedCurrent.fit === 'contain' || parsedCurrent.fit === 'fill' ? parsedCurrent.fit : 'cover',
+              };
+              this.fitMode = this.draftWallpaper.fit || 'cover';
+            }
+
+            this.status = this.t('statusReady');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch {
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async loadLiveProviders() {
+          if (!this.client || typeof this.client.listApps !== 'function') {
+            this.liveProviders = [];
+            return;
+          }
+          try {
+            const apps = await this.client.listApps('wallpaperProvider');
+            const ownAppId = this.appId;
+            this.liveProviders = (Array.isArray(apps) ? apps : [])
+              .filter((item) => item && typeof item.id === 'string' && item.id !== ownAppId);
+          } catch {
+            this.liveProviders = [];
+          }
+        },
+
+        selectPreset(preset) {
+          this.wallpaperMode = 'static';
+          this.selectedPresetId = preset.id;
+          this.draftWallpaper = {
+            type: 'gradient',
+            value: preset.value,
+            fit: 'cover',
+          };
+          this.fitMode = 'cover';
+        },
+
+        selectLiveProvider(appId) {
+          this.wallpaperMode = 'live';
+          this.selectedLiveProviderId = appId;
+        },
+
+        async onUpload(event) {
+          const file = event?.target?.files?.[0];
+          if (!file) return;
+          if (!file.type.startsWith('image/')) {
+            this.error = this.t('imageTypeError');
+            return;
+          }
+          if (file.size > 4 * 1024 * 1024) {
+            this.error = this.t('imageSizeError');
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            const value = typeof reader.result === 'string' ? reader.result : '';
+            if (!value) return;
+            this.error = '';
+            this.wallpaperMode = 'static';
+            this.selectedPresetId = '';
+            this.draftWallpaper = {
+              type: 'image',
+              value,
+              fit: this.fitMode,
+            };
+          };
+          reader.readAsDataURL(file);
+        },
+
+        async saveWallpaper() {
+          if (!this.client || this.saving) return;
+          this.saving = true;
+          this.error = '';
+          this.status = this.t('statusSaving');
+
+          const payload = this.wallpaperMode === 'live'
+            ? {
+              type: 'liveApp',
+              appId: this.selectedLiveProviderId,
+              mode: 'wallpaper',
+              updatedAt: new Date().toISOString(),
+            }
+            : {
+              type: this.draftWallpaper.type === 'image' ? 'image' : 'gradient',
+              value: this.draftWallpaper.value,
+              fit: this.fitMode,
+              updatedAt: new Date().toISOString(),
+            };
+
+          if (this.wallpaperMode === 'live' && !this.selectedLiveProviderId) {
+            this.error = this.t('noLiveProviders');
+            this.status = this.t('statusFailed');
+            this.saving = false;
+            return;
+          }
+
+          try {
+            await this.client.firestoreUpdate('space', 'wallpaper', {
+              wallpaper: JSON.stringify(payload),
+              wallpaperUpdatedAt: payload.updatedAt,
+            });
+
+            window.parent.postMessage({ type: 'hayos:appSpaceChanged' }, '*');
+            window.parent.postMessage({
+              type: 'hayos:systemEvent',
+              event: 'wallpaperChanged',
+              payload: { wallpaper: payload },
+            }, '*');
+
+            this.status = this.t('statusSaved');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          } finally {
+            this.saving = false;
+          }
+        },
+
+        async resetWallpaper() {
+          this.wallpaperMode = 'static';
+          this.selectedLiveProviderId = '';
+          this.draftWallpaper = { ...defaultWallpaper };
+          this.fitMode = 'cover';
+          await this.saveWallpaper();
+        },
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="marketplace()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketplace</title>
+  
+  <!-- 1. Load Tailwind CSS v4 Browser Script FIRST -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  <!-- 2. Load daisyUI v5 Core Styles -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  
+  <!-- 3. Load daisyUI v5 Additional Themes (for Halloween, etc.) -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [
+          require('daisyui')
+        ],
+        daisyui: {
+          themes: true, // Enable all default themes
+        }
+      }
+    }
+  </script>
+  <!-- <style>
+    body {}
+
+    .glass-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 18px;
+    }
+
+    .app-card {
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(30, 41, 59, 0.65);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .app-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.45);
+    }
+
+    .category-pill {
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #bfdbfe;
+    }
+  </style> -->
+</head>
+
+<body class="h-full">
+  <div class="max-w-6xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card p-5 flex flex-col gap-4">
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-[240px]">
+          <input type="text" class="input input-bordered w-full" placeholder="Որոնել հավելվածներ..."
+            x-model="searchQuery" @input.debounce.250ms="filterApps" :placeholder="t('searchPlaceholder')" />
+        </div>
+        <button class="btn" @click="refresh()" x-text="t('refreshBtn')"></button>
+      </div>
+    </div>
+
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" x-show="!loading">
+      <template x-for="app in filteredApps" :key="app.id">
+        <div class="card bg-base-200 shadow-lg shadow-secondary p-5">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-lg font-semibold" x-text="app.name || app.id"></div>
+              <div class="text-sm text-slate-300" x-text="app.description || t('missingDescription')"></div>
+            </div>
+            <div class="category-pill" x-text="app.category || t('generalCategory')"></div>
+          </div>
+          <div class="mt-4 text-xs text-slate-300" x-text="`${t('versionLabel')}: ${app.version || '1.0.0'}`"></div>
+          <div class="mt-4">
+            <button
+              class="btn w-full"
+              :class="isInstalled(app.id) ? 'btn-outline btn-error' : 'btn-primary'"
+              :disabled="isPending(app.id)"
+              @click="handleInstallAction(app.id)"
+              x-text="buttonLabel(app.id)">
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="mt-6 text-center text-sm text-slate-300" x-show="!loading && filteredApps.length === 0">
+      <span x-show="searchQuery" x-text="`${t('noResultsPrefix')} ${searchQuery}`"></span>
+      <span x-show="!searchQuery" x-text="t('emptyStore')"></span>
+    </div>
+
+    <div class="mt-6 text-center text-sm text-red-400" x-show="error" x-text="error"></div>
+  </div>
+
+  <script>
+    function marketplace() {
+      return {
+        loading: true,
+        error: '',
+        status: 'Loading...',
+        apps: [],
+        filteredApps: [],
+        searchQuery: '',
+        installedApps: {},
+        installedDocIds: {},
+        pendingActions: {},
+        client: null,
+        language: 'en',
+        osTheme: '',
+        i18n: {
+          en: {
+            loadingStatus: 'Loading...',
+            loadedStatus: 'Ready',
+            errorStatus: 'Failed',
+            searchPlaceholder: 'Search apps...',
+            refreshBtn: 'Refresh',
+            missingDescription: 'Description is missing',
+            generalCategory: 'General',
+            versionLabel: 'Version',
+            noResultsPrefix: 'No results for',
+            emptyStore: 'No apps in store yet',
+            uninstalling: 'Uninstalling...',
+            installing: 'Installing...',
+            uninstall: 'Uninstall',
+            install: 'Install',
+          },
+          hy: {
+            loadingStatus: 'Բեռնվում է...',
+            loadedStatus: 'Բեռնված է',
+            errorStatus: 'Սխալ',
+            searchPlaceholder: 'Որոնել հավելվածներ...',
+            refreshBtn: 'Թարմացնել',
+            missingDescription: 'Բացակայում է նկարագրությունը',
+            generalCategory: 'Ընդհանուր',
+            versionLabel: 'Տարբերակ',
+            noResultsPrefix: 'Արդյունք չկա',
+            emptyStore: 'Խանութում դեռ հավելվածներ չկան',
+            uninstalling: 'Հեռացվում է...',
+            installing: 'Տեղադրվում է...',
+            uninstall: 'Հեռացնել',
+            install: 'Տեղադրել',
+          },
+        },
+        fallbackOsExports: {
+          saryan: [{ key: 'ui.theme', sourceField: 'selectedTheme', valueType: 'string' }],
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            const appId = urlParams.get('appId') || 'app-store';
+            this.client = new HayOSClient(appId);
+            this.status = this.t('loadingStatus');
+            await this.client.ensureAuthenticated();
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            this.status = this.t('loadedStatus');
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('errorStatus');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async refresh() {
+          this.error = '';
+          try {
+            const storeApps = await this.client.firestoreQuery('systemStore');
+            this.apps = Array.isArray(storeApps) ? storeApps : [];
+            await this.loadOsTheme();
+            const installedState = await this.loadInstalledAppIds();
+            this.resetInstalledApps(installedState.installedIds, installedState.docIds);
+            this.filterApps();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async loadOsTheme() {
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        filterApps() {
+          const query = this.searchQuery.trim().toLowerCase();
+          if (!query) {
+            this.filteredApps = [...this.apps];
+            return;
+          }
+          this.filteredApps = this.apps.filter((app) => {
+            const name = (app.name || '').toLowerCase();
+            const desc = (app.description || '').toLowerCase();
+            return name.includes(query) || desc.includes(query);
+          });
+        },
+
+        async loadInstalledAppIds() {
+          try {
+            const installedApps = await this.client.firestoreQuery('installedApps');
+            if (!Array.isArray(installedApps)) {
+              return { installedIds: new Set(), docIds: {} };
+            }
+
+            const installedIds = new Set();
+            const docIds = {};
+            installedApps.forEach((installedApp) => {
+              const appId =
+                typeof installedApp?.appId === 'string'
+                  ? installedApp.appId
+                  : typeof installedApp?.id === 'string'
+                    ? installedApp.id
+                    : '';
+
+              if (appId) {
+                installedIds.add(appId);
+                docIds[appId] =
+                  typeof installedApp?.id === 'string' ? installedApp.id : appId;
+              }
+            });
+            return { installedIds, docIds };
+          } catch (error) {
+            console.warn('Failed to load installed apps:', error);
+            return { installedIds: new Set(), docIds: {} };
+          }
+        },
+
+        resetInstalledApps(installedAppIds = new Set(), docIds = {}) {
+          this.installedApps = {};
+          this.installedDocIds = { ...docIds };
+          this.pendingActions = {};
+          this.apps.forEach((app) => {
+            this.installedApps[app.id] = installedAppIds.has(app.id);
+          });
+        },
+
+        isInstalled(appId) {
+          return Boolean(this.installedApps[appId]);
+        },
+
+        getAppById(appId) {
+          return this.apps.find((app) => app.id === appId) || null;
+        },
+
+        getOsExportsForApp(appId) {
+          const app = this.getAppById(appId);
+          if (Array.isArray(app?.osExports) && app.osExports.length > 0) {
+            return app.osExports
+              .filter((entry) =>
+                entry &&
+                typeof entry.key === 'string' &&
+                typeof entry.sourceField === 'string' &&
+                (entry.valueType === 'string' || entry.valueType === 'number' || entry.valueType === 'timestamp'),
+              )
+              .map((entry) => ({
+                key: entry.key,
+                sourceField: entry.sourceField,
+                valueType: entry.valueType,
+              }));
+          }
+          return this.fallbackOsExports[appId] || [];
+        },
+
+        isPending(appId) {
+          return Boolean(this.pendingActions[appId]);
+        },
+
+        buttonLabel(appId) {
+          if (this.isPending(appId)) {
+            return this.isInstalled(appId) ? this.t('uninstalling') : this.t('installing');
+          }
+          return this.isInstalled(appId) ? this.t('uninstall') : this.t('install');
+        },
+
+        async handleInstallAction(appId) {
+          if (!appId || this.isPending(appId)) {
+            return;
+          }
+
+          this.pendingActions[appId] = true;
+          this.error = '';
+          try {
+            if (this.isInstalled(appId)) {
+              await this.uninstallApp(appId);
+            } else {
+              await this.installApp(appId);
+            }
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          } finally {
+            this.pendingActions[appId] = false;
+          }
+        },
+
+        async installApp(appId) {
+          const nowIso = new Date().toISOString();
+          const payload = {
+            appId,
+            installedAt: nowIso,
+            isFavorite: false,
+          };
+          const osExports = this.getOsExportsForApp(appId);
+
+          await this.client.firestoreUpdate('installedApps', appId, payload);
+          await this.client.firestoreUpdate('space', appId, {
+            appId,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          });
+          for (const binding of osExports) {
+            await this.client.firestoreUpdate('osBindings', binding.key, {
+              key: binding.key,
+              providerAppId: appId,
+              sourceCollection: 'space',
+              sourceDocumentId: appId,
+              sourceField: binding.sourceField,
+              valueType: binding.valueType,
+            });
+          }
+          this.installedApps[appId] = true;
+          this.installedDocIds[appId] = appId;
+          await this.loadOsTheme();
+          this.notifyInstalledAppsChanged('install', appId);
+        },
+
+        async uninstallApp(appId) {
+          const documentId = this.installedDocIds[appId] || appId;
+          const bindings = await this.client.firestoreQuery('osBindings');
+          if (Array.isArray(bindings)) {
+            for (const binding of bindings) {
+              const providerAppId =
+                typeof binding?.providerAppId === 'string' ? binding.providerAppId : '';
+              if (providerAppId !== appId) {
+                continue;
+              }
+              const bindingId =
+                typeof binding?.id === 'string'
+                  ? binding.id
+                  : typeof binding?.key === 'string'
+                    ? binding.key
+                    : '';
+              if (bindingId) {
+                await this.client.firestoreDelete('osBindings', bindingId);
+              }
+            }
+          }
+          await this.client.firestoreDelete('installedApps', documentId);
+          this.installedApps[appId] = false;
+          delete this.installedDocIds[appId];
+          await this.loadOsTheme();
+          this.notifyInstalledAppsChanged('uninstall', appId);
+        },
+
+        notifyInstalledAppsChanged(action, appId) {
+          window.parent.postMessage(
+            {
+              type: 'hayos:installedAppsChanged',
+              sourceAppId: 'app-store',
+              action,
+              appId,
+              at: Date.now(),
+            },
+            '*',
+          );
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

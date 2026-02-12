@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="koryoonApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Koryoon</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+<style>
+  .koryoon-fullscreen {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    function loadKoryoonRuntime() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const runtimeUrl = isLocalhost ? 'http://localhost:5174/dist/koryoon.min.js' : '/koryoon.min.js';
+      return new Promise((resolve, reject) => {
+        if (window.Koryoon && typeof window.Koryoon.init === 'function') {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = runtimeUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load Koryoon runtime from ${runtimeUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full w-full">
+  <div class="max-w-5xl mx-auto px-4 py-6 h-full" x-cloak x-show="!isWallpaperMode">
+    <div class="card bg-base-200 shadow p-5">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-xl font-semibold" x-text="t('title')"></h1>
+          <p class="text-sm opacity-70" x-text="t('description')"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5">
+      <div class="text-sm"><span class="font-semibold" x-text="`${t('statusLabel')}:`"></span> <span x-text="status"></span></div>
+      <div class="mt-2 text-sm"><span class="font-semibold" x-text="`${t('themeLabel')}:`"></span> <span x-text="osTheme || '(not resolved)'"></span></div>
+      <div class="mt-2 text-sm"><span class="font-semibold" x-text="`${t('languageLabel')}:`"></span> <span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span></div>
+      <div class="mt-2 text-sm" x-show="user"><span class="font-semibold" x-text="`${t('userLabel')}:`"></span> <span x-text="user?.email || user?.displayName || user?.uid"></span></div>
+      <div class="mt-3 text-error text-sm" x-show="error" x-text="error"></div>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-3 h-[55vh]">
+      <div id="koryoon-container" class="w-full h-full"></div>
+    </div>
+
+    <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50" x-show="activeNode && activeNode.actions && activeNode.actions.length > 0">
+      <div class="card border border-base-300 bg-base-100/90 backdrop-blur p-2">
+        <div class="text-xs opacity-80 px-1 mb-1" x-text="activeNode?.name || ''"></div>
+        <div class="flex gap-2">
+          <template x-for="action in (activeNode?.actions || [])" :key="action.label + '-' + action.handler">
+            <button class="btn btn-sm" @click="runAction(action)">
+              <span x-text="action.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="h-full w-full" x-show="isWallpaperMode">
+    <div id="koryoon-wallpaper-container" class="w-full h-full"></div>
+  </div>
+
+  <script>
+    function koryoonApp() {
+      const toPreview = (value) => {
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        if (value === null) return 'null';
+        if (Array.isArray(value)) return `Array(${value.length})`;
+        if (value && typeof value === 'object') {
+          try {
+            const raw = JSON.stringify(value);
+            return raw.length > 100 ? `${raw.slice(0, 97)}...` : raw;
+          } catch {
+            return '[object]';
+          }
+        }
+        return '';
+      };
+
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'koryoon',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        isWallpaperMode: false,
+        hierarchy: {},
+        activeNodeId: '',
+        activeNode: null,
+        handlers: null,
+        i18n: {
+          en: {
+            pageTitle: 'Koryoon',
+            title: 'Koryoon',
+            description: '3D system visualization and navigation.',
+            statusLabel: 'Status',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusLoadingData: 'Loading hierarchy...',
+            statusReady: 'Ready',
+            statusFailed: 'Failed',
+          },
+          hy: {
+            pageTitle: 'Կորյուն',
+            title: 'Կորյուն',
+            description: 'Համակարգի 3D վիզուալիզացիա և նավիգացիա։',
+            statusLabel: 'Կարգավիճակ',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusLoadingData: 'Բեռնվում է հիերարխիան...',
+            statusReady: 'Պատրաստ է',
+            statusFailed: 'Սխալ',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          this.error = '';
+          this.status = this.t('statusInitializing');
+          try {
+            const params = new URLSearchParams(window.location.search);
+            this.appId = params.get('appId') || 'koryoon';
+            this.isWallpaperMode = params.get('mode') === 'wallpaper';
+
+            await Promise.all([loadHayOSClient(), loadKoryoonRuntime()]);
+            this.client = new HayOSClient(this.appId);
+
+            if (!this.isWallpaperMode) {
+              this.status = this.t('statusAuthCheck');
+            }
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            await this.loadOsTheme();
+
+            this.status = this.t('statusLoadingData');
+            this.hierarchy = await this.loadHierarchy();
+            this.mountKoryoon();
+            this.status = this.t('statusReady');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            if (this.osTheme) {
+              document.documentElement.setAttribute('data-theme', this.osTheme);
+            }
+          } catch {
+            this.osTheme = '';
+          }
+        },
+
+        async loadHierarchy() {
+          if (!this.client) return {};
+
+          const [apps, installedApps, spaceDocs] = await Promise.all([
+            this.client.listApps(),
+            this.client.firestoreQuery('installedApps', {}),
+            this.client.firestoreQuery('space', {}),
+          ]);
+
+          const appById = new Map((Array.isArray(apps) ? apps : []).map((app) => [app.id, app]));
+          const hierarchy = {};
+
+          hierarchy['hayos-root'] = {
+            id: 'hayos-root',
+            name: '',
+            parentId: null,
+            childrenIds: ['system-root', 'user-root'],
+            nodeType: 'root',
+          };
+          hierarchy['system-root'] = {
+            id: 'system-root',
+            name: 'Սիստեմ',
+            parentId: 'hayos-root',
+            childrenIds: [],
+            nodeType: 'system',
+          };
+          hierarchy['user-root'] = {
+            id: 'user-root',
+            name: 'Տուն',
+            parentId: 'hayos-root',
+            childrenIds: ['user-programs', 'user-data'],
+            nodeType: 'user',
+            userId: this.user?.uid,
+          };
+          hierarchy['user-programs'] = {
+            id: 'user-programs',
+            name: 'Ծրագրեր',
+            parentId: 'user-root',
+            childrenIds: [],
+            nodeType: 'programs',
+          };
+          hierarchy['user-data'] = {
+            id: 'user-data',
+            name: 'Տվյալներ',
+            parentId: 'user-root',
+            childrenIds: [],
+            nodeType: 'data',
+          };
+
+          (Array.isArray(apps) ? apps : [])
+            .filter((app) => app && app.builtin)
+            .forEach((app) => {
+              const id = `system-${app.id}`;
+              hierarchy[id] = {
+                id,
+                name: app.name,
+                parentId: 'system-root',
+                childrenIds: [],
+                nodeType: 'app',
+                appId: app.id,
+                actions: [{ label: 'Բացել', type: 'open', icon: '▶️', handler: 'openApp' }],
+              };
+              hierarchy['system-root'].childrenIds.push(id);
+            });
+
+          const installedIds = Array.from(new Set((Array.isArray(installedApps) ? installedApps : [])
+            .map((entry) => (entry && typeof entry.appId === 'string' ? entry.appId : entry?.id))
+            .filter(Boolean)));
+
+          installedIds.forEach((appId) => {
+            const app = appById.get(appId);
+            if (!app) return;
+            const id = `program-${appId}`;
+            hierarchy[id] = {
+              id,
+              name: app.name,
+              parentId: 'user-programs',
+              childrenIds: [],
+              nodeType: 'app',
+              appId,
+              actions: [{ label: 'Բացել', type: 'open', icon: '▶️', handler: 'openApp' }],
+            };
+            hierarchy['user-programs'].childrenIds.push(id);
+          });
+
+          (Array.isArray(spaceDocs) ? spaceDocs : []).forEach((space) => {
+            const appId = typeof space?.appId === 'string' ? space.appId : space?.id;
+            if (!appId) return;
+            const app = appById.get(appId);
+            const dataId = `data-${appId}`;
+            hierarchy[dataId] = {
+              id: dataId,
+              name: app?.name || appId,
+              parentId: 'user-data',
+              childrenIds: [],
+              nodeType: 'appData',
+              appId,
+            };
+            hierarchy['user-data'].childrenIds.push(dataId);
+
+            Object.entries(space || {})
+              .filter(([key]) => key !== 'id' && key !== 'appId')
+              .forEach(([key, value]) => {
+                const preview = toPreview(value);
+                if (!preview) return;
+                const fieldId = `${dataId}-field-${key}`;
+                hierarchy[fieldId] = {
+                  id: fieldId,
+                  name: key,
+                  parentId: dataId,
+                  childrenIds: [],
+                  nodeType: Array.isArray(value) ? 'appFieldArray' : 'appField',
+                  appDataId: key,
+                  previewValue: preview,
+                };
+                hierarchy[dataId].childrenIds.push(fieldId);
+              });
+          });
+
+          return hierarchy;
+        },
+
+        mountKoryoon() {
+          if (!window.Koryoon || typeof window.Koryoon.init !== 'function') {
+            throw new Error('Koryoon runtime is not available');
+          }
+
+          const containerId = this.isWallpaperMode ? 'koryoon-wallpaper-container' : 'koryoon-container';
+          const container = document.getElementById(containerId);
+          if (!container) {
+            throw new Error('Koryoon container not found');
+          }
+          container.innerHTML = '';
+
+          const isLight = ['light', 'cupcake', 'bumblebee', 'retro', 'pastel', 'winter', 'silk'].includes(document.documentElement.getAttribute('data-theme') || '');
+          const color = isLight ? '#1f2937' : '#e5e7eb';
+          const inactiveColor = isLight ? '#6b7280' : '#111827';
+
+          window.Koryoon.init({
+            container,
+            hierarchy: this.hierarchy,
+            rootNodeId: 'hayos-root',
+            config: {
+              scale: {
+                sphereSizeBase: this.isWallpaperMode ? window.innerWidth * 0.008 : window.innerWidth * 0.01,
+              },
+              theme: {
+                pointCloud: {
+                  color,
+                  hoverColor: color,
+                  inactiveColor,
+                },
+              },
+            },
+            onRegisterHandlers: (handlers) => {
+              this.handlers = handlers;
+            },
+            onStateChange: (state) => {
+              const nextId = state?.autoHoveredSphereId || state?.hoveredNodeId || state?.currentNodeId;
+              if (!nextId || !this.hierarchy[nextId]) return;
+              this.activeNodeId = nextId;
+              this.activeNode = this.hierarchy[nextId];
+            },
+          });
+        },
+
+        runAction(action) {
+          if (!action || !this.activeNode) return;
+          if (action.handler === 'openApp' && this.activeNode.appId) {
+            window.parent.postMessage({
+              type: 'hayos:koryoonAction',
+              action,
+              node: {
+                id: this.activeNode.id,
+                nodeType: this.activeNode.nodeType,
+                appId: this.activeNode.appId,
+                appDataId: this.activeNode.appDataId,
+              },
+            }, '*');
+            return;
+          }
+          if (action.handler === 'navigateInto' && this.handlers && typeof this.handlers.navigateTo === 'function') {
+            this.handlers.navigateTo(this.activeNode.id);
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
