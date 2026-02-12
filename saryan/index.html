@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="themePickerApp()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saryan Theme Picker</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="min-h-full">
+  <main class="min-h-screen">
+    <section class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10" x-cloak>
+      <header class="mb-5 sm:mb-7">
+        <h1 class="text-4xl font-black tracking-tight sm:text-5xl" x-text="t('title')"></h1>
+        <p class="mt-3 text-lg opacity-80" x-text="t('subtitle')"></p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="badge badge-outline" x-text="status"></span>
+          <span class="badge badge-ghost" x-show="isSaving" x-text="t('saving')"></span>
+          <span class="text-error" x-show="error" x-text="error"></span>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <template x-for="theme in themes" :key="theme.id">
+          <button
+            type="button"
+            :data-theme="theme.id"
+            class="card card-border w-full text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+            :class="selectedTheme === theme.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-300 shadow-xl' : 'shadow-md'"
+            @click="selectTheme(theme.id)">
+            <div class="card-body gap-3 p-4">
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="truncate text-2xl font-black leading-none tracking-tight sm:text-3xl" x-text="themeLabel(theme.id)"></h2>
+                <span class="badge badge-outline" x-text="t('themeBadge')"></span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="btn btn-xs btn-primary">A</span>
+                <span class="btn btn-xs btn-secondary">A</span>
+                <span class="btn btn-xs btn-accent">A</span>
+                <span class="btn btn-xs btn-neutral">A</span>
+              </div>
+
+              <div class="grid grid-cols-4 gap-1 rounded-box bg-base-200 p-1">
+                <div class="h-2 rounded bg-primary"></div>
+                <div class="h-2 rounded bg-secondary"></div>
+                <div class="h-2 rounded bg-accent"></div>
+                <div class="h-2 rounded bg-neutral"></div>
+              </div>
+            </div>
+          </button>
+        </template>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function themePickerApp() {
+      return {
+        appId: 'saryan',
+        selectedTheme: 'black',
+        status: 'Ready',
+        error: '',
+        isSaving: false,
+        client: null,
+        language: 'en',
+        i18n: {
+          en: {
+            title: 'List of themes',
+            subtitle: 'Try them:',
+            saving: 'Saving...',
+            themeBadge: 'theme',
+            statusAuth: 'Auth...',
+            statusConnected: 'Connected',
+            statusOffline: 'Offline mode',
+          },
+          hy: {
+            title: 'Թեմաների ցանկ',
+            subtitle: 'Փորձիր թեմաները․',
+            saving: 'Պահվում է...',
+            themeBadge: 'թեմա',
+            statusAuth: 'Auth...',
+            statusConnected: 'Կապ հաստատված է',
+            statusOffline: 'Օֆլայն ռեժիմ',
+          },
+        },
+        themeLabels: {
+          en: {
+            light: 'Light', dark: 'Dark', cupcake: 'Cupcake', bumblebee: 'Bumblebee', emerald: 'Emerald',
+            corporate: 'Corporate', synthwave: 'Synthwave', retro: 'Retro', cyberpunk: 'Cyberpunk',
+            valentine: 'Valentine', halloween: 'Halloween', garden: 'Garden', forest: 'Forest', aqua: 'Aqua',
+            lofi: 'Lofi', pastel: 'Pastel', fantasy: 'Fantasy', wireframe: 'Wireframe', black: 'Black',
+            luxury: 'Luxury', dracula: 'Dracula', cmyk: 'CMYK', autumn: 'Autumn', business: 'Business',
+            acid: 'Acid', lemonade: 'Lemonade', night: 'Night', coffee: 'Coffee', winter: 'Winter',
+            dim: 'Dim', nord: 'Nord', sunset: 'Sunset', caramellatte: 'Caramel Latte', abyss: 'Abyss', silk: 'Silk',
+          },
+          hy: {
+            light: 'Լույս', dark: 'Մութ', cupcake: 'Քափքեյք', bumblebee: 'Մեղու', emerald: 'Զմրուխտ',
+            corporate: 'Կորպորատիվ', synthwave: 'Սինթվեյվ', retro: 'Ռետրո', cyberpunk: 'Սայբերփանք',
+            valentine: 'Վալենտին', halloween: 'Հելոուին', garden: 'Այգի', forest: 'Անտառ', aqua: 'Ջրային',
+            lofi: 'Լոֆայ', pastel: 'Պաստել', fantasy: 'Ֆենթզի', wireframe: 'Ուայրֆրեյմ', black: 'Սև',
+            luxury: 'Լյուքս', dracula: 'Դրակուլա', cmyk: 'ՍՄՅԿ', autumn: 'Աշուն', business: 'Բիզնես',
+            acid: 'Ասիդ', lemonade: 'Լիմոնադ', night: 'Գիշեր', coffee: 'Սուրճ', winter: 'Ձմեռ',
+            dim: 'Խամրած', nord: 'Նորդ', sunset: 'Մայրամուտ', caramellatte: 'Կարամել լատտե', abyss: 'Անդունդ', silk: 'Մետաքս',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+        themeLabel(themeId) {
+          const labels = this.themeLabels[this.language] || this.themeLabels.en;
+          return labels[themeId] || themeId;
+        },
+        themes: [
+          { id: 'light' },
+          { id: 'dark' },
+          { id: 'cupcake' },
+          { id: 'bumblebee' },
+          { id: 'emerald' },
+          { id: 'corporate' },
+          { id: 'synthwave' },
+          { id: 'retro' },
+          { id: 'cyberpunk' },
+          { id: 'valentine' },
+          { id: 'halloween' },
+          { id: 'garden' },
+          { id: 'forest' },
+          { id: 'aqua' },
+          { id: 'lofi' },
+          { id: 'pastel' },
+          { id: 'fantasy' },
+          { id: 'wireframe' },
+          { id: 'black' },
+          { id: 'luxury' },
+          { id: 'dracula' },
+          { id: 'cmyk' },
+          { id: 'autumn' },
+          { id: 'business' },
+          { id: 'acid' },
+          { id: 'lemonade' },
+          { id: 'night' },
+          { id: 'coffee' },
+          { id: 'winter' },
+          { id: 'dim' },
+          { id: 'nord' },
+          { id: 'sunset' },
+          { id: 'caramellatte' },
+          { id: 'abyss' },
+          { id: 'silk' },
+        ],
+        async init() {
+          const urlParams = new URLSearchParams(window.location.search);
+          this.appId = urlParams.get('appId') || 'saryan';
+          document.documentElement.setAttribute('data-theme', this.selectedTheme);
+
+          try {
+            this.status = this.t('statusAuth');
+            await loadHayOSClient();
+            this.client = new HayOSClient(this.appId);
+            await this.client.ensureAuthenticated();
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            this.status = this.t('statusConnected');
+            await this.loadSavedTheme();
+          } catch (error) {
+            this.status = this.t('statusOffline');
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async loadSavedTheme() {
+          if (!this.client) {
+            return;
+          }
+          try {
+            const space = await this.client.firestoreGet('space', this.appId);
+            const persistedTheme = typeof space?.selectedTheme === 'string'
+              ? space.selectedTheme
+              : '';
+            const isKnownTheme = this.themes.some((theme) => theme.id === persistedTheme);
+            if (isKnownTheme) {
+              this.selectedTheme = persistedTheme;
+              document.documentElement.setAttribute('data-theme', persistedTheme);
+            }
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async selectTheme(theme) {
+          this.selectedTheme = theme;
+          document.documentElement.setAttribute('data-theme', theme);
+          await this.persistTheme(theme);
+        },
+
+        async persistTheme(theme) {
+          if (!this.client) {
+            return;
+          }
+
+          this.isSaving = true;
+          this.error = '';
+          try {
+            const nowIso = new Date().toISOString();
+            await this.client.firestoreUpdate('space', this.appId, {
+              appId: this.appId,
+              selectedTheme: theme,
+              updatedAt: nowIso,
+            });
+            window.parent.postMessage(
+              {
+                type: 'hayos:appSpaceChanged',
+                sourceAppId: this.appId,
+                appId: this.appId,
+                at: Date.now(),
+              },
+              '*',
+            );
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          } finally {
+            this.isSaving = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

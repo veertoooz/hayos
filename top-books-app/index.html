@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="topBooksApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top Books</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+<body class="h-full">
+  <div class="max-w-7xl mx-auto px-4 py-6 h-full flex flex-col gap-4" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-xl font-semibold" x-text="t('title')"></h1>
+          <p class="text-sm opacity-70" x-text="t('subtitle')"></p>
+        </div>
+        <div class="text-sm">
+          <span class="font-semibold" x-text="`${t('statusLabel')}:`"></span>
+          <span x-text="status"></span>
+        </div>
+      </div>
+      <div class="mt-2 flex gap-2 flex-wrap">
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full md:w-80"
+          :placeholder="t('searchPlaceholder')"
+          x-model="searchQuery"
+          @input="filterRecords()"
+        />
+        <button
+          class="btn btn-sm"
+          :class="showFavoritesOnly ? 'btn-primary' : 'btn-outline'"
+          @click="toggleFavoritesOnly()"
+          x-text="showFavoritesOnly ? t('showAllBtn') : t('favoritesOnlyBtn')"
+        ></button>
+        <button class="btn btn-sm btn-outline" @click="refresh()" x-text="t('refreshBtn')"></button>
+      </div>
+      <div class="mt-3 text-error text-sm" x-show="error" x-text="error"></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 overflow-auto" x-show="!loading">
+      <template x-for="record in filteredRecords" :key="record.id">
+        <article class="card bg-base-200 shadow">
+          <div class="card-body">
+            <div class="flex items-start justify-between gap-2">
+              <h2 class="card-title text-base" x-text="recordTitle(record)"></h2>
+              <button
+                class="btn btn-ghost btn-xs text-xl"
+                @click="toggleFavorite(record.id)"
+                :title="isFavorite(record.id) ? t('removeFavoriteTitle') : t('addFavoriteTitle')"
+              >
+                <span x-text="isFavorite(record.id) ? '❤️' : '🤍'"></span>
+              </button>
+            </div>
+
+            <div class="divider my-1"></div>
+
+            <div class="space-y-2">
+              <template x-for="field in schema" :key="`${record.id}-${field.id}`">
+                <div class="text-sm">
+                  <span class="font-semibold" x-text="field.label || field.key"></span>:
+                  <span class="opacity-80 break-all" x-text="formatFieldValue(field, record[field.key])"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </article>
+      </template>
+    </div>
+
+    <div class="card bg-base-200 shadow p-5 text-sm opacity-70" x-show="!loading && filteredRecords.length === 0">
+      <span x-show="records.length === 0" x-text="t('emptyRecords')"></span>
+      <span x-show="records.length > 0" x-text="t('emptyFilter')"></span>
+    </div>
+  </div>
+
+  <script>
+    function topBooksApp() {
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'top-books',
+        client: null,
+        user: null,
+        language: 'en',
+        osTheme: '',
+        schema: [],
+        records: [],
+        filteredRecords: [],
+        favoriteRecordIds: [],
+        searchQuery: '',
+        showFavoritesOnly: false,
+        favoriteSpaceDocId: 'top-books',
+        i18n: {
+          en: {
+            title: 'Top Books',
+            subtitle: 'Data loads from global books space; hearts are saved in your local space.',
+            statusLabel: 'Status',
+            searchPlaceholder: 'Search books...',
+            showAllBtn: 'Show all',
+            favoritesOnlyBtn: 'Only favorites',
+            refreshBtn: 'Refresh',
+            removeFavoriteTitle: 'Remove from favorites',
+            addFavoriteTitle: 'Add to favorites',
+            emptyRecords: 'No records in books yet.',
+            emptyFilter: 'No results for current filter.',
+            statusInitializing: 'Initializing...',
+            statusCheckingAuth: 'Checking auth...',
+            statusLoadingBooks: 'Loading books...',
+            statusReady: 'Ready',
+            statusFailed: 'Failed',
+            yes: 'Yes',
+            no: 'No',
+            unknownBook: 'Unknown Book',
+            fallbackBook: 'Book',
+          },
+          hy: {
+            title: 'Թոփ գրքեր',
+            subtitle: 'Տվյալները բեռնվում են global books տարածքից, սրտիկները պահվում են քո local space-ում։',
+            statusLabel: 'Կարգավիճակ',
+            searchPlaceholder: 'Փնտրիր գրքեր...',
+            showAllBtn: 'Ցույց տալ բոլորը',
+            favoritesOnlyBtn: 'Միայն սիրելիները',
+            refreshBtn: 'Թարմացնել',
+            removeFavoriteTitle: 'Հեռացնել սիրելիներից',
+            addFavoriteTitle: 'Ավելացնել սիրելիներին',
+            emptyRecords: 'books records դեռ չկան։',
+            emptyFilter: 'Քո ֆիլտրով արդյունք չկա։',
+            statusInitializing: 'Սկսվում է...',
+            statusCheckingAuth: 'Ստուգվում է auth-ը...',
+            statusLoadingBooks: 'Բեռնվում են գրքերը...',
+            statusReady: 'Պատրաստ է',
+            statusFailed: 'Սխալ',
+            yes: 'Այո',
+            no: 'Ոչ',
+            unknownBook: 'Անհայտ գիրք',
+            fallbackBook: 'Գիրք',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'top-books';
+            this.client = new HayOSClient(this.appId);
+
+            this.status = this.t('statusCheckingAuth');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async sendGlobalRequest(action) {
+          if (!this.client || typeof this.client._sendRequest !== 'function') {
+            throw new Error('HayOS client is not initialized');
+          }
+          const response = await this.client._sendRequest(action);
+          if (!response.ok) {
+            throw new Error(response.error || 'Request failed');
+          }
+          return response.data;
+        },
+
+        async refresh() {
+          this.error = '';
+          this.status = this.t('statusLoadingBooks');
+          try {
+            await this.loadOsTheme();
+            const [schema, records, favorites] = await Promise.all([
+              this.sendGlobalRequest({ kind: 'globalSpace.getSchema', spaceId: 'books' }),
+              this.sendGlobalRequest({ kind: 'globalSpace.listRecords', spaceId: 'books' }),
+              this.loadFavorites(),
+            ]);
+            this.schema = Array.isArray(schema) ? schema : [];
+            this.records = Array.isArray(records) ? records : [];
+            this.favoriteRecordIds = Array.isArray(favorites) ? favorites : [];
+            this.filterRecords();
+            this.status = this.t('statusReady');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          }
+        },
+
+        async loadOsTheme() {
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async loadFavorites() {
+          const doc = await this.client.firestoreGet('space', this.favoriteSpaceDocId);
+          if (!doc || !Array.isArray(doc.favoriteRecordIds)) {
+            return [];
+          }
+          return doc.favoriteRecordIds.filter((id) => typeof id === 'string' && id.length > 0);
+        },
+
+        async saveFavorites() {
+          const plainFavoriteIds = Array.from(this.favoriteRecordIds || [])
+            .filter((id) => typeof id === 'string' && id.length > 0);
+          await this.client.firestoreUpdate('space', this.favoriteSpaceDocId, {
+            appId: this.favoriteSpaceDocId,
+            favoriteRecordIds: plainFavoriteIds,
+            updatedAt: new Date().toISOString(),
+          });
+        },
+
+        isFavorite(recordId) {
+          return this.favoriteRecordIds.includes(recordId);
+        },
+
+        async toggleFavorite(recordId) {
+          if (!recordId) return;
+          if (this.isFavorite(recordId)) {
+            this.favoriteRecordIds = this.favoriteRecordIds.filter((id) => id !== recordId);
+          } else {
+            this.favoriteRecordIds = [...this.favoriteRecordIds, recordId];
+          }
+          try {
+            await this.saveFavorites();
+            this.filterRecords();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        toggleFavoritesOnly() {
+          this.showFavoritesOnly = !this.showFavoritesOnly;
+          this.filterRecords();
+        },
+
+        filterRecords() {
+          const query = (this.searchQuery || '').trim().toLowerCase();
+          let list = [...this.records];
+
+          if (this.showFavoritesOnly) {
+            const favSet = new Set(this.favoriteRecordIds);
+            list = list.filter((record) => favSet.has(record.id));
+          }
+
+          if (query) {
+            list = list.filter((record) => {
+              return this.schema.some((field) => {
+                const value = this.formatFieldValue(field, record[field.key]);
+                return value.toLowerCase().includes(query);
+              });
+            });
+          }
+
+          this.filteredRecords = list;
+        },
+
+        formatFieldValue(field, value) {
+          if (value === null || typeof value === 'undefined') {
+            return '-';
+          }
+
+          const type = field && typeof field.type === 'string' ? field.type : '';
+          if (type === 'boolean') {
+            return value ? this.t('yes') : this.t('no');
+          }
+          if (type === 'number') {
+            return Number.isFinite(Number(value)) ? String(value) : '-';
+          }
+          if (type === 'json') {
+            try {
+              return typeof value === 'string' ? value : JSON.stringify(value);
+            } catch {
+              return '[json]';
+            }
+          }
+          if (type === 'date' && typeof value === 'string') {
+            const parsed = new Date(value);
+            if (!Number.isNaN(parsed.getTime())) {
+              return parsed.toLocaleDateString();
+            }
+          }
+          if (type === 'imageUrl' && typeof value === 'string') {
+            return value;
+          }
+
+          if (typeof value === 'object') {
+            try {
+              return JSON.stringify(value);
+            } catch {
+              return '[object]';
+            }
+          }
+          return String(value);
+        },
+
+        recordTitle(record) {
+          if (!record || typeof record !== 'object') {
+            return this.t('unknownBook');
+          }
+          if (typeof record.name === 'string' && record.name.trim().length > 0) {
+            return record.name;
+          }
+          const firstField = this.schema.find((field) => typeof record[field.key] !== 'undefined');
+          if (!firstField) {
+            return record.id || this.t('fallbackBook');
+          }
+          return this.formatFieldValue(firstField, record[firstField.key]);
+        },
+      };
+    }
+  </script>
+</body>
+</html>
