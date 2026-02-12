@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="languageApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Language</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+<body class="h-full">
+  <div class="max-w-3xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <h1 class="text-xl font-semibold" x-text="t('title')"></h1>
+      <p class="text-sm opacity-75 mt-1" x-text="t('description')"></p>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5">
+      <div class="text-sm">
+        <span class="font-semibold" x-text="`${t('currentLabel')}:`"></span>
+        <span x-text="currentLanguage === 'hy' ? t('armenian') : t('english')"></span>
+      </div>
+
+      <div class="mt-4 flex gap-2 flex-wrap">
+        <button
+          class="btn btn-sm"
+          :class="currentLanguage === 'hy' ? 'btn-primary' : 'btn-ghost'"
+          :disabled="saving"
+          @click="changeLanguage('hy')"
+          x-text="t('armenian')"
+        ></button>
+        <button
+          class="btn btn-sm"
+          :class="currentLanguage === 'en' ? 'btn-primary' : 'btn-ghost'"
+          :disabled="saving"
+          @click="changeLanguage('en')"
+          x-text="t('english')"
+        ></button>
+      </div>
+
+      <div class="mt-3 text-sm opacity-80">
+        <span class="font-semibold" x-text="`${t('statusLabel')}:`"></span>
+        <span x-text="status"></span>
+      </div>
+      <div class="mt-2 text-error text-sm" x-show="error" x-text="error"></div>
+    </div>
+  </div>
+
+  <script>
+    function languageApp() {
+      return {
+        appId: 'language',
+        client: null,
+        currentLanguage: 'en',
+        saving: false,
+        status: 'Initializing...',
+        error: '',
+        i18n: {
+          en: {
+            title: 'Language',
+            description: 'Choose the system language for HayOS apps.',
+            currentLabel: 'Current language',
+            armenian: 'Armenian',
+            english: 'English',
+            statusLabel: 'Status',
+            statusInitializing: 'Initializing...',
+            statusReady: 'Ready',
+            statusSaving: 'Saving...',
+            statusSaved: 'Saved',
+            statusFailed: 'Failed',
+          },
+          hy: {
+            title: 'Լեզու',
+            description: 'Ընտրիր HayOS հավելվածների համակարգային լեզուն։',
+            currentLabel: 'Ընթացիկ լեզու',
+            armenian: 'Հայերեն',
+            english: 'Անգլերեն',
+            statusLabel: 'Կարգավիճակ',
+            statusInitializing: 'Սկսվում է...',
+            statusReady: 'Պատրաստ է',
+            statusSaving: 'Պահվում է...',
+            statusSaved: 'Պահվեց',
+            statusFailed: 'Սխալ',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.currentLanguage] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'language';
+            this.client = new HayOSClient(this.appId);
+
+            await this.client.ensureAuthenticated();
+            this.currentLanguage = await this.client.getLanguage();
+            document.documentElement.lang = this.currentLanguage;
+            this.status = this.t('statusReady');
+
+            this.client.onLanguageChanged((language) => {
+              this.currentLanguage = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.currentLanguage;
+              this.status = this.t('statusReady');
+            });
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          }
+        },
+
+        async changeLanguage(language) {
+          const nextLanguage = language === 'hy' ? 'hy' : 'en';
+          if (!this.client || this.currentLanguage === nextLanguage || this.saving) {
+            return;
+          }
+          this.error = '';
+          this.saving = true;
+          this.status = this.t('statusSaving');
+          try {
+            this.currentLanguage = await this.client.setLanguage(nextLanguage);
+            document.documentElement.lang = this.currentLanguage;
+            this.status = this.t('statusSaved');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusFailed');
+          } finally {
+            this.saving = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
