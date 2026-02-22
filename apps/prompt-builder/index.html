@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="promptBuilderApp()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Prompt Builder</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+
+<body class="h-full">
+  <div class="h-full" x-cloak>
+    <div class="drawer lg:drawer-open h-full">
+      <input id="prompt-builder-sidebar" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
+
+      <div class="drawer-content h-full p-4 lg:p-6 overflow-auto">
+        <div class="mb-4 lg:hidden">
+          <label for="prompt-builder-sidebar" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-bars mr-2"></i>
+            <span x-text="t('menuBtn')"></span>
+          </label>
+        </div>
+
+        <div class="card bg-base-200 shadow p-4 mb-4">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <p class="text-sm"><span class="font-semibold" x-text="`${t('statusLabel')}:`"></span> <span x-text="status"></span></p>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-sm btn-primary" @click="copyPrePrompt()" x-text="t('copyPrePromptBtn')"></button>
+              <button class="btn btn-sm" @click="saveDraft()" x-text="t('saveBtn')"></button>
+            </div>
+          </div>
+          <p class="text-error text-sm mt-2" x-show="error" x-text="error"></p>
+        </div>
+
+        <div x-show="currentPage === 'idea'" class="card bg-base-200 shadow p-5 space-y-4">
+          <h2 class="text-lg font-semibold" x-text="t('ideaTitle')"></h2>
+          <p class="text-sm opacity-70" x-text="t('ideaDescription')"></p>
+
+          <label class="form-control">
+            <span class="label-text" x-text="t('ideaFieldLabel')"></span>
+            <textarea
+              class="textarea textarea-bordered min-h-36"
+              x-model="draft.idea"
+              @input="onDraftChange()"
+              :placeholder="t('ideaPlaceholder')"
+            ></textarea>
+          </label>
+        </div>
+
+        <div x-show="currentPage === 'template'" class="card bg-base-200 shadow p-5 space-y-4">
+          <h2 class="text-lg font-semibold" x-text="t('templateTitle')"></h2>
+          <p class="text-sm opacity-70" x-text="t('templateDescription')"></p>
+          <p class="text-sm">
+            <span class="font-semibold" x-text="`${t('templateMeaningLabel')}:`"></span>
+            <span x-text="t('templateMeaningText')"></span>
+          </p>
+
+          <div class="grid grid-cols-1 gap-2">
+            <template x-for="item in templateCatalog" :key="item.id">
+              <button
+                class="btn h-auto p-3 justify-start text-left"
+                :class="draft.templateId === item.id ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                @click="selectTemplate(item.id)">
+                <div>
+                  <p class="font-semibold" x-text="item.name"></p>
+                  <p class="text-xs opacity-70 mt-1" x-text="item.description"></p>
+                  <p class="text-xs mt-2 font-mono" x-text="item.path"></p>
+                </div>
+              </button>
+            </template>
+          </div>
+
+          <div class="rounded-lg border border-base-300 p-3 bg-base-300/40">
+            <p class="text-xs uppercase tracking-wide opacity-70" x-text="t('summaryTitle')"></p>
+            <p class="mt-2 text-sm"><span class="font-semibold" x-text="`${t('selectedTemplate')}:`"></span> <span x-text="selectedTemplateName()"></span></p>
+            <p class="mt-2 text-sm"><span class="font-semibold" x-text="`${t('ideaShort')}:`"></span> <span x-text="ideaPreview()"></span></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-side">
+        <label for="prompt-builder-sidebar" class="drawer-overlay"></label>
+        <aside class="min-h-full w-72 bg-base-200 border-r border-base-300 p-4">
+          <p class="text-xs uppercase tracking-wide opacity-60 mb-3" x-text="t('sidebarLabel')"></p>
+          <ul class="menu gap-1">
+            <template x-for="item in navItems" :key="item.key">
+              <li>
+                <button class="justify-start" :class="{ 'active': currentPage === item.key }" @click="setPage(item.key)">
+                  <i :class="item.icon"></i>
+                  <span x-text="t(item.labelKey)"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function promptBuilderApp() {
+      const DRAFT_KEY = 'promptBuilderDraft:v2';
+      const templateCatalog = [
+        {
+          id: 'template-index',
+          name: 'Base Template',
+          description: 'Initial index.html used as prompt reference.',
+          path: '/prompt-builder/template/index.html',
+        },
+      ];
+
+      return {
+        appId: 'prompt-builder',
+        client: null,
+        user: null,
+        language: 'en',
+        status: 'Initializing...',
+        error: '',
+        currentPage: 'idea',
+        sidebarOpen: false,
+        templateCatalog,
+        navItems: [
+          { key: 'idea', labelKey: 'menuIdea', icon: 'fa-solid fa-pen-to-square' },
+          { key: 'template', labelKey: 'menuTemplate', icon: 'fa-solid fa-layer-group' },
+        ],
+        draft: {
+          idea: '',
+          templateId: '',
+        },
+        i18n: {
+          en: {
+            pageTitle: 'Prompt Builder',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuIdea: 'Idea',
+            menuTemplate: 'Template',
+            statusLabel: 'Status',
+            copyPrePromptBtn: 'Copy Pre-Prompt',
+            saveBtn: 'Save Draft',
+            ideaTitle: 'What do you want to build?',
+            ideaDescription: 'Write a short description of your app idea.',
+            ideaFieldLabel: 'App idea',
+            ideaPlaceholder: 'Example: I want to build a music player with playlist and favorites.',
+            templateTitle: 'Choose a template',
+            templateDescription: 'Pick the base index.html file used as prompt reference.',
+            templateMeaningLabel: 'Template',
+            templateMeaningText: 'Template is the initial index.html file attached to the prompt as reference.',
+            summaryTitle: 'Quick Summary',
+            selectedTemplate: 'Template',
+            ideaShort: 'Idea',
+            ready: 'Ready',
+            initFailed: 'Failed',
+            draftSaved: 'Draft saved',
+            prePromptCopied: 'Pre-prompt copied',
+            prePromptFailed: 'Could not build pre-prompt',
+            noTemplate: 'Not selected',
+            noIdea: 'No idea text yet',
+          },
+          hy: {
+            pageTitle: 'Prompt Builder',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuIdea: 'Գաղափար',
+            menuTemplate: 'Տեմփլեյթ',
+            statusLabel: 'Կարգավիճակ',
+            copyPrePromptBtn: 'Պատճենել Pre-Prompt',
+            saveBtn: 'Պահպանել',
+            ideaTitle: 'Ի՞նչ ես ուզում սարքել',
+            ideaDescription: 'Գրի՛ր քո ծրագրի կարճ նկարագիրը։',
+            ideaFieldLabel: 'Ծրագրի գաղափար',
+            ideaPlaceholder: 'Օրինակ՝ ուզում եմ սարքել music player՝ playlist-ով և favorites-ով։',
+            templateTitle: 'Ընտրիր տեմփլեյթ',
+            templateDescription: 'Ընտրիր index.html-ը, որը կկցվի prompt-ին որպես reference։',
+            templateMeaningLabel: 'Template',
+            templateMeaningText: 'Template-ը սկզբնական index.html ֆայլն է, որը կկցվի prompt-ին որպես reference։',
+            summaryTitle: 'Կարճ ամփոփում',
+            selectedTemplate: 'Տեմփլեյթ',
+            ideaShort: 'Գաղափար',
+            ready: 'Պատրաստ է',
+            initFailed: 'Խափանում',
+            draftSaved: 'Պահպանվեց',
+            prePromptCopied: 'Pre-prompt-ը պատճենվեց',
+            prePromptFailed: 'Չհաջողվեց կազմել pre-prompt-ը',
+            noTemplate: 'Ընտրված չէ',
+            noIdea: 'Գաղափար դեռ չկա',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          this.error = '';
+          this.loadDraft();
+          this.resolvePageFromHash();
+          window.addEventListener('hashchange', () => this.resolvePageFromHash());
+          try {
+            await loadHayOSClient();
+            const params = new URLSearchParams(window.location.search);
+            this.appId = params.get('appId') || 'prompt-builder';
+            this.client = new HayOSClient(this.appId);
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+              this.status = this.t('ready');
+            });
+            this.status = this.t('ready');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('initFailed');
+          }
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+          this.sidebarOpen = false;
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'idea';
+        },
+
+        selectTemplate(id) {
+          this.draft.templateId = id;
+          this.onDraftChange();
+        },
+
+        selectedTemplateName() {
+          const found = this.templateCatalog.find((item) => item.id === this.draft.templateId);
+          return found ? found.name : this.t('noTemplate');
+        },
+
+        ideaPreview() {
+          const text = String(this.draft.idea || '').trim();
+          if (!text) return this.t('noIdea');
+          return text.length > 160 ? `${text.slice(0, 160)}...` : text;
+        },
+
+        onDraftChange() {
+          this.saveDraft();
+        },
+
+        async copyPrePrompt() {
+          this.error = '';
+          try {
+            const prePrompt = await this.buildPrePromptText();
+            await navigator.clipboard.writeText(prePrompt);
+            this.status = this.t('prePromptCopied');
+            window.setTimeout(() => {
+              this.status = this.t('ready');
+            }, 1200);
+          } catch (error) {
+            this.error = error && error.message ? error.message : this.t('prePromptFailed');
+          }
+        },
+
+        async buildPrePromptText() {
+          const selected = this.templateCatalog.find((item) => item.id === this.draft.templateId) || this.templateCatalog[0];
+          const response = await fetch(selected.path, { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error(`Failed to load template source: ${selected.path}`);
+          }
+          const templateHtml = await response.text();
+          const ideaText = String(this.draft.idea || '').trim() || this.t('noIdea');
+
+          return [
+            '# HayOS Build Pre-Prompt',
+            '',
+            '## 1. Product Goal',
+            `- Main idea: ${ideaText}`,
+            '- Deliver a working app based on the selected reference template.',
+            '',
+            '## 2. Scope',
+            '- In scope: implement only what is required for the described app behavior.',
+            '- Out of scope: unrelated features, global shell changes, and speculative extras.',
+            '',
+            '## 3. Target User Flows',
+            '- Flow A: user opens app and sees the primary workspace.',
+            '- Flow B: user performs the core action of the app.',
+            '- Flow C: user saves/updates state and returns to continue.',
+            '',
+            '## 4. Data Model Contract',
+            '- Define minimal collections/documents needed for the app.',
+            '- Include ownership rules (per-user isolation when needed).',
+            '- Keep schema simple and explicit (required fields only).',
+            '',
+            '## 5. UI Contract',
+            '- Keep layout responsive for desktop and mobile.',
+            '- Keep sidebar navigation behavior consistent.',
+            '- Do not introduce body-level scrolling unless explicitly required.',
+            '- Implement loading, empty, and error states.',
+            '',
+            '## 6. Integration Contract',
+            '- Use HayOSClient APIs where needed (auth/current user/app data).',
+            '- Avoid breaking existing app bootstrap/auth flow.',
+            '- Keep app self-contained inside its app folder.',
+            '',
+            '## 7. Security & Permissions',
+            '- Follow least-privilege permissions.',
+            '- Do not request permissions not required by the implemented features.',
+            '- Never expose secrets or unsafe client-side privileged operations.',
+            '',
+            '## 8. Performance Constraints',
+            '- Keep initial render fast and avoid blocking UI work.',
+            '- Use lightweight rendering patterns for lists and repeated blocks.',
+            '- Prefer debounced writes when frequent updates are expected.',
+            '',
+            '## 9. Output Contract',
+            '- Return concrete file changes with clear paths.',
+            '- Keep code readable and maintainable.',
+            '- Preserve existing conventions unless change is required.',
+            '',
+            '## 10. Acceptance Criteria',
+            '- Core user flow works end-to-end.',
+            '- UI works on desktop and mobile.',
+            '- Data operations are correct and permission-safe.',
+            '- No obvious regressions in existing behavior.',
+            '',
+            '## 11. Reference Template',
+            `Template path: ${selected.path}`,
+            '',
+            '## Reference Template (index.html)',
+            '```html',
+            templateHtml,
+            '```',
+          ].join('\n');
+        },
+
+        saveDraft() {
+          try {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(this.draft));
+            this.status = this.t('draftSaved');
+            window.setTimeout(() => {
+              this.status = this.t('ready');
+            }, 1000);
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        loadDraft() {
+          try {
+            const raw = localStorage.getItem(DRAFT_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === 'object') {
+                this.draft.idea = typeof parsed.idea === 'string' ? parsed.idea : '';
+                this.draft.templateId = typeof parsed.templateId === 'string' ? parsed.templateId : '';
+              }
+            }
+          } catch {
+            this.draft.idea = '';
+            this.draft.templateId = '';
+          }
+          if (!this.draft.templateId && this.templateCatalog.length > 0) {
+            this.draft.templateId = this.templateCatalog[0].id;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

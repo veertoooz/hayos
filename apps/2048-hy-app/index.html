@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-transparent" data-theme="black" x-data="app2048Hy()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">2048 Հայերեն</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <style>
+    :root {
+      --app-bg-1: color-mix(in oklab, var(--fallback-p, oklch(var(--p) / 1)) 20%, transparent);
+      --app-bg-2: color-mix(in oklab, var(--fallback-s, oklch(var(--s) / 1)) 16%, transparent);
+      --app-surface: color-mix(in oklab, var(--fallback-b1, oklch(var(--b1) / 1)) 92%, #000);
+      --app-board-bg: color-mix(in oklab, var(--fallback-b3, oklch(var(--b3) / 1)) 70%, transparent);
+      --app-tile-empty: color-mix(in oklab, var(--fallback-b2, oklch(var(--b2) / 1)) 84%, transparent);
+      --app-tile-border: color-mix(in oklab, var(--fallback-bc, oklch(var(--bc) / 1)) 20%, transparent);
+      --app-tile-text: color-mix(in oklab, var(--fallback-bc, oklch(var(--bc) / 1)) 96%, transparent);
+    }
+
+    [x-cloak] {
+      display: none !important;
+    }
+
+    .mobile-shell {
+      width: min(100vw, 480px);
+      height: 100dvh;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 100% -10%, var(--app-bg-1), transparent 40%),
+        radial-gradient(circle at 0% 115%, var(--app-bg-2), transparent 40%),
+        var(--app-surface);
+    }
+
+    .grid-board {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.6rem;
+      width: min(100%, 420px);
+      margin: 0 auto;
+    }
+
+    .tile-cell {
+      aspect-ratio: 1 / 1;
+      border-radius: 0.9rem;
+      border: 1px solid var(--app-tile-border);
+      background: var(--app-tile-empty);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 1.2rem;
+      user-select: none;
+      transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+    }
+
+    .tile-empty {
+      color: transparent;
+    }
+
+    .tile-filled {
+      color: var(--app-tile-text);
+      border-color: color-mix(in oklab, var(--fallback-bc, oklch(var(--bc) / 1)) 32%, transparent);
+    }
+
+    .tile-l0,
+    .tile-l1 {
+      background: color-mix(in oklab, var(--fallback-p, oklch(var(--p) / 1)) 22%, var(--app-tile-empty));
+    }
+
+    .tile-l2,
+    .tile-l3 {
+      background: color-mix(in oklab, var(--fallback-s, oklch(var(--s) / 1)) 28%, var(--app-tile-empty));
+    }
+
+    .tile-l4,
+    .tile-l5 {
+      background: color-mix(in oklab, var(--fallback-a, oklch(var(--a) / 1)) 30%, var(--app-tile-empty));
+    }
+
+    .tile-l6,
+    .tile-l7 {
+      background: color-mix(in oklab, var(--fallback-p, oklch(var(--p) / 1)) 42%, var(--app-tile-empty));
+    }
+
+    .tile-l8,
+    .tile-l9,
+    .tile-l10,
+    .tile-l11,
+    .tile-l12 {
+      background: color-mix(in oklab, var(--fallback-s, oklch(var(--s) / 1)) 48%, var(--app-tile-empty));
+    }
+
+    .board-touch-surface {
+      touch-action: none;
+    }
+
+    .board-area {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      background: var(--app-board-bg);
+    }
+
+    @media (max-height: 760px) {
+      .mobile-shell header {
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+      }
+
+      .mobile-shell main {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+        gap: 0.5rem;
+      }
+
+      .grid-board {
+        gap: 0.45rem;
+      }
+
+      .tile-cell {
+        border-radius: 0.75rem;
+        font-size: 1.05rem;
+      }
+    }
+  </style>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full overflow-hidden bg-base-100">
+  <div class="mobile-shell border-x border-base-300/50" x-cloak>
+    <header class="z-10 border-b border-base-300/70 bg-base-100/90 px-4 py-3 backdrop-blur">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <h1 class="text-lg font-semibold leading-tight truncate" x-text="t('pageTitle')"></h1>
+          <span class="badge badge-ghost badge-sm shrink-0" x-text="status"></span>
+        </div>
+        <button class="btn btn-sm btn-outline" @click="restart()" :aria-label="t('restartBtn')" title="Restart">↺</button>
+      </div>
+    </header>
+
+    <main class="flex-1 min-h-0 overflow-hidden px-3 py-3 flex flex-col gap-3">
+      <section class="grid grid-cols-2 gap-2">
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-2.5">
+            <p class="text-[11px] opacity-65" x-text="t('scoreLabel')"></p>
+            <p class="text-2xl font-semibold leading-none mt-0.5" x-text="score"></p>
+          </div>
+        </div>
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-2.5">
+            <p class="text-[11px] opacity-65" x-text="t('bestScoreLabel')"></p>
+            <p class="text-2xl font-semibold leading-none mt-0.5" x-text="bestScore"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card bg-base-200 shadow-sm board-touch-surface flex-1 min-h-0">
+        <div class="card-body p-2.5 h-full flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="badge badge-outline text-[11px]" x-text="`${t('moveCountLabel')}: ${moveCount}`"></span>
+            <span class="badge badge-outline text-[11px]" x-text="`${t('targetLabel')}: ${targetLetter}`"></span>
+          </div>
+          <div class="board-area rounded-2xl p-2">
+            <div class="grid-board">
+              <template x-for="cell in flatBoard" :key="cell.id">
+                <div class="tile-cell" :class="cell.classes" x-text="cell.label"></div>
+              </template>
+            </div>
+          </div>
+          <p class="text-[10px] opacity-60 text-center tracking-wide" x-text="t('controlsHint')"></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" :class="{ 'modal-open': showResultModal }">
+    <div class="modal-box max-w-sm p-4">
+      <h3 class="text-base font-bold" x-text="resultTitle"></h3>
+      <p class="py-1.5 text-sm opacity-80" x-text="resultDescription"></p>
+      <div class="rounded-lg bg-base-200 p-2.5 text-sm">
+        <p><span class="opacity-70" x-text="t('scoreLabel')"></span>: <span class="font-semibold" x-text="score"></span></p>
+        <p><span class="opacity-70" x-text="t('bestScoreLabel')"></span>: <span class="font-semibold" x-text="bestScore"></span></p>
+      </div>
+      <div class="modal-action mt-3">
+        <button class="btn btn-sm btn-outline" x-show="isWin && !continueAfterWin" @click="continueAfterWinGame()" x-text="t('continueBtn')"></button>
+        <button class="btn btn-sm btn-primary" @click="restart()" x-text="t('restartBtn')"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function app2048Hy() {
+      return {
+        status: 'Initializing...',
+        mappingStatus: '',
+        language: 'hy',
+        boardSize: 4,
+        board: [],
+        score: 0,
+        bestScore: 0,
+        moveCount: 0,
+        isWin: false,
+        isGameOver: false,
+        continueAfterWin: false,
+        storageKeys: {
+          bestScore: 'hayos.2048hy.bestScore.v1',
+        },
+        targetLetter: 'Ք',
+        demoMerge: {
+          left: 'Ա',
+          right: 'Ա',
+          result: 'Բ',
+        },
+        hyLetters: [
+          'Ա', 'Բ', 'Գ', 'Դ', 'Ե', 'Զ', 'Է', 'Ը', 'Թ', 'Ժ', 'Ի',
+          'Լ', 'Խ', 'Ծ', 'Կ', 'Հ', 'Ձ', 'Ղ', 'Ճ', 'Մ', 'Յ', 'Ն',
+          'Շ', 'Ո', 'Չ', 'Պ', 'Ջ', 'Ռ', 'Ս', 'Վ', 'Տ', 'Ր', 'Ց',
+          'Ու', 'Փ', 'Ք', 'Օ', 'Ֆ',
+        ],
+        i18n: {
+          hy: {
+            pageTitle: '2048 Հայերեն',
+            restartBtn: 'Նորից',
+            mappingTitle: 'Հայկական mapping model',
+            mappingHint: 'Տառերը հաշվարկվում են value աստիճանով (2,4,8...), merge-ը անցնում է հաջորդ տառին։',
+            targetLabel: 'Նպատակ',
+            exampleLabel: 'Օրինակ',
+            scoreLabel: 'Միավոր',
+            moveCountLabel: 'Քայլեր',
+            bestScoreLabel: 'Լավագույն',
+            boardTitle: 'Խաղատախտակ (4x4)',
+            boardHint: 'Ticket 3: move/merge/spawn engine-ը արդեն միացված է։',
+            controlsHint: 'SWIPE / ARROW / WASD',
+            dirUp: 'Վերև',
+            dirDown: 'Ներքև',
+            dirLeft: 'Ձախ',
+            dirRight: 'Աջ',
+            statusReady: 'Պատրաստ',
+            statusWon: 'Հաղթանակ',
+            statusGameOver: 'Խաղն ավարտվեց',
+            mappingCheckOk: 'Mapping self-check: անցել է',
+            mappingCheckFail: 'Mapping self-check: խնդիր կա',
+            resultWinTitle: 'Հաղթեցիր',
+            resultWinDescription: 'Դու հասար նպատակային տառին։ Կարող ես շարունակել կամ նորից սկսել։',
+            resultLoseTitle: 'Այլևս քայլ չկա',
+            resultLoseDescription: 'Տախտակի վրա այլ merge կամ move հնարավոր չէ։',
+            continueBtn: 'Շարունակել',
+          },
+          en: {
+            pageTitle: '2048 Armenian',
+            restartBtn: 'Restart',
+            mappingTitle: 'Armenian mapping model',
+            mappingHint: 'Tiles are computed by power value (2,4,8...) and merges move to the next letter.',
+            targetLabel: 'Target',
+            exampleLabel: 'Example',
+            scoreLabel: 'Score',
+            moveCountLabel: 'Moves',
+            bestScoreLabel: 'Best',
+            boardTitle: 'Game Board (4x4)',
+            boardHint: 'Ticket 3: move/merge/spawn engine is active.',
+            controlsHint: 'SWIPE / ARROW / WASD',
+            dirUp: 'Up',
+            dirDown: 'Down',
+            dirLeft: 'Left',
+            dirRight: 'Right',
+            statusReady: 'Ready',
+            statusWon: 'Won',
+            statusGameOver: 'Game over',
+            mappingCheckOk: 'Mapping self-check: passed',
+            mappingCheckFail: 'Mapping self-check: failed',
+            resultWinTitle: 'You won',
+            resultWinDescription: 'You reached the target letter. Continue or restart.',
+            resultLoseTitle: 'No moves left',
+            resultLoseDescription: 'No merges or moves are possible on the board.',
+            continueBtn: 'Continue',
+          },
+        },
+        get maxLevel() {
+          return this.hyLetters.length - 1;
+        },
+        get maxValue() {
+          return Math.pow(2, this.maxLevel + 1);
+        },
+        keydownHandler: null,
+        touchStartHandler: null,
+        touchEndHandler: null,
+        touchStartX: null,
+        touchStartY: null,
+        touchMinDistance: 24,
+        get flatBoard() {
+          const cells = [];
+          for (let row = 0; row < this.boardSize; row += 1) {
+            for (let col = 0; col < this.boardSize; col += 1) {
+              const level = this.board[row][col];
+              const isEmpty = level === null;
+              cells.push({
+                id: row * this.boardSize + col,
+                isEmpty,
+                label: isEmpty ? '' : this.levelToLetter(level),
+                classes: isEmpty
+                  ? 'tile-empty'
+                  : `tile-filled ${this.tileToneClass(level)}`,
+              });
+            }
+          }
+          return cells;
+        },
+        tileToneClass(level) {
+          const safe = Number.isInteger(level) && level >= 0 ? Math.min(level, 12) : 0;
+          return `tile-l${safe}`;
+        },
+        get targetLevel() {
+          return this.valueToLevel(2048);
+        },
+        get showResultModal() {
+          if (this.isGameOver) return true;
+          return this.isWin && !this.continueAfterWin;
+        },
+        get resultTitle() {
+          if (this.isGameOver) return this.t('resultLoseTitle');
+          if (this.isWin) return this.t('resultWinTitle');
+          return '';
+        },
+        get resultDescription() {
+          if (this.isGameOver) return this.t('resultLoseDescription');
+          if (this.isWin) return this.t('resultWinDescription');
+          return '';
+        },
+        t(key) {
+          const table = this.i18n[this.language] || this.i18n.en;
+          return table[key] || key;
+        },
+        loadBestScore() {
+          try {
+            const raw = localStorage.getItem(this.storageKeys.bestScore) || '0';
+            const parsed = Number.parseInt(raw, 10);
+            this.bestScore = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+          } catch (_error) {
+            this.bestScore = 0;
+          }
+        },
+        saveBestScore() {
+          try {
+            localStorage.setItem(this.storageKeys.bestScore, String(this.bestScore));
+          } catch (_error) {
+            // Ignore storage failures in embedded contexts.
+          }
+        },
+        updateBestScore() {
+          if (this.score <= this.bestScore) return;
+          this.bestScore = this.score;
+          this.saveBestScore();
+        },
+        valueToLevel(value) {
+          if (!Number.isInteger(value) || value < 2) return -1;
+          if ((value & (value - 1)) !== 0) return -1;
+          return Math.log2(value) - 1;
+        },
+        levelToValue(level) {
+          if (!Number.isInteger(level) || level < 0) return null;
+          return Math.pow(2, level + 1);
+        },
+        levelToLetter(level) {
+          if (!Number.isInteger(level) || level < 0) return this.hyLetters[0];
+          if (level > this.maxLevel) return this.hyLetters[this.maxLevel];
+          return this.hyLetters[level];
+        },
+        valueToLetter(value) {
+          const level = this.valueToLevel(value);
+          if (level < 0) return this.hyLetters[0];
+          return this.levelToLetter(level);
+        },
+        letterToLevel(letter) {
+          return this.hyLetters.indexOf(letter);
+        },
+        canMergeLevels(levelA, levelB) {
+          return Number.isInteger(levelA) && levelA >= 0 && levelA === levelB;
+        },
+        mergeLevels(levelA, levelB) {
+          if (!this.canMergeLevels(levelA, levelB)) return null;
+          return Math.min(levelA + 1, this.maxLevel);
+        },
+        mergeLetters(left, right) {
+          const leftLevel = this.letterToLevel(left);
+          const rightLevel = this.letterToLevel(right);
+          const mergedLevel = this.mergeLevels(leftLevel, rightLevel);
+          if (mergedLevel === null) return null;
+          return this.levelToLetter(mergedLevel);
+        },
+        runMappingSelfCheck() {
+          try {
+            const checks = [
+              this.valueToLetter(2) === 'Ա',
+              this.valueToLetter(4) === 'Բ',
+              this.levelToValue(0) === 2,
+              this.levelToValue(5) === 64,
+              this.mergeLetters('Ա', 'Ա') === 'Բ',
+              this.mergeLetters('Բ', 'Բ') === 'Գ',
+              this.mergeLetters('Ք', 'Ք') === 'Օ',
+              this.mergeLetters('Ֆ', 'Ֆ') === 'Ֆ',
+              this.mergeLetters('Ա', 'Բ') === null,
+              this.valueToLevel(3) === -1,
+            ];
+            return checks.every(Boolean);
+          } catch (_error) {
+            return false;
+          }
+        },
+        createEmptyBoard() {
+          return Array.from({ length: this.boardSize }, () =>
+            Array.from({ length: this.boardSize }, () => null));
+        },
+        getEmptyCells() {
+          const empty = [];
+          for (let row = 0; row < this.boardSize; row += 1) {
+            for (let col = 0; col < this.boardSize; col += 1) {
+              if (this.board[row][col] === null) {
+                empty.push({ row, col });
+              }
+            }
+          }
+          return empty;
+        },
+        spawnRandomTile() {
+          const empty = this.getEmptyCells();
+          if (!empty.length) return false;
+          const randomIndex = Math.floor(Math.random() * empty.length);
+          const spot = empty[randomIndex];
+          const level = Math.random() < 0.9 ? 0 : 1;
+          this.board[spot.row][spot.col] = level;
+          return true;
+        },
+        cloneBoard(board) {
+          return board.map((row) => row.slice());
+        },
+        linesForDirection(direction) {
+          const lines = [];
+          const n = this.boardSize;
+
+          if (direction === 'left') {
+            for (let row = 0; row < n; row += 1) {
+              lines.push(Array.from({ length: n }, (_, col) => ({ row, col })));
+            }
+          } else if (direction === 'right') {
+            for (let row = 0; row < n; row += 1) {
+              lines.push(Array.from({ length: n }, (_, offset) => ({ row, col: n - 1 - offset })));
+            }
+          } else if (direction === 'up') {
+            for (let col = 0; col < n; col += 1) {
+              lines.push(Array.from({ length: n }, (_, row) => ({ row, col })));
+            }
+          } else if (direction === 'down') {
+            for (let col = 0; col < n; col += 1) {
+              lines.push(Array.from({ length: n }, (_, offset) => ({ row: n - 1 - offset, col })));
+            }
+          }
+          return lines;
+        },
+        collapseLine(values) {
+          const compact = values.filter((value) => value !== null);
+          const out = [];
+          let gainedScore = 0;
+
+          for (let i = 0; i < compact.length; i += 1) {
+            const current = compact[i];
+            const next = compact[i + 1];
+            if (next !== undefined && next === current) {
+              const merged = Math.min(current + 1, this.maxLevel);
+              out.push(merged);
+              gainedScore += this.levelToValue(merged) || 0;
+              i += 1;
+            } else {
+              out.push(current);
+            }
+          }
+
+          while (out.length < this.boardSize) out.push(null);
+          return { values: out, gainedScore };
+        },
+        applyMove(direction) {
+          const lines = this.linesForDirection(direction);
+          const next = this.cloneBoard(this.board);
+          let gainedScore = 0;
+          let moved = false;
+
+          lines.forEach((line) => {
+            const original = line.map((point) => this.board[point.row][point.col]);
+            const collapsed = this.collapseLine(original);
+            gainedScore += collapsed.gainedScore;
+
+            line.forEach((point, idx) => {
+              next[point.row][point.col] = collapsed.values[idx];
+              if (collapsed.values[idx] !== original[idx]) {
+                moved = true;
+              }
+            });
+          });
+
+          return { moved, nextBoard: next, gainedScore };
+        },
+        move(direction) {
+          if (this.isGameOver) return false;
+          if (this.isWin && !this.continueAfterWin) return false;
+
+          const result = this.applyMove(direction);
+          if (!result.moved) {
+            this.evaluateGameState();
+            return false;
+          }
+
+          this.board = result.nextBoard;
+          this.score += result.gainedScore;
+          this.updateBestScore();
+          this.moveCount += 1;
+          this.spawnRandomTile();
+          this.evaluateGameState();
+          return true;
+        },
+        hasReachedTarget() {
+          for (let row = 0; row < this.boardSize; row += 1) {
+            for (let col = 0; col < this.boardSize; col += 1) {
+              const level = this.board[row][col];
+              if (level !== null && level >= this.targetLevel) return true;
+            }
+          }
+          return false;
+        },
+        hasMovesAvailable() {
+          if (this.getEmptyCells().length > 0) return true;
+          for (let row = 0; row < this.boardSize; row += 1) {
+            for (let col = 0; col < this.boardSize; col += 1) {
+              const current = this.board[row][col];
+              if (col + 1 < this.boardSize && this.board[row][col + 1] === current) return true;
+              if (row + 1 < this.boardSize && this.board[row + 1][col] === current) return true;
+            }
+          }
+          return false;
+        },
+        evaluateGameState() {
+          if (!this.continueAfterWin && this.hasReachedTarget()) {
+            this.isWin = true;
+            this.status = this.t('statusWon');
+            return;
+          }
+          if (!this.hasMovesAvailable()) {
+            this.isGameOver = true;
+            this.status = this.t('statusGameOver');
+            return;
+          }
+          this.status = this.t('statusReady');
+        },
+        continueAfterWinGame() {
+          if (!this.isWin) return;
+          this.continueAfterWin = true;
+          this.status = this.t('statusReady');
+        },
+        keyToDirection(key) {
+          const normalized = String(key || '');
+          const map = {
+            ArrowUp: 'up',
+            ArrowDown: 'down',
+            ArrowLeft: 'left',
+            ArrowRight: 'right',
+            w: 'up',
+            W: 'up',
+            s: 'down',
+            S: 'down',
+            a: 'left',
+            A: 'left',
+            d: 'right',
+            D: 'right',
+          };
+          return map[normalized] || null;
+        },
+        handleKeydown(event) {
+          const direction = this.keyToDirection(event.key);
+          if (!direction) return;
+
+          const target = event.target;
+          const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+          const isEditable = tag === 'input' || tag === 'textarea' || tag === 'select' || (target && target.isContentEditable);
+          if (isEditable) return;
+
+          event.preventDefault();
+          this.move(direction);
+        },
+        handleTouchStart(event) {
+          const touch = event.changedTouches && event.changedTouches[0];
+          if (!touch) return;
+          this.touchStartX = touch.clientX;
+          this.touchStartY = touch.clientY;
+        },
+        handleTouchEnd(event) {
+          if (this.touchStartX === null || this.touchStartY === null) return;
+
+          const touch = event.changedTouches && event.changedTouches[0];
+          if (!touch) return;
+
+          const dx = touch.clientX - this.touchStartX;
+          const dy = touch.clientY - this.touchStartY;
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+
+          this.touchStartX = null;
+          this.touchStartY = null;
+
+          if (absX < this.touchMinDistance && absY < this.touchMinDistance) return;
+
+          const direction = absX > absY
+            ? (dx > 0 ? 'right' : 'left')
+            : (dy > 0 ? 'down' : 'up');
+          this.move(direction);
+        },
+        registerInputHandlers() {
+          const root = this.$root;
+          if (!root) return;
+
+          this.keydownHandler = (event) => this.handleKeydown(event);
+          this.touchStartHandler = (event) => this.handleTouchStart(event);
+          this.touchEndHandler = (event) => this.handleTouchEnd(event);
+
+          window.addEventListener('keydown', this.keydownHandler);
+          root.addEventListener('touchstart', this.touchStartHandler, { passive: true });
+          root.addEventListener('touchend', this.touchEndHandler, { passive: true });
+        },
+        bootstrapGame() {
+          this.board = this.createEmptyBoard();
+          this.score = 0;
+          this.moveCount = 0;
+          this.isWin = false;
+          this.isGameOver = false;
+          this.continueAfterWin = false;
+          this.spawnRandomTile();
+          this.spawnRandomTile();
+          this.status = this.t('statusReady');
+        },
+        async init() {
+          this.status = 'Loading...';
+          try {
+            await loadHayOSClient();
+            if (window.HayOSClient && typeof window.HayOSClient.create === 'function') {
+              const client = await window.HayOSClient.create({
+                appId: '2048-hy',
+                autoAuth: true,
+                autoFetchUser: false,
+              });
+              const osLanguage = client && typeof client.getLanguage === 'function'
+                ? client.getLanguage()
+                : 'hy';
+              this.language = osLanguage === 'en' ? 'en' : 'hy';
+            }
+          } catch (_error) {
+            this.language = 'hy';
+          }
+          this.targetLetter = this.valueToLetter(2048);
+          this.demoMerge = {
+            left: 'Ա',
+            right: 'Ա',
+            result: this.mergeLetters('Ա', 'Ա') || 'Ա',
+          };
+          this.loadBestScore();
+          this.mappingStatus = this.runMappingSelfCheck()
+            ? this.t('mappingCheckOk')
+            : this.t('mappingCheckFail');
+          this.bootstrapGame();
+          this.registerInputHandlers();
+        },
+        restart() {
+          this.bootstrapGame();
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

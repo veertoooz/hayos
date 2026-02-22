@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" data-theme="black" x-data="booApp()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boo</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+  </style>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+
+<body class="h-full min-h-dvh bg-base-200">
+  <main class="min-h-dvh p-3 sm:p-4" style="padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);" x-cloak>
+    <div class="mx-auto w-full max-w-md">
+      <section class="bg-base-100 border border-base-300 rounded-box shadow-sm overflow-hidden min-h-[calc(100dvh-1.5rem)] flex flex-col">
+        <header class="navbar min-h-0 px-3 py-2 border-b border-base-300">
+          <button class="btn btn-ghost btn-sm btn-circle mr-2" x-show="currentView !== 'chats'" x-cloak @click="backToChats()">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="avatar" x-show="currentView !== 'conversation'" x-cloak>
+              <div class="w-7 rounded-full ring ring-base-300 ring-offset-base-100 ring-offset-1">
+                <img :src="profilePhoto" alt="Profile photo" loading="lazy" />
+              </div>
+            </div>
+            <div class="avatar" x-show="currentView === 'conversation'" x-cloak>
+              <div class="w-7 rounded-full ring ring-base-300 ring-offset-base-100 ring-offset-1">
+                <img :src="activePeer?.photoUrl || profilePhoto" alt="Peer photo" loading="lazy" />
+              </div>
+            </div>
+            <div class="min-w-0">
+              <h1 class="text-sm font-semibold truncate" x-text="viewTitle"></h1>
+              <p class="text-[11px] opacity-60 truncate" x-text="currentView === 'conversation' ? (activeThreadId || '') : profileUsername"></p>
+            </div>
+          </div>
+          <div class="ml-auto">
+            <span class="badge badge-outline badge-sm" x-text="language === 'hy' ? 'Հայ' : 'EN'"></span>
+          </div>
+        </header>
+
+        <div class="flex-1 min-h-0">
+          <div class="h-full p-3 space-y-3 overflow-auto" x-show="currentView === 'chats'" x-cloak>
+            <div class="card bg-base-200 border border-base-300">
+              <div class="card-body p-3 gap-2">
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="text-sm font-semibold">Recent chats</h2>
+                  <button class="btn btn-xs btn-ghost" @click="loadRecentThreads()">Refresh</button>
+                </div>
+                <div class="alert alert-info py-2" x-show="isThreadListLoading" x-cloak>
+                  <span class="loading loading-spinner loading-xs"></span>
+                  <span class="text-sm">Loading chats...</span>
+                </div>
+                <div class="alert alert-error py-2" x-show="threadListError" x-cloak>
+                  <div class="flex w-full items-center justify-between gap-2">
+                    <span class="text-sm" x-text="threadListError"></span>
+                    <button class="btn btn-xs btn-outline" @click="loadRecentThreads()">Retry</button>
+                  </div>
+                </div>
+                <ul class="menu bg-base-100 rounded-box border border-base-300 p-1" x-show="filteredRecentThreads.length > 0" x-cloak>
+                  <template x-for="thread in filteredRecentThreads" :key="thread.threadId">
+                    <li>
+                      <button class="flex items-center gap-2" @click="openThreadFromList(thread)">
+                        <div class="avatar">
+                          <div class="w-9 rounded-full">
+                            <img :src="peerPhotoFor(thread)" alt="Thread peer avatar" loading="lazy" />
+                          </div>
+                        </div>
+                        <div class="min-w-0 text-left">
+                          <p class="text-sm font-medium truncate" x-text="thread.username"></p>
+                          <p class="text-xs opacity-60 truncate" x-text="thread.subtitle"></p>
+                        </div>
+                        <span class="ml-auto text-[10px] opacity-60" x-text="formatMessageTime(thread.lastActivityAt)"></span>
+                      </button>
+                    </li>
+                  </template>
+                </ul>
+                <p class="text-xs opacity-70" x-show="!isThreadListLoading && !threadListError && filteredRecentThreads.length === 0" x-cloak>No chats yet. Search by username to start.</p>
+              </div>
+            </div>
+
+            <div class="join w-full">
+              <input
+                type="text"
+                class="input input-bordered join-item w-full"
+                placeholder="Search username..."
+                x-model="searchQuery"
+                @input="onSearchInput()"
+              />
+              <button class="btn join-item" @click="retrySearch()">Go</button>
+            </div>
+            <p class="text-xs opacity-70" x-show="searchQuery.trim().length > 0 && searchQuery.trim().length < 2" x-cloak>Type at least 2 characters.</p>
+
+            <div class="alert alert-info py-2" x-show="isSearchLoading" x-cloak>
+              <span class="loading loading-spinner loading-xs"></span>
+              <span class="text-sm">Searching...</span>
+            </div>
+
+            <div class="alert alert-error py-2" x-show="searchError" x-cloak>
+              <div class="flex w-full items-center justify-between gap-2">
+                <span class="text-sm" x-text="searchError"></span>
+                <button class="btn btn-xs btn-outline" @click="retrySearch()">Retry</button>
+              </div>
+            </div>
+
+            <div class="text-xs opacity-70" x-show="!isSearchLoading && !searchError && searchQuery.trim().length >= 2 && searchResults.length === 0" x-cloak>No users found.</div>
+
+            <ul class="menu bg-base-100 rounded-box border border-base-300 p-1" x-show="searchResults.length > 0" x-cloak>
+              <template x-for="item in searchResults" :key="item.uid">
+                <li>
+                  <button class="flex items-center gap-2" @click="openThreadForResult(item)">
+                    <div class="avatar">
+                      <div class="w-9 rounded-full">
+                        <img :src="item.photoUrl || profilePhoto" alt="Result avatar" loading="lazy" />
+                      </div>
+                    </div>
+                    <div class="min-w-0 text-left">
+                      <p class="text-sm font-medium truncate" x-text="item.username"></p>
+                      <p class="text-xs opacity-60 truncate" x-text="item.uid"></p>
+                    </div>
+                    <span class="ml-auto text-xs opacity-70">Open</span>
+                  </button>
+                </li>
+              </template>
+            </ul>
+
+            <div class="alert alert-info py-2" x-show="isBootReady && activePeer && activeThreadId" x-cloak>
+              <div class="w-full flex items-center justify-between gap-2">
+                <span class="text-sm truncate" x-text="`Active chat: ${activePeer?.username || '-'}`"></span>
+                <button class="btn btn-xs btn-primary" @click="switchView('conversation')">Open Chat</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-full flex flex-col" x-show="currentView === 'conversation'" x-cloak>
+            <div class="px-3 pt-3">
+              <div class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-2">
+                <div class="avatar">
+                  <div class="w-10 rounded-full">
+                    <img :src="peerPhotoFor(activePeer)" alt="Active peer avatar" loading="lazy" />
+                  </div>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold truncate" x-text="activePeerTitle"></p>
+                  <p class="text-xs opacity-70 truncate" x-text="activePeerSubtitle"></p>
+                </div>
+              </div>
+            </div>
+            <div class="px-3 pt-3" x-show="threadError" x-cloak>
+              <div class="alert alert-error py-2">
+                <div class="flex w-full items-center justify-between gap-2">
+                  <span class="text-sm" x-text="threadError"></span>
+                  <button class="btn btn-xs btn-outline" @click="reloadThread()">Retry</button>
+                </div>
+              </div>
+            </div>
+            <div class="px-3 pt-3" x-show="isThreadLoading" x-cloak>
+              <div class="alert alert-info py-2">
+                <span class="loading loading-spinner loading-xs"></span>
+                <span class="text-sm">Loading messages...</span>
+              </div>
+            </div>
+            <div class="flex-1 min-h-0 overflow-auto px-3 py-3 space-y-2" x-ref="messagesViewport">
+              <template x-for="msg in threadMessages" :key="msg.id">
+                <div class="chat" :class="msg.senderUid === user?.uid ? 'chat-end' : 'chat-start'">
+                  <div class="chat-bubble chat-bubble-primary" :class="msg.senderUid === user?.uid ? '' : 'chat-bubble-neutral'">
+                    <p class="break-words" x-text="msg.text || ''"></p>
+                    <p class="mt-1 text-[10px] opacity-70 text-right" x-text="formatMessageTime(msg.createdAt || msg.created_at || msg.timestamp || msg.sentAt)"></p>
+                  </div>
+                </div>
+              </template>
+              <p class="text-xs opacity-60" x-show="!isThreadLoading && threadMessages.length === 0" x-cloak>No messages yet.</p>
+            </div>
+            <div class="border-t border-base-300 p-3" style="padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);">
+              <form class="join w-full" @submit.prevent="sendMessage()">
+                <input
+                  type="text"
+                  class="input input-bordered join-item w-full"
+                  placeholder="Write a message..."
+                  x-model="messageDraft"
+                  maxlength="4000"
+                  :disabled="isSendingMessage || !activeThreadId"
+                />
+                <button type="submit" class="btn btn-primary join-item" :disabled="isSendingMessage || !activeThreadId || !messageDraft.trim()">
+                  <span class="loading loading-spinner loading-xs" x-show="isSendingMessage" x-cloak></span>
+                  <span x-text="isSendingMessage ? '...' : 'Send'"></span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="h-full p-3 space-y-3 overflow-auto" x-show="currentView === 'profile'" x-cloak>
+            <div class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-2" x-show="isBootReady" x-cloak>
+              <div class="avatar">
+                <div class="w-10 rounded-full">
+                  <img :src="profilePhoto" alt="Profile avatar" loading="lazy" />
+                </div>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium truncate" x-text="profileUsername"></p>
+                <p class="text-xs opacity-70 truncate" x-text="user?.email || user?.uid || '-'"></p>
+              </div>
+            </div>
+
+            <div class="card bg-base-200 border border-base-300" x-show="isBootReady && needsUsernameSetup" x-cloak>
+              <div class="card-body p-3 gap-2">
+                <h3 class="text-sm font-semibold">Set your username</h3>
+                <form class="space-y-2" @submit.prevent="saveUsername()">
+                  <input type="text" class="input input-bordered w-full" placeholder="username" maxlength="30" x-model="usernameDraft" autocomplete="nickname" />
+                  <button type="submit" class="btn btn-primary btn-sm w-full" :disabled="isSavingUsername">
+                    <span class="loading loading-spinner loading-xs" x-show="isSavingUsername" x-cloak></span>
+                    <span x-text="isSavingUsername ? 'Saving...' : 'Save Username'"></span>
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card bg-base-200 border border-base-300" x-show="debugEnabled" x-cloak>
+              <div class="card-body p-3 gap-1">
+                <h3 class="text-sm font-semibold">Debug</h3>
+                <p class="text-xs break-all"><span class="opacity-70">Last action:</span> <span x-text="debugLastAction || '-'"></span></p>
+                <p class="text-xs break-all"><span class="opacity-70">Thread ID:</span> <span x-text="activeThreadId || '-'"></span></p>
+                <p class="text-xs break-all"><span class="opacity-70">Last error:</span> <span x-text="debugLastError || '-'"></span></p>
+                <div class="rounded-box border border-base-300 bg-base-100 p-2 max-h-32 overflow-auto text-[11px] space-y-1" x-show="debugEvents.length > 0" x-cloak>
+                  <template x-for="(line, idx) in debugEvents" :key="idx">
+                    <p class="break-all opacity-80 font-mono" x-text="line"></p>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="border-t border-base-300 p-2 bg-base-100" x-show="isBootReady" x-cloak>
+          <div class="tabs tabs-boxed grid grid-cols-3">
+            <a class="tab" :class="{ 'tab-active': currentView === 'chats' }" @click="switchView('chats')">Chats</a>
+            <a class="tab" :class="{ 'tab-active': currentView === 'conversation' }" @click="switchView('conversation')" :disabled="!activeThreadId">Chat</a>
+            <a class="tab" :class="{ 'tab-active': currentView === 'profile' }" @click="switchView('profile')">Profile</a>
+          </div>
+        </footer>
+      </section>
+
+      <div class="mt-3 space-y-2">
+        <div class="alert alert-info py-2" x-show="loading || isBootLoading" x-cloak>
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="text-sm" x-text="bootState === 'auth-check' ? 'Checking authentication...' : 'Initializing...'"></span>
+        </div>
+        <div class="alert alert-error py-2" x-show="errorMessage" x-cloak>
+          <span class="text-sm" x-text="errorMessage"></span>
+        </div>
+        <div class="alert alert-success py-2" x-show="successMessage" x-cloak>
+          <span class="text-sm" x-text="successMessage"></span>
+        </div>
+        <div class="card-actions pt-1" x-show="isBootError" x-cloak>
+          <button class="btn btn-sm btn-outline" @click="init()">Retry</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function booApp() {
+      return {
+        appId: 'boo',
+        client: null,
+        user: null,
+        profileData: null,
+        language: 'en',
+        currentView: 'chats',
+        loading: true,
+        bootState: 'initializing',
+        errorMessage: '',
+        successMessage: '',
+        usernameDraft: '',
+        isSavingUsername: false,
+        searchQuery: '',
+        searchResults: [],
+        searchError: '',
+        isSearching: false,
+        searchState: 'idle',
+        searchDebounceHandle: null,
+        searchTokenCounter: 0,
+        activeSearchToken: 0,
+        searchDebounceMs: 350,
+        recentThreads: [],
+        threadListState: 'idle',
+        threadListError: '',
+        threadListPollHandle: null,
+        activePeer: null,
+        activeThreadId: '',
+        threadMessages: [],
+        threadLoading: false,
+        threadState: 'idle',
+        threadError: '',
+        threadLoadToken: 0,
+        messageDraft: '',
+        messagePollHandle: null,
+        lastMessageSignature: '',
+        isSendingMessage: false,
+        profilesByUid: {},
+        debugLastAction: '',
+        debugLastError: '',
+        debugEnabled: false,
+        debugEvents: [],
+        detachProfileUpdateListener: null,
+        detachDebugTraceListener: null,
+
+        get statusLabel() {
+          if (this.bootState === 'ready') return 'ready';
+          if (this.bootState === 'auth-check') return 'auth-check';
+          if (this.bootState === 'auth-failed') return 'auth-failed';
+          if (this.bootState === 'error') return 'error';
+          return 'initializing';
+        },
+
+        get isBootReady() {
+          return this.bootState === 'ready';
+        },
+
+        get isBootLoading() {
+          return this.bootState === 'initializing' || this.bootState === 'auth-check';
+        },
+
+        get isBootError() {
+          return this.bootState === 'auth-failed' || this.bootState === 'error';
+        },
+
+        get isSearchLoading() {
+          return this.searchState === 'loading';
+        },
+
+        get isThreadLoading() {
+          return this.threadState === 'loading';
+        },
+
+        get isThreadListLoading() {
+          return this.threadListState === 'loading';
+        },
+
+        get filteredRecentThreads() {
+          const query = String(this.searchQuery || '').trim().toLowerCase();
+          if (!query) return this.recentThreads;
+          return this.recentThreads.filter((thread) => {
+            const username = String(thread?.username || '').toLowerCase();
+            const subtitle = String(thread?.subtitle || '').toLowerCase();
+            return username.includes(query) || subtitle.includes(query);
+          });
+        },
+
+        get viewTitle() {
+          if (this.currentView === 'conversation') return 'Chat';
+          if (this.currentView === 'profile') {
+            return 'My Profile';
+          }
+          return 'Boo';
+        },
+
+        get profileUsername() {
+          const socialName = typeof this.profileData?.username === 'string'
+            ? this.profileData.username.trim()
+            : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName.trim() : '');
+          const fallbackName = typeof this.user?.displayName === 'string' ? this.user.displayName.trim() : '';
+          return socialName || fallbackName || 'No username';
+        },
+
+        get needsUsernameSetup() {
+          const socialName = typeof this.profileData?.username === 'string'
+            ? this.profileData.username.trim()
+            : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName.trim() : '');
+          return socialName.length === 0;
+        },
+
+        get profilePhoto() {
+          const socialPhoto = typeof this.profileData?.photoUrl === 'string'
+            ? this.profileData.photoUrl.trim()
+            : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl.trim() : '');
+          const authPhoto = typeof this.user?.photoURL === 'string' ? this.user.photoURL.trim() : '';
+          if (socialPhoto) return socialPhoto;
+          if (authPhoto) return authPhoto;
+          const seed = (this.profileUsername || 'U').charAt(0).toUpperCase();
+          const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"128\" height=\"128\"><rect width=\"100%\" height=\"100%\" fill=\"#2a323c\"/><text x=\"50%\" y=\"50%\" fill=\"#ffffff\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"56\">${seed}</text></svg>`;
+          return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        },
+
+        get activePeerTitle() {
+          return this.activePeer?.username || 'Unknown user';
+        },
+
+        get activePeerSubtitle() {
+          if (!this.activePeer) return '';
+          if (this.isThreadLoading) return 'Loading...';
+          return this.activePeer.uid || '';
+        },
+
+        mapError(error) {
+          return this.normalizeError(error).message;
+        },
+
+        normalizeError(error, fallback = '') {
+          const text = error && error.message ? error.message : String(error || '');
+          const raw = String(text || '').trim();
+          const upper = raw.toUpperCase();
+          if (upper.includes('NOT AUTHENTICATED')) {
+            return { kind: 'auth', message: 'Authentication failed. Please sign in again.' };
+          }
+          if (upper.includes('PERMISSION_DENIED')) {
+            return { kind: 'permission', message: 'Permission denied for this app.' };
+          }
+          if (upper.includes('USERNAME_TAKEN') || upper.includes('CONFLICT_ALREADY_EXISTS')) {
+            return { kind: 'conflict', message: 'Username is already taken.' };
+          }
+          if (upper.includes('VALIDATION_ERROR')) {
+            return { kind: 'validation', message: 'Validation failed. Check your input values.' };
+          }
+          if (upper.includes('NOT_FOUND')) {
+            return { kind: 'not_found', message: 'Requested data was not found.' };
+          }
+          if (upper.includes('BLOCKED_RELATION')) {
+            return { kind: 'conflict', message: 'User relationship does not allow this action.' };
+          }
+          if (upper.includes('REQUEST TIMEOUT') || upper.includes('NETWORK') || upper.includes('FAILED TO FETCH')) {
+            return { kind: 'network', message: 'Network error. Please retry.' };
+          }
+          return { kind: 'unknown', message: raw || fallback || 'Unexpected error.' };
+        },
+
+        setDebugAction(action) {
+          this.debugLastAction = String(action || '').trim();
+          this.appendDebugEvent({ source: 'boo', stage: 'action', action: this.debugLastAction });
+        },
+
+        setBootState(nextState) {
+          const allowed = ['initializing', 'auth-check', 'ready', 'auth-failed', 'error'];
+          this.bootState = allowed.includes(nextState) ? nextState : 'error';
+        },
+
+        setSearchState(nextState) {
+          const allowed = ['idle', 'loading', 'ready', 'error'];
+          this.searchState = allowed.includes(nextState) ? nextState : 'error';
+          this.isSearching = this.searchState === 'loading';
+        },
+
+        setThreadState(nextState) {
+          const allowed = ['idle', 'loading', 'sending', 'ready', 'error'];
+          this.threadState = allowed.includes(nextState) ? nextState : 'error';
+          this.threadLoading = this.threadState === 'loading';
+          this.isSendingMessage = this.threadState === 'sending';
+        },
+
+        switchView(nextView) {
+          const allowed = nextView === 'chats' || nextView === 'conversation' || nextView === 'profile';
+          if (!allowed) return;
+          if (nextView === 'conversation' && !this.activeThreadId) return;
+          this.currentView = nextView;
+          if (nextView === 'conversation') {
+            this.stopChatsAutoRefresh();
+            this.startConversationAutoRefresh();
+            return;
+          }
+          if (nextView === 'chats') {
+            this.startChatsAutoRefresh();
+            this.stopConversationAutoRefresh();
+            return;
+          }
+          this.stopConversationAutoRefresh();
+          this.stopChatsAutoRefresh();
+        },
+
+        backToChats() {
+          this.stopConversationAutoRefresh();
+          this.startChatsAutoRefresh();
+          this.currentView = 'chats';
+        },
+
+        captureDebugError(context, error) {
+          const message = error && error.message ? String(error.message) : String(error);
+          this.debugLastError = `${String(context || 'unknown')}: ${message}`;
+          this.appendDebugEvent({ source: 'boo', stage: 'error', context, message });
+        },
+
+        isDebugEnabledFromQuery() {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('debug') === '1';
+          } catch {
+            return false;
+          }
+        },
+
+        appendDebugEvent(payload) {
+          if (!this.debugEnabled) return;
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          const ss = String(now.getSeconds()).padStart(2, '0');
+          const stage = typeof payload?.stage === 'string' ? payload.stage : 'event';
+          const action = typeof payload?.action === 'string' ? payload.action : '';
+          const message = typeof payload?.message === 'string' ? payload.message : '';
+          const line = `[${hh}:${mm}:${ss}] ${stage}${action ? `:${action}` : ''}${message ? ` ${message}` : ''}`;
+          this.debugEvents.unshift(line);
+          if (this.debugEvents.length > 30) {
+            this.debugEvents = this.debugEvents.slice(0, 30);
+          }
+        },
+
+        formatMessageTime(value) {
+          if (!value) return '';
+          try {
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) return '';
+            return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch {
+            return '';
+          }
+        },
+
+        peerPhotoFor(item) {
+          const raw = typeof item?.photoUrl === 'string' ? item.photoUrl.trim() : '';
+          return raw || this.profilePhoto;
+        },
+
+        setThreadListState(nextState) {
+          const allowed = ['idle', 'loading', 'ready', 'error'];
+          this.threadListState = allowed.includes(nextState) ? nextState : 'error';
+        },
+
+        peerUidFromThreadRow(row) {
+          const members = Array.isArray(row?.members) ? row.members.filter((item) => typeof item === 'string') : [];
+          const ownUid = this.user?.uid || '';
+          return members.find((uid) => uid !== ownUid) || '';
+        },
+
+        normalizeThreadRow(row) {
+          const threadId = typeof row?.id === 'string' ? row.id.trim() : '';
+          if (!threadId) return null;
+          const peerUid = this.peerUidFromThreadRow(row);
+          if (!peerUid) return null;
+          const cached = this.profilesByUid[peerUid] || null;
+          const username = cached?.displayName || `user:${peerUid.slice(0, 6)}`;
+          const photoUrl = cached?.avatarUrl || '';
+          const lastActivityAt = typeof row?.lastMessageAt === 'string' && row.lastMessageAt.trim()
+            ? row.lastMessageAt
+            : (typeof row?.updatedAt === 'string' ? row.updatedAt : '');
+          return {
+            threadId,
+            peerUid,
+            username,
+            photoUrl,
+            subtitle: peerUid,
+            lastActivityAt,
+          };
+        },
+
+        async hydrateThreadPeers(rows) {
+          const list = Array.isArray(rows) ? rows : [];
+          const pending = [];
+          for (const row of list) {
+            const peerUid = this.peerUidFromThreadRow(row);
+            if (!peerUid) continue;
+            if (!this.profilesByUid[peerUid]) pending.push(peerUid);
+          }
+          if (pending.length === 0) return;
+          await Promise.all(pending.map(async (peerUid) => {
+            await this.refreshPeerIdentity(peerUid);
+          }));
+        },
+
+        messageSignature(rows) {
+          if (!Array.isArray(rows) || rows.length === 0) return '';
+          const last = rows[rows.length - 1] || {};
+          const id = typeof last.id === 'string' ? last.id : '';
+          const text = typeof last.text === 'string' ? last.text : '';
+          const stamp = typeof last.createdAt === 'string'
+            ? last.createdAt
+            : (typeof last.created_at === 'string' ? last.created_at : '');
+          return `${rows.length}:${id}:${text.length}:${stamp}`;
+        },
+
+        scrollThreadToBottom(behavior = 'auto') {
+          this.$nextTick(() => {
+            const node = this.$refs?.messagesViewport;
+            if (!node) return;
+            node.scrollTo({ top: node.scrollHeight, behavior });
+          });
+        },
+
+        // Core data API wrappers (logic freeze layer for upcoming UI refactors).
+        async apiGetProfile(uid) {
+          return this.client.socialProfileGet(uid);
+        },
+
+        async apiSearchProfiles(query, limitCount) {
+          return this.client.socialProfileSearch(query, limitCount);
+        },
+
+        async apiOpenThread(peerUid) {
+          return this.client.socialDmOpenThread(peerUid);
+        },
+
+        async apiListThreads() {
+          return this.client.socialDmListThreads();
+        },
+
+        async apiListMessages(threadId, cursor, limitCount) {
+          return this.client.socialDmListMessages(threadId, cursor, limitCount);
+        },
+
+        async apiSendMessage(threadId, text) {
+          return this.client.socialDmSendMessage(threadId, text);
+        },
+
+        usernameIsValid(value) {
+          const normalized = (value || '').trim();
+          if (normalized.length < 3 || normalized.length > 30) return false;
+          return /^[a-zA-Z0-9._-]+$/.test(normalized);
+        },
+
+        async loadProfileIdentity() {
+          if (!this.client) return;
+          try {
+            this.profileData = await this.apiGetProfile();
+            this.usernameDraft = typeof this.profileData?.username === 'string'
+              ? this.profileData.username
+              : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName : '');
+          } catch (error) {
+            const text = this.mapError(error);
+            if (text.includes('Profile not found.')) {
+              this.profileData = null;
+              this.usernameDraft = '';
+              return;
+            }
+            throw error;
+          }
+        },
+
+        async refreshPeerIdentity(uid) {
+          const targetUid = String(uid || '').trim();
+          if (!targetUid || !this.client) return;
+          try {
+            const profile = await this.apiGetProfile(targetUid);
+            const username = typeof profile?.username === 'string'
+              ? profile.username.trim()
+              : (typeof profile?.displayName === 'string' ? profile.displayName.trim() : '');
+            const photoUrl = typeof profile?.photoUrl === 'string'
+              ? profile.photoUrl.trim()
+              : (typeof profile?.avatarUrl === 'string' ? profile.avatarUrl.trim() : '');
+            if (!username) return;
+            const normalized = {
+              uid: targetUid,
+              username,
+              photoUrl: photoUrl || null,
+            };
+            this.profilesByUid[targetUid] = {
+              uid: targetUid,
+              displayName: username,
+              avatarUrl: normalized.photoUrl,
+            };
+            if (this.activePeer?.uid === targetUid) {
+              this.activePeer = { ...this.activePeer, ...normalized };
+            }
+            this.searchResults = this.searchResults.map((row) => (
+              row.uid === targetUid ? { ...row, username, photoUrl: normalized.photoUrl } : row
+            ));
+            this.recentThreads = this.recentThreads.map((row) => (
+              row.peerUid === targetUid
+                ? { ...row, username, photoUrl: normalized.photoUrl, subtitle: targetUid }
+                : row
+            ));
+          } catch {
+            // Ignore peer refresh failures; realtime event should never break chat flow.
+          }
+        },
+
+        async handleProfileRealtimeUpdate(payload) {
+          const changedUid = typeof payload?.uid === 'string' ? payload.uid.trim() : '';
+          if (!changedUid) return;
+          if (changedUid === this.user?.uid) {
+            await this.loadProfileIdentity();
+            return;
+          }
+          await this.refreshPeerIdentity(changedUid);
+        },
+
+        async saveUsername() {
+          if (!this.client || this.isSavingUsername || this.bootState !== 'ready') return;
+          this.setDebugAction('save-username');
+          this.errorMessage = '';
+          this.successMessage = '';
+
+          const normalized = (this.usernameDraft || '').trim();
+          if (!this.usernameIsValid(normalized)) {
+            this.errorMessage = 'Username must be 3-30 characters and contain only letters, numbers, . _ -';
+            return;
+          }
+
+          this.isSavingUsername = true;
+          try {
+            const payload = {
+              username: normalized,
+              displayName: normalized,
+              photoUrl: typeof this.profileData?.photoUrl === 'string'
+                ? this.profileData.photoUrl
+                : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl : null),
+              avatarUrl: typeof this.profileData?.photoUrl === 'string'
+                ? this.profileData.photoUrl
+                : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl : null),
+              bio: typeof this.profileData?.bio === 'string' ? this.profileData.bio : '',
+              defaultVisibility: typeof this.profileData?.defaultVisibility === 'string'
+                ? this.profileData.defaultVisibility
+                : 'followers',
+              schemaVersion: 2,
+            };
+            const nextProfile = await this.client.socialProfileUpdate(payload);
+            this.profileData = nextProfile || payload;
+            this.usernameDraft = normalized;
+            this.successMessage = 'Username saved.';
+          } catch (error) {
+            this.errorMessage = this.mapError(error);
+            this.captureDebugError('save-username', error);
+          } finally {
+            this.isSavingUsername = false;
+          }
+        },
+
+        clearSearchState() {
+          this.searchResults = [];
+          this.searchError = '';
+          this.setSearchState('idle');
+        },
+
+        nextSearchToken() {
+          this.searchTokenCounter += 1;
+          this.activeSearchToken = this.searchTokenCounter;
+          return this.activeSearchToken;
+        },
+
+        onSearchInput() {
+          this.searchError = '';
+          if (this.searchDebounceHandle) {
+            window.clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+          }
+          const query = (this.searchQuery || '').trim();
+          if (!query) {
+            this.clearSearchState();
+            return;
+          }
+          if (query.length < 2) {
+            this.searchResults = [];
+            this.setSearchState('idle');
+            return;
+          }
+          const token = this.nextSearchToken();
+          this.searchDebounceHandle = window.setTimeout(() => {
+            this.runUsernameSearch(query, token);
+          }, this.searchDebounceMs);
+        },
+
+        async performUsernameSearch(query) {
+          const normalizedQuery = String(query || '').trim().toLowerCase();
+          if (!this.client || !normalizedQuery) return [];
+          const rows = await this.apiSearchProfiles(normalizedQuery, 30);
+          if (!Array.isArray(rows)) return [];
+          const ownUid = this.user?.uid || '';
+          const results = [];
+          for (const row of rows) {
+            const uid = typeof row?.uid === 'string' ? row.uid.trim() : '';
+            const username = typeof row?.username === 'string'
+              ? row.username.trim()
+              : (typeof row?.displayName === 'string' ? row.displayName.trim() : '');
+            const photoUrl = typeof row?.photoUrl === 'string'
+              ? row.photoUrl.trim()
+              : (typeof row?.avatarUrl === 'string' ? row.avatarUrl.trim() : '');
+            if (!uid || !username || uid === ownUid) continue;
+            if (!username.toLowerCase().includes(normalizedQuery)) continue;
+            results.push({ uid, username, photoUrl });
+          }
+          return results;
+        },
+
+        async runUsernameSearch(query, token) {
+          this.setDebugAction('search');
+          this.setSearchState('loading');
+          this.searchError = '';
+          try {
+            const results = await this.performUsernameSearch(query);
+            if (token !== this.activeSearchToken) return;
+            this.searchResults = Array.isArray(results) ? results : [];
+            this.setSearchState('ready');
+          } catch (error) {
+            if (token !== this.activeSearchToken) return;
+            this.searchResults = [];
+            this.searchError = this.mapError(error);
+            this.setSearchState('error');
+            this.captureDebugError('search', error);
+          } finally {
+            if (token === this.activeSearchToken) {
+              if (!this.searchError && this.searchState !== 'ready') {
+                this.setSearchState(this.searchResults.length > 0 ? 'ready' : 'idle');
+              }
+            }
+          }
+        },
+
+        retrySearch() {
+          const query = (this.searchQuery || '').trim();
+          if (!query || query.length < 2) return;
+          if (this.searchDebounceHandle) {
+            window.clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+          }
+          const token = this.nextSearchToken();
+          this.runUsernameSearch(query, token);
+        },
+
+        async loadRecentThreads() {
+          if (!this.client) return;
+          this.setDebugAction('list-threads');
+          this.threadListError = '';
+          this.setThreadListState('loading');
+          try {
+            const rows = await this.apiListThreads();
+            await this.hydrateThreadPeers(rows);
+            const mapped = (Array.isArray(rows) ? rows : [])
+              .map((row) => this.normalizeThreadRow(row))
+              .filter((row) => !!row);
+            this.recentThreads = mapped;
+            this.setThreadListState('ready');
+          } catch (error) {
+            this.recentThreads = [];
+            this.threadListError = this.mapError(error);
+            this.setThreadListState('error');
+            this.captureDebugError('list-threads', error);
+          }
+        },
+
+        nextThreadLoadToken() {
+          this.threadLoadToken += 1;
+          return this.threadLoadToken;
+        },
+
+        async openThreadFromList(item) {
+          if (!item?.threadId || !item?.peerUid) return;
+          this.activePeer = {
+            uid: item.peerUid,
+            username: item.username,
+            photoUrl: item.photoUrl || null,
+          };
+          this.activeThreadId = item.threadId;
+          this.threadError = '';
+          this.threadMessages = [];
+          this.lastMessageSignature = '';
+          await this.reloadThread();
+          this.switchView('conversation');
+        },
+
+        async openThreadForResult(item) {
+          if (!this.client || !item || !item.uid) return;
+          this.setDebugAction(`open-thread:${item.uid}`);
+          if (item.uid === this.user?.uid) {
+            this.threadError = 'You cannot message yourself.';
+            this.setThreadState('error');
+            return;
+          }
+          this.threadError = '';
+          this.setThreadState('loading');
+          this.activePeer = item;
+          if (item?.uid) {
+            this.profilesByUid[item.uid] = {
+              uid: item.uid,
+              displayName: item.username,
+              avatarUrl: item.photoUrl || null,
+            };
+          }
+          this.threadMessages = [];
+          this.lastMessageSignature = '';
+          this.messageDraft = '';
+
+          try {
+            const opened = await this.apiOpenThread(item.uid);
+            const threadId = typeof opened?.threadId === 'string' ? opened.threadId : '';
+            if (!threadId) {
+              throw new Error('Failed to open thread.');
+            }
+            this.activeThreadId = threadId;
+            this.setDebugAction(`open-thread-ok:${threadId}`);
+            await this.reloadThread();
+            await this.loadRecentThreads();
+            this.switchView('conversation');
+          } catch (error) {
+            this.threadError = this.mapError(error);
+            this.setThreadState('error');
+            this.captureDebugError('open-thread', error);
+          }
+        },
+
+        async reloadThread() {
+          if (!this.client || !this.activeThreadId) return;
+          this.setDebugAction(`list-messages:${this.activeThreadId}`);
+          const token = this.nextThreadLoadToken();
+          this.setThreadState('loading');
+          this.threadError = '';
+          try {
+            const rows = await this.apiListMessages(this.activeThreadId, undefined, 120);
+            if (token !== this.threadLoadToken) return;
+            this.threadMessages = Array.isArray(rows) ? rows : [];
+            const nextSignature = this.messageSignature(this.threadMessages);
+            const hasNewData = nextSignature !== this.lastMessageSignature;
+            this.lastMessageSignature = nextSignature;
+            this.setThreadState('ready');
+            if (hasNewData) this.scrollThreadToBottom('smooth');
+          } catch (error) {
+            if (token !== this.threadLoadToken) return;
+            this.threadError = this.mapError(error);
+            this.setThreadState('error');
+            this.captureDebugError('list-messages', error);
+          }
+        },
+
+        async sendMessage() {
+          if (!this.client || !this.activeThreadId || this.isSendingMessage) return;
+          this.setDebugAction(`send-message:${this.activeThreadId}`);
+          const text = (this.messageDraft || '').trim();
+          if (!text) return;
+          this.setThreadState('sending');
+          this.threadError = '';
+          try {
+            await this.apiSendMessage(this.activeThreadId, text);
+            this.messageDraft = '';
+            await this.reloadThread();
+            await this.loadRecentThreads();
+            this.scrollThreadToBottom('smooth');
+          } catch (error) {
+            this.threadError = this.mapError(error);
+            this.setThreadState('error');
+            this.captureDebugError('send-message', error);
+          }
+        },
+
+        startConversationAutoRefresh() {
+          if (this.messagePollHandle) {
+            window.clearInterval(this.messagePollHandle);
+            this.messagePollHandle = null;
+          }
+          if (!this.client || !this.activeThreadId) return;
+          this.messagePollHandle = window.setInterval(() => {
+            if (this.currentView !== 'conversation') return;
+            if (!this.activeThreadId) return;
+            if (this.isThreadLoading || this.isSendingMessage) return;
+            this.reloadThread();
+          }, 3000);
+        },
+
+        stopConversationAutoRefresh() {
+          if (!this.messagePollHandle) return;
+          window.clearInterval(this.messagePollHandle);
+          this.messagePollHandle = null;
+        },
+
+        startChatsAutoRefresh() {
+          if (this.threadListPollHandle) {
+            window.clearInterval(this.threadListPollHandle);
+            this.threadListPollHandle = null;
+          }
+          if (!this.client) return;
+          this.threadListPollHandle = window.setInterval(() => {
+            if (this.currentView !== 'chats') return;
+            if (this.isThreadListLoading) return;
+            this.loadRecentThreads();
+          }, 5000);
+        },
+
+        stopChatsAutoRefresh() {
+          if (!this.threadListPollHandle) return;
+          window.clearInterval(this.threadListPollHandle);
+          this.threadListPollHandle = null;
+        },
+
+        async init() {
+          this.setDebugAction('init');
+          this.currentView = 'chats';
+          this.loading = true;
+          this.setBootState('initializing');
+          this.errorMessage = '';
+          this.successMessage = '';
+          this.debugLastError = '';
+          if (this.searchDebounceHandle) {
+            window.clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+          }
+          this.stopConversationAutoRefresh();
+          this.stopChatsAutoRefresh();
+          this.searchQuery = '';
+          this.clearSearchState();
+          this.recentThreads = [];
+          this.threadListError = '';
+          this.setThreadListState('idle');
+          if (typeof this.detachProfileUpdateListener === 'function') {
+            this.detachProfileUpdateListener();
+            this.detachProfileUpdateListener = null;
+          }
+          if (typeof this.detachDebugTraceListener === 'function') {
+            this.detachDebugTraceListener();
+            this.detachDebugTraceListener = null;
+          }
+          this.debugEnabled = this.isDebugEnabledFromQuery();
+          this.debugEvents = [];
+
+          try {
+            await loadHayOSClient();
+            if (typeof HayOSClient !== 'function') {
+              throw new Error('HayOSClient unavailable');
+            }
+
+            this.client = new HayOSClient(this.appId);
+            this.setBootState('auth-check');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth?.user || null;
+            if (!this.user) {
+              throw new Error('Not authenticated');
+            }
+
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((nextLanguage) => {
+              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            this.detachProfileUpdateListener = this.client.onSocialProfileUpdated((payload) => {
+              this.handleProfileRealtimeUpdate(payload);
+            });
+            if (this.debugEnabled) {
+              this.detachDebugTraceListener = this.client.onDebugTrace((payload) => {
+                this.appendDebugEvent({
+                  source: payload?.hop || 'trace',
+                  stage: typeof payload?.stage === 'string' ? payload.stage : 'trace',
+                  action: typeof payload?.action === 'string' ? payload.action : '',
+                  message: typeof payload?.error === 'string' ? payload.error : '',
+                });
+              });
+            }
+
+            await this.loadProfileIdentity();
+            await this.loadRecentThreads();
+            this.startChatsAutoRefresh();
+            this.setBootState('ready');
+          } catch (error) {
+            this.errorMessage = this.mapError(error);
+            this.captureDebugError('init', error);
+            if (String(this.errorMessage).includes('Authentication failed')) {
+              this.setBootState('auth-failed');
+            } else {
+              this.setBootState('error');
+            }
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

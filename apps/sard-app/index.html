@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-base-100" data-theme="black">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="h-full">
+  <main class="min-h-full p-4 md:p-6 max-w-5xl mx-auto space-y-4" x-data="sardApp()" x-init="init()" x-cloak>
+    <header class="card bg-base-200 p-4">
+      <div class="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold">Sard MVP</h1>
+          <p class="text-sm opacity-75">Profile, Visit, Follow, Block, Feed, Privacy, Storage</p>
+        </div>
+        <div class="text-xs opacity-80" x-text="status"></div>
+      </div>
+      <p class="mt-2 text-error text-sm break-words" x-show="error" x-text="error"></p>
+    </header>
+
+    <section class="card bg-base-200 p-4">
+      <h2 class="font-semibold mb-3">User Visit</h2>
+      <div class="flex flex-col md:flex-row gap-2">
+        <input class="input input-bordered flex-1" x-model="visitInput" placeholder="Մուտքագրիր UID կամ թող դատարկ՝ իմ profile-ը" />
+        <button class="btn btn-primary" @click="visitProfile()">Visit</button>
+        <button class="btn btn-outline" @click="visitSelf()">My Profile</button>
+      </div>
+      <div class="mt-3 text-xs opacity-80">
+        Viewing UID:
+        <span class="font-mono" x-text="viewedUid || '-'"></span>
+      </div>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="viewedProfile">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-semibold">Profile View</h2>
+        <div class="badge badge-outline" x-text="isViewingSelf ? 'self' : 'visitor'"></div>
+      </div>
+      <p class="mt-2 text-sm opacity-75" x-show="!canViewFeed" x-text="accessMessage"></p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <label class="form-control">
+          <span class="label-text">Display name</span>
+          <input class="input input-bordered" :disabled="!isViewingSelf" x-model="profileDraft.displayName" />
+        </label>
+        <label class="form-control">
+          <span class="label-text">Avatar URL</span>
+          <input class="input input-bordered" :disabled="!isViewingSelf" x-model="profileDraft.avatarUrl" />
+        </label>
+        <label class="form-control md:col-span-2">
+          <span class="label-text">Bio</span>
+          <textarea class="textarea textarea-bordered" :disabled="!isViewingSelf" x-model="profileDraft.bio"></textarea>
+        </label>
+        <label class="form-control">
+          <span class="label-text">Default visibility</span>
+          <select class="select select-bordered" :disabled="!isViewingSelf" x-model="profileDraft.defaultVisibility">
+            <option value="followers">followers</option>
+            <option value="public">public</option>
+            <option value="private">private</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <template x-if="isViewingSelf">
+          <button class="btn btn-secondary" @click="saveProfile()">Save Profile + Privacy</button>
+        </template>
+        <template x-if="!isViewingSelf && canShowFollowActions">
+          <button class="btn" :class="isFollowing ? 'btn-warning' : 'btn-primary'" @click="toggleFollow()" x-text="isFollowing ? 'Unfollow' : 'Follow'"></button>
+        </template>
+        <template x-if="!isViewingSelf && canShowFollowActions">
+          <button
+            class="btn"
+            :class="isBlockedTarget ? 'btn-success btn-outline' : 'btn-error'"
+            @click="toggleBlock()"
+            x-text="isBlockedTarget ? 'Unblock' : 'Block'"
+          ></button>
+        </template>
+        <template x-if="!isViewingSelf && canShowFollowActions">
+          <button class="btn btn-outline" @click="openDmThread()">Open DM Thread</button>
+        </template>
+        <template x-if="!isViewingSelf && canShowFollowActions">
+          <button class="btn btn-accent btn-outline" @click="openTelegramModule()">Telegram Module</button>
+        </template>
+      </div>
+      <p class="mt-2 text-xs opacity-70" x-show="dmThreadId">
+        DM Thread:
+        <span class="font-mono" x-text="dmThreadId"></span>
+      </p>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="isViewingSelf">
+      <h2 class="font-semibold mb-3">Create Post</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label class="form-control">
+          <span class="label-text">Module</span>
+          <select class="select select-bordered" x-model="composer.moduleId">
+            <option value="thoughts">thoughts</option>
+            <option value="photos">photos</option>
+            <option value="books">books</option>
+            <option value="movies">movies</option>
+          </select>
+        </label>
+        <label class="form-control">
+          <span class="label-text">Visibility</span>
+          <select class="select select-bordered" x-model="composer.visibility">
+            <option value="followers">followers</option>
+            <option value="public">public</option>
+            <option value="private">private</option>
+          </select>
+        </label>
+      </div>
+      <label class="form-control mt-3">
+        <span class="label-text">Text (պահվում է որպես content.text)</span>
+        <textarea class="textarea textarea-bordered" x-model="composer.text"></textarea>
+      </label>
+      <button class="btn btn-primary mt-3" @click="createPost()">Publish</button>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="isViewingSelf">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Blocked Users</h2>
+        <button class="btn btn-sm btn-outline" @click="refreshBlocks()">Refresh</button>
+      </div>
+      <p class="mt-3 text-sm opacity-75" x-show="blockedUsers.length === 0">No blocked users.</p>
+      <ul class="mt-3 space-y-2">
+        <template x-for="entry in blockedUsers" :key="entry.id || entry.blockedUid">
+          <li class="flex items-center justify-between gap-2 card bg-base-300/40 p-2">
+            <span class="font-mono text-xs" x-text="entry.blockedUid || '-'"></span>
+            <button class="btn btn-xs btn-outline btn-success" @click="unblockByUid(entry.blockedUid)">Unblock</button>
+          </li>
+        </template>
+      </ul>
+    </section>
+
+    <section class="card bg-base-200 p-4">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="font-semibold">Storage</h2>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-outline" @click="refreshStorageQuota()">Quota</button>
+          <button class="btn btn-sm btn-outline" @click="refreshStorageFiles()">Files</button>
+        </div>
+      </div>
+
+      <div class="mt-3 text-sm">
+        <span class="opacity-75">Used:</span>
+        <span class="font-mono" x-text="formatBytes(storageQuota.usedBytes)"></span>
+        <span class="opacity-60"> / </span>
+        <span class="font-mono" x-text="formatBytes(storageQuota.maxBytes)"></span>
+      </div>
+      <progress class="progress progress-primary w-full mt-2" :value="storageQuota.usedBytes" :max="Math.max(storageQuota.maxBytes, 1)"></progress>
+
+      <section class="mt-4" x-show="isViewingSelf">
+        <h3 class="font-medium text-sm">Upload Session (Metadata Flow)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+          <label class="form-control">
+            <span class="label-text">File name</span>
+            <input class="input input-bordered" x-model="storageComposer.fileName" placeholder="photo.jpg" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">MIME type</span>
+            <select class="select select-bordered" x-model="storageComposer.mimeType">
+              <option value="image/jpeg">image/jpeg</option>
+              <option value="image/png">image/png</option>
+              <option value="image/webp">image/webp</option>
+              <option value="video/mp4">video/mp4</option>
+              <option value="audio/mpeg">audio/mpeg</option>
+              <option value="audio/wav">audio/wav</option>
+              <option value="application/pdf">application/pdf</option>
+            </select>
+          </label>
+          <label class="form-control">
+            <span class="label-text">Size (bytes)</span>
+            <input class="input input-bordered" type="number" min="1" x-model.number="storageComposer.sizeBytes" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Visibility</span>
+            <select class="select select-bordered" x-model="storageComposer.visibility">
+              <option value="private">private</option>
+              <option value="followers">followers</option>
+              <option value="public">public</option>
+            </select>
+          </label>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button class="btn btn-primary" @click="storageUploadInit()">Init</button>
+          <button class="btn btn-secondary" :disabled="!activeUploadSession" @click="storageUploadComplete()">Complete</button>
+          <button class="btn btn-warning btn-outline" :disabled="!activeUploadSession" @click="storageUploadCancel()">Cancel</button>
+        </div>
+        <p class="mt-2 text-xs opacity-70 break-all" x-show="activeUploadSession">
+          Active session:
+          <span class="font-mono" x-text="activeUploadSession && activeUploadSession.sessionId ? activeUploadSession.sessionId : '-'"></span>
+        </p>
+      </section>
+
+      <section class="mt-4">
+        <h3 class="font-medium text-sm" x-text="isViewingSelf ? 'My Files' : 'Visible Files'"></h3>
+        <p class="mt-2 text-sm opacity-75" x-show="storageFiles.length === 0">No files.</p>
+        <ul class="mt-2 space-y-2">
+          <template x-for="item in storageFiles" :key="item.id">
+            <li class="card bg-base-300/40 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-mono break-all" x-text="item.fileName || item.id"></div>
+                <button
+                  class="btn btn-xs btn-error btn-outline"
+                  x-show="isStorageOwner(item)"
+                  @click="deleteStorageFile(item.id)"
+                >
+                  Delete
+                </button>
+              </div>
+              <div class="mt-1 text-xs opacity-70">
+                <span x-text="item.mimeType || '-'"></span>
+                <span> · </span>
+                <span x-text="formatBytes(item.sizeBytes || 0)"></span>
+                <span> · </span>
+                <span x-text="item.visibility || '-'"></span>
+              </div>
+            </li>
+          </template>
+        </ul>
+      </section>
+    </section>
+
+    <section class="card bg-base-200 p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Feed</h2>
+        <button class="btn btn-sm btn-outline" @click="loadFeed()">Refresh</button>
+      </div>
+      <div class="mt-3 alert alert-info py-2" x-show="!canViewFeed">
+        <span class="text-sm" x-text="accessMessage"></span>
+      </div>
+      <div class="mt-3 text-sm opacity-75" x-show="feed.length === 0">No visible posts.</div>
+      <ul class="space-y-3 mt-3">
+        <template x-for="item in feed" :key="item.id">
+          <li class="card bg-base-300/40 p-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs opacity-70 font-mono">
+                <span x-text="item.ownerUid"></span>
+                <span> · </span>
+                <span x-text="item.moduleId"></span>
+                <span> · </span>
+                <span x-text="item.visibility"></span>
+              </div>
+              <button
+                class="btn btn-xs btn-error btn-outline"
+                x-show="item.ownerUid === user?.uid"
+                @click="deletePost(item.id)"
+              >
+                Delete
+              </button>
+            </div>
+            <p class="mt-2 text-sm break-words" x-text="readPostText(item)"></p>
+            <p class="text-xs opacity-60 mt-2" x-text="item.createdAt || ''"></p>
+          </li>
+        </template>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    function sardApp() {
+      return {
+        client: null,
+        user: null,
+        status: 'Initializing...',
+        error: '',
+        visitInput: '',
+        viewedUid: '',
+        viewedProfile: null,
+        isFollowing: false,
+        blockedUsers: [],
+        dmThreadId: '',
+        hostSessionId: '',
+        storageQuota: {
+          usedBytes: 0,
+          maxBytes: 500 * 1024 * 1024,
+        },
+        storageFiles: [],
+        activeUploadSession: null,
+        storageComposer: {
+          fileName: 'photo.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1024,
+          visibility: 'private',
+        },
+        canViewFeed: false,
+        accessMessage: '',
+        feed: [],
+        profileDraft: {
+          displayName: '',
+          bio: '',
+          avatarUrl: '',
+          defaultVisibility: 'followers',
+        },
+        composer: {
+          moduleId: 'thoughts',
+          visibility: 'followers',
+          text: '',
+        },
+        get isViewingSelf() {
+          return this.user && this.viewedUid === this.user.uid;
+        },
+        get canShowFollowActions() {
+          return this.user && this.viewedUid && this.viewedUid !== this.user.uid;
+        },
+        get isBlockedTarget() {
+          if (!this.viewedUid || !Array.isArray(this.blockedUsers)) return false;
+          return this.blockedUsers.some((entry) => entry && entry.blockedUid === this.viewedUid);
+        },
+        async init() {
+          try {
+            await loadHayOSClient();
+            this.client = new HayOSClient('sard');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user;
+            this.hostSessionId = `sard-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            await this.ensureSelfProfile();
+            await this.refreshBlocks();
+            await this.visitSelf();
+            await this.refreshStorageQuota();
+            this.status = 'Ready';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Init failed';
+          }
+        },
+        clearError() {
+          this.error = '';
+        },
+        async ensureSelfProfile() {
+          try {
+            await this.client.socialProfileGet();
+          } catch {
+            await this.client.socialProfileUpdate({
+              displayName: this.user && this.user.displayName ? this.user.displayName : '',
+              bio: '',
+              avatarUrl: this.user && this.user.photoURL ? this.user.photoURL : null,
+              defaultVisibility: 'followers',
+            });
+          }
+        },
+        async visitSelf() {
+          this.visitInput = '';
+          await this.visitByUid(this.user && this.user.uid ? this.user.uid : '');
+        },
+        async visitProfile() {
+          const uid = typeof this.visitInput === 'string' ? this.visitInput.trim() : '';
+          if (uid.length > 128) {
+            this.error = 'UID is too long';
+            return;
+          }
+          await this.visitByUid(uid || (this.user && this.user.uid ? this.user.uid : ''));
+        },
+        async visitByUid(uid) {
+          if (!uid) return;
+          this.clearError();
+          this.status = 'Loading profile...';
+          this.viewedUid = uid;
+          this.dmThreadId = '';
+          try {
+            const profile = await this.client.socialProfileGet(uid);
+            this.viewedProfile = profile;
+            this.profileDraft = {
+              displayName: profile && typeof profile.displayName === 'string' ? profile.displayName : '',
+              bio: profile && typeof profile.bio === 'string' ? profile.bio : '',
+              avatarUrl: profile && typeof profile.avatarUrl === 'string' ? profile.avatarUrl : '',
+              defaultVisibility: profile && typeof profile.defaultVisibility === 'string' ? profile.defaultVisibility : 'followers',
+            };
+            await this.refreshBlocks();
+            await this.refreshFollowState();
+            this.recomputeViewAccess();
+            await this.loadFeed();
+            await this.refreshStorageFiles();
+            this.status = 'Profile loaded';
+          } catch (error) {
+            this.viewedProfile = null;
+            this.feed = [];
+            this.storageFiles = [];
+            this.isFollowing = false;
+            this.canViewFeed = false;
+            this.accessMessage = 'Profile access is restricted by visibility policy.';
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Profile access denied or not found';
+          }
+        },
+        recomputeViewAccess() {
+          if (!this.viewedProfile || !this.user) {
+            this.canViewFeed = false;
+            this.accessMessage = 'No active profile selected.';
+            return;
+          }
+          if (this.isViewingSelf) {
+            this.canViewFeed = true;
+            this.accessMessage = '';
+            return;
+          }
+          if (this.isBlockedTarget) {
+            this.canViewFeed = false;
+            this.accessMessage = 'You blocked this user.';
+            return;
+          }
+          const visibility = this.viewedProfile && typeof this.viewedProfile.defaultVisibility === 'string'
+            ? this.viewedProfile.defaultVisibility
+            : 'followers';
+          if (visibility === 'public') {
+            this.canViewFeed = true;
+            this.accessMessage = '';
+            return;
+          }
+          if (visibility === 'followers') {
+            this.canViewFeed = Boolean(this.isFollowing);
+            this.accessMessage = this.isFollowing
+              ? ''
+              : 'This profile is followers-only. Follow to view feed.';
+            return;
+          }
+          this.canViewFeed = false;
+          this.accessMessage = 'This profile is private.';
+        },
+        async refreshFollowState() {
+          if (!this.canShowFollowActions) {
+            this.isFollowing = false;
+            this.recomputeViewAccess();
+            return;
+          }
+          const following = await this.client.socialFollowListFollowing(this.user.uid);
+          this.isFollowing = Array.isArray(following) && following.some((item) => item && item.targetUid === this.viewedUid);
+          this.recomputeViewAccess();
+        },
+        async toggleFollow() {
+          if (!this.canShowFollowActions || this.isBlockedTarget) return;
+          this.clearError();
+          this.status = this.isFollowing ? 'Unfollowing...' : 'Following...';
+          try {
+            if (this.isFollowing) {
+              await this.client.socialFollowDelete(this.viewedUid);
+            } else {
+              await this.client.socialFollowCreate(this.viewedUid);
+            }
+            await this.refreshFollowState();
+            if (this.canViewFeed) {
+              await this.loadFeed();
+            } else {
+              this.feed = [];
+            }
+            await this.refreshStorageFiles();
+            this.status = 'Follow state updated';
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            this.error = message;
+            this.status = message.includes('BLOCKED_RELATION')
+              ? 'Follow denied by block policy'
+              : 'Follow action failed';
+          }
+        },
+        async refreshBlocks() {
+          if (!this.user) {
+            this.blockedUsers = [];
+            return;
+          }
+          const rows = await this.client.socialBlockList();
+          this.blockedUsers = Array.isArray(rows) ? rows : [];
+          this.recomputeViewAccess();
+        },
+        async toggleBlock() {
+          if (!this.canShowFollowActions) return;
+          this.clearError();
+          const wasBlocked = this.isBlockedTarget;
+          this.status = wasBlocked ? 'Unblocking...' : 'Blocking...';
+          try {
+            if (wasBlocked) {
+              await this.client.socialBlockDelete(this.viewedUid);
+            } else {
+              await this.client.socialBlockCreate(this.viewedUid);
+              this.isFollowing = false;
+              this.feed = [];
+              this.dmThreadId = '';
+            }
+            await this.refreshBlocks();
+            await this.refreshFollowState();
+            if (this.canViewFeed) {
+              await this.loadFeed();
+            }
+            this.status = wasBlocked ? 'User unblocked' : 'User blocked';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Block action failed';
+          }
+        },
+        async unblockByUid(uid) {
+          const targetUid = typeof uid === 'string' ? uid.trim() : '';
+          if (!targetUid) return;
+          this.clearError();
+          this.status = 'Unblocking...';
+          try {
+            await this.client.socialBlockDelete(targetUid);
+            await this.refreshBlocks();
+            if (targetUid === this.viewedUid) {
+              await this.refreshFollowState();
+              await this.loadFeed();
+            }
+            this.status = 'User unblocked';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Unblock failed';
+          }
+        },
+        async openDmThread() {
+          if (!this.canShowFollowActions) return;
+          this.clearError();
+          this.status = 'Opening DM thread...';
+          try {
+            const result = await this.client.socialDmOpenThread(this.viewedUid);
+            this.dmThreadId = result && typeof result.threadId === 'string' ? result.threadId : '';
+            this.status = this.dmThreadId ? 'DM thread ready' : 'DM thread opened';
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            this.error = message;
+            this.dmThreadId = '';
+            this.status = message.includes('BLOCKED_RELATION')
+              ? 'DM denied by block policy'
+              : 'Open DM failed';
+          }
+        },
+        async refreshStorageQuota() {
+          if (!this.user) return;
+          try {
+            const quota = await this.client.storageQuotaGet();
+            if (quota && typeof quota === 'object') {
+              this.storageQuota = {
+                usedBytes: Number(quota.usedBytes) > 0 ? Number(quota.usedBytes) : 0,
+                maxBytes: Number(quota.maxBytes) > 0 ? Number(quota.maxBytes) : 500 * 1024 * 1024,
+              };
+            }
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+        async refreshStorageFiles() {
+          if (!this.user || !this.viewedUid) return;
+          try {
+            const rows = await this.client.storageFilesList({ uid: this.viewedUid, limit: 80 });
+            this.storageFiles = Array.isArray(rows) ? rows : [];
+          } catch (error) {
+            this.storageFiles = [];
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+        async storageUploadInit() {
+          if (!this.isViewingSelf) return;
+          this.clearError();
+          this.status = 'Initializing upload session...';
+          try {
+            const payload = {
+              fileName: this.storageComposer.fileName || '',
+              mimeType: this.storageComposer.mimeType || '',
+              sizeBytes: Number(this.storageComposer.sizeBytes) || 0,
+              visibility: this.storageComposer.visibility || 'private',
+            };
+            this.activeUploadSession = await this.client.storageUploadInit(payload);
+            this.status = 'Upload session initialized';
+          } catch (error) {
+            this.activeUploadSession = null;
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Upload init failed';
+          }
+        },
+        async storageUploadComplete() {
+          if (!this.isViewingSelf || !this.activeUploadSession || !this.activeUploadSession.sessionId) return;
+          this.clearError();
+          this.status = 'Completing upload...';
+          try {
+            await this.client.storageUploadComplete(this.activeUploadSession.sessionId);
+            this.activeUploadSession = null;
+            await this.refreshStorageQuota();
+            await this.refreshStorageFiles();
+            this.status = 'Upload completed';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Upload complete failed';
+          }
+        },
+        async storageUploadCancel() {
+          if (!this.isViewingSelf || !this.activeUploadSession || !this.activeUploadSession.sessionId) return;
+          this.clearError();
+          this.status = 'Cancelling upload session...';
+          try {
+            await this.client.storageUploadCancel(this.activeUploadSession.sessionId);
+            this.activeUploadSession = null;
+            this.status = 'Upload session cancelled';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Upload cancel failed';
+          }
+        },
+        async deleteStorageFile(fileId) {
+          if (!this.isViewingSelf || !fileId) return;
+          this.clearError();
+          this.status = 'Deleting file...';
+          try {
+            await this.client.storageFilesDelete(fileId);
+            await this.refreshStorageQuota();
+            await this.refreshStorageFiles();
+            this.status = 'File deleted';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'File delete failed';
+          }
+        },
+        isStorageOwner(item) {
+          if (!item || typeof item !== 'object' || !this.user) return false;
+          return item.ownerUid === this.user.uid;
+        },
+        formatBytes(value) {
+          const bytes = Number(value);
+          if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+          const units = ['B', 'KB', 'MB', 'GB'];
+          let size = bytes;
+          let idx = 0;
+          while (size >= 1024 && idx < units.length - 1) {
+            size /= 1024;
+            idx += 1;
+          }
+          return `${size.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`;
+        },
+        openTelegramModule() {
+          if (!this.canShowFollowActions) return;
+          const payload = {
+            moduleAppId: 'telegram-dm',
+            moduleMode: 'dm',
+            hostSessionId: this.hostSessionId || `sard-${Date.now()}`,
+            threadId: this.dmThreadId || '',
+            peerUid: this.viewedUid || '',
+          };
+          window.parent.postMessage({
+            type: 'hayos:openHostedModule',
+            payload,
+          }, '*');
+          this.status = 'Opening Telegram hosted module...';
+        },
+        async saveProfile() {
+          if (!this.isViewingSelf) return;
+          this.clearError();
+          this.status = 'Saving profile...';
+          try {
+            const payload = {
+              displayName: this.profileDraft.displayName || '',
+              bio: this.profileDraft.bio || '',
+              avatarUrl: this.profileDraft.avatarUrl || null,
+              defaultVisibility: this.profileDraft.defaultVisibility || 'followers',
+            };
+            const next = await this.client.socialProfileUpdate(payload);
+            this.viewedProfile = next;
+            this.status = 'Profile saved';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Profile save failed';
+          }
+        },
+        async createPost() {
+          if (!this.isViewingSelf) return;
+          if (!this.composer.text || !this.composer.text.trim()) return;
+          this.clearError();
+          this.status = 'Publishing post...';
+          try {
+            await this.client.socialFeedCreatePost({
+              moduleId: this.composer.moduleId,
+              visibility: this.composer.visibility,
+              content: { text: this.composer.text.trim() },
+            });
+            this.composer.text = '';
+            await this.loadFeed();
+            this.status = 'Post published';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Post publish failed';
+          }
+        },
+        async loadFeed() {
+          if (!this.viewedUid) {
+            this.feed = [];
+            return;
+          }
+          if (!this.canViewFeed) {
+            this.feed = [];
+            this.status = 'Feed visibility restricted';
+            return;
+          }
+          this.clearError();
+          try {
+            const rows = await this.client.socialFeedList({ ownerUid: this.viewedUid, limit: 60 });
+            this.feed = Array.isArray(rows) ? rows : [];
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.feed = [];
+          }
+        },
+        async deletePost(postId) {
+          if (!postId) return;
+          this.clearError();
+          this.status = 'Deleting post...';
+          try {
+            await this.client.socialFeedDeletePost(postId);
+            await this.loadFeed();
+            this.status = 'Post deleted';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = 'Delete failed';
+          }
+        },
+        readPostText(item) {
+          if (!item || typeof item !== 'object') return '';
+          const content = item.content;
+          if (content && typeof content === 'object' && typeof content.text === 'string') {
+            return content.text;
+          }
+          try {
+            return JSON.stringify(content || {});
+          } catch {
+            return '';
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

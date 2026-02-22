@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="superadminApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Սուպերադմին</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+<body class="h-full">
+  <div class="max-w-6xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <h1 class="text-xl font-semibold">Սուպերադմին</h1>
+      <p class="text-sm opacity-70">Տես user-ների ցուցակը, user role ունեցողներին admin դարձրու և admin-ներին սահմանիր scope-եր։</p>
+      <p class="text-sm mt-2"><span class="font-semibold">Status:</span> <span x-text="status"></span></p>
+      <p class="text-error text-sm mt-2" x-show="error" x-text="error"></p>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-semibold">Օգտատերեր</h2>
+        <button class="btn btn-sm" @click="loadAll()">Reload</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra table-sm">
+          <thead><tr><th>UID</th><th>Email</th><th>Role</th><th>App հայտեր</th><th>Role upgrade</th><th>Action</th></tr></thead>
+          <tbody>
+            <template x-for="item in userProfiles" :key="item.id">
+              <tr>
+                <td class="font-mono text-xs" x-text="item.id"></td>
+                <td x-text="item.email || '-'"></td>
+                <td><span class="badge" x-text="effectiveRole(item)"></span></td>
+                <td>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    :checked="isScopeEnabled(item.id, 'apps')"
+                    @change="setScope(item.id, 'apps', $event.target.checked)"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    :checked="isScopeEnabled(item.id, 'roles')"
+                    @change="setScope(item.id, 'roles', $event.target.checked)"
+                  />
+                </td>
+                <td class="flex gap-2">
+                  <button
+                    class="btn btn-xs btn-primary"
+                    @click="promoteToAdmin(item)"
+                    x-text="promoting[item.id] ? 'Promoting...' : 'Promote to Admin'">
+                  </button>
+                  <button
+                    class="btn btn-xs"
+                    @click="saveAdminScopes(item)"
+                    x-text="savingScopes[item.id] ? 'Saving...' : 'Save scopes'">
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function superadminApp() {
+      return {
+        client: null,
+        appId: 'superadmin',
+        status: 'Initializing...',
+        error: '',
+        userProfiles: [],
+        promoting: {},
+        savingScopes: {},
+        adminPoliciesByUser: {},
+        scopeDrafts: {},
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            this.client = new HayOSClient(this.appId);
+            await this.client.ensureAuthenticated();
+            this.status = 'Ready';
+            await this.loadAll();
+          } catch (error) {
+            this.error = error?.message || String(error);
+            this.status = 'Failed';
+          }
+        },
+
+        async loadAll() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            const usersResult = await Promise.allSettled([
+              this.client.firestoreQuery('userDirectory', {}),
+            ]);
+            const usersOnly = usersResult[0];
+
+            const users = usersOnly.status === 'fulfilled' ? usersOnly.value : [];
+            this.userProfiles = Array.isArray(users)
+              ? users.map((item) => ({
+                  ...item,
+                  role: typeof item?.role === 'string'
+                    ? item.role.trim().toLowerCase()
+                    : 'user',
+                }))
+              : [];
+
+            if (usersOnly.status !== 'fulfilled') {
+              this.error = `userDirectory: ${usersOnly.reason?.message || String(usersOnly.reason)}`;
+            }
+
+            this.adminPoliciesByUser = {};
+
+            this.scopeDrafts = {};
+          } catch (error) {
+            this.userProfiles = [];
+            this.error = `userProfiles: ${error?.message || String(error)}`;
+          }
+        },
+
+        effectiveRole(item) {
+          const raw = typeof item?.role === 'string' ? item.role.trim().toLowerCase() : '';
+          if (raw === 'admin' || raw === 'developer' || raw === 'superadmin') return raw;
+          return 'user';
+        },
+
+        policyScopesForUser(userId) {
+          const profile = this.userProfiles.find((item) => item.id === userId);
+          const scopes = Array.isArray(profile?.scopes) ? profile.scopes : [];
+          const profileCapabilities = Array.isArray(profile?.capabilities) ? profile.capabilities : [];
+          const capabilities = profileCapabilities;
+          return {
+            apps: scopes.includes('admin.appSubmissions.manage')
+              || capabilities.includes('apps.submissions.review')
+              || capabilities.includes('apps.submissions.approve')
+              || capabilities.includes('apps.submissions.reject'),
+            roles: scopes.includes('admin.roleUpgrade.manage')
+              || capabilities.includes('users.roles.assignDeveloper'),
+          };
+        },
+
+        currentScopes(userId) {
+          if (this.scopeDrafts[userId]) {
+            return this.scopeDrafts[userId];
+          }
+          const fromPolicy = this.policyScopesForUser(userId);
+          this.scopeDrafts[userId] = fromPolicy;
+          return fromPolicy;
+        },
+
+        isScopeEnabled(userId, scopeKey) {
+          const scopes = this.currentScopes(userId);
+          return scopeKey === 'apps' ? Boolean(scopes.apps) : Boolean(scopes.roles);
+        },
+
+        setScope(userId, scopeKey, enabled) {
+          const target = this.userProfiles.find((item) => item.id === userId);
+          if (this.effectiveRole(target) !== 'admin') {
+            this.error = 'Scopes can be edited only for admin users';
+            return;
+          }
+          const current = this.currentScopes(userId);
+          this.scopeDrafts[userId] = {
+            apps: scopeKey === 'apps' ? enabled : Boolean(current.apps),
+            roles: scopeKey === 'roles' ? enabled : Boolean(current.roles),
+          };
+        },
+
+        mapScopesToCapabilities(scopes) {
+          const capabilities = [];
+          if (scopes.apps) {
+            capabilities.push('apps.submissions.review', 'apps.submissions.approve', 'apps.submissions.reject');
+          }
+          if (scopes.roles) {
+            capabilities.push('users.roles.assignDeveloper');
+          }
+          return capabilities;
+        },
+
+        async promoteToAdmin(item) {
+          if (!this.client) return;
+          const userId = typeof item?.id === 'string' ? item.id : '';
+          if (this.promoting[userId]) return;
+          if (!userId || this.effectiveRole(item) !== 'user') {
+            this.error = 'Only users can be promoted to admin';
+            return;
+          }
+          this.promoting[userId] = true;
+          this.error = '';
+          const defaultScopes = { apps: true, roles: true };
+          const adminCapabilities = this.mapScopesToCapabilities(defaultScopes);
+          try {
+            await this.client.firestoreUpdate('userProfiles', userId, {
+              role: 'admin',
+              capabilities: adminCapabilities,
+              scopes: ['admin.appSubmissions.manage', 'admin.roleUpgrade.manage'],
+              status: 'active',
+            });
+            try {
+              await this.client.firestoreUpdate('adminPolicies', userId, {
+                userId,
+                scopes: ['admin.appSubmissions.manage', 'admin.roleUpgrade.manage'],
+                capabilities: adminCapabilities,
+                updatedAt: new Date().toISOString(),
+              });
+            } catch {}
+            await this.loadAll();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.promoting[userId] = false;
+          }
+        },
+
+        async saveAdminScopes(item) {
+          if (!this.client) return;
+          if (this.effectiveRole(item) !== 'admin') {
+            this.error = 'Scopes can be saved only for admin users';
+            return;
+          }
+          const userId = typeof item?.id === 'string' ? item.id : '';
+          if (this.savingScopes[userId]) return;
+          if (!userId) return;
+          this.savingScopes[userId] = true;
+          this.error = '';
+          try {
+            const scopes = this.currentScopes(userId);
+            const capabilities = this.mapScopesToCapabilities(scopes);
+            const scopeList = [];
+            if (scopes.apps) scopeList.push('admin.appSubmissions.manage');
+            if (scopes.roles) scopeList.push('admin.roleUpgrade.manage');
+
+            await this.client.firestoreUpdate('userProfiles', userId, {
+              role: 'admin',
+              capabilities,
+              scopes: scopeList,
+              status: 'active',
+            });
+
+            let policyError = '';
+            try {
+              await this.client.firestoreUpdate('adminPolicies', userId, {
+                userId,
+                scopes: scopeList,
+                capabilities,
+                updatedAt: new Date().toISOString(),
+              });
+            } catch (error) {
+              policyError = error?.message || String(error);
+            }
+
+            if (policyError) {
+              this.error = `Saved profile, but adminPolicies failed: ${policyError}`;
+            } else {
+              this.error = '';
+            }
+
+            await this.loadAll();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.savingScopes[userId] = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

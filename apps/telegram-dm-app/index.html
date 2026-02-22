@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-base-100" data-theme="black">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Telegram DM</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="h-full bg-base-100">
+  <main class="p-4 md:p-6 max-w-3xl mx-auto space-y-4" x-data="telegramDm()" x-init="init()">
+    <header class="card bg-base-200 p-4">
+      <h1 class="text-xl font-semibold">Telegram DM Hosted</h1>
+      <p class="text-xs opacity-75 mt-1">DM-only hosted module for Sard. Standalone launch is denied.</p>
+      <p class="text-xs opacity-75 mt-1 font-mono break-all" x-text="contextInfo"></p>
+      <p class="text-xs text-error mt-2" x-show="fatalError" x-text="fatalError"></p>
+      <p class="text-xs opacity-80 mt-2" x-text="status"></p>
+    </header>
+
+    <section class="card bg-base-200 p-4" x-show="!fatalError">
+      <h2 class="font-semibold">Conversation</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <label class="form-control">
+          <span class="label-text">Peer UID</span>
+          <input class="input input-bordered" x-model="peerUid" placeholder="user uid" />
+        </label>
+        <label class="form-control">
+          <span class="label-text">Thread ID</span>
+          <input class="input input-bordered" x-model="threadId" placeholder="auto after open" />
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button class="btn btn-primary" @click="openThread()">Open Thread</button>
+        <button class="btn btn-outline" @click="loadThreads()">Refresh Threads</button>
+        <button class="btn btn-outline" @click="loadMessages()">Load Messages</button>
+      </div>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="!fatalError">
+      <h2 class="font-semibold">Send Message</h2>
+      <label class="form-control mt-3">
+        <span class="label-text">Text</span>
+        <textarea class="textarea textarea-bordered min-h-24" x-model="draftText" placeholder="Type a message"></textarea>
+      </label>
+      <div class="mt-3">
+        <button class="btn btn-secondary" @click="send()">Send</button>
+      </div>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="!fatalError">
+      <h2 class="font-semibold">Threads</h2>
+      <p class="mt-3 text-sm opacity-75" x-show="threads.length === 0">No visible threads.</p>
+      <ul class="mt-3 space-y-2">
+        <template x-for="item in threads" :key="item.id">
+          <li class="card bg-base-300/40 p-2">
+            <div class="text-xs font-mono break-all" x-text="item.id"></div>
+            <div class="text-xs opacity-70 mt-1" x-text="threadLabel(item)"></div>
+            <button class="btn btn-xs btn-outline mt-2" @click="selectThread(item.id)">Use Thread</button>
+          </li>
+        </template>
+      </ul>
+    </section>
+
+    <section class="card bg-base-200 p-4" x-show="!fatalError">
+      <h2 class="font-semibold">Messages</h2>
+      <p class="mt-3 text-sm opacity-75" x-show="messages.length === 0">No messages.</p>
+      <ul class="mt-3 space-y-2">
+        <template x-for="item in messages" :key="item.id">
+          <li class="card bg-base-300/40 p-3 text-sm">
+            <div class="font-mono text-xs opacity-70" x-text="item.senderUid || '-'"></div>
+            <div class="mt-1 break-words" x-text="item.text || ''"></div>
+            <div class="text-[11px] opacity-60 mt-2" x-text="item.createdAt || ''"></div>
+          </li>
+        </template>
+      </ul>
+    </section>
+    
+    <div class="card bg-base-200 p-4" x-show="fatalError">
+      <p class="text-sm">
+        Invalid host context: this app can run only inside Sard with `moduleMode=dm`.
+      </p>
+    </div>
+  </main>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    function telegramDm() {
+      return {
+        client: null,
+        user: null,
+        hostContext: null,
+        fatalError: '',
+        peerUid: '',
+        threadId: '',
+        draftText: '',
+        threads: [],
+        messages: [],
+        status: 'Initializing...',
+        contextInfo: '',
+        readHostContext() {
+          const params = new URLSearchParams(window.location.search);
+          return {
+            hostAppId: params.get('hostAppId') || '',
+            hostSessionId: params.get('hostSessionId') || '',
+            actorUid: params.get('actorUid') || '',
+            moduleMode: params.get('moduleMode') || '',
+            threadId: params.get('threadId') || '',
+            peerUid: params.get('peerUid') || '',
+          };
+        },
+        validateHostContext(context, actorUid) {
+          if (!context) return false;
+          if (context.hostAppId !== 'sard') return false;
+          if (!context.hostSessionId) return false;
+          if (context.moduleMode !== 'dm') return false;
+          if (!context.actorUid || context.actorUid !== actorUid) return false;
+          return true;
+        },
+        async init() {
+          try {
+            await loadHayOSClient();
+            this.client = new HayOSClient('telegram-dm');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user;
+            this.hostContext = this.readHostContext();
+            this.contextInfo = `host=${this.hostContext.hostAppId || '-'} mode=${this.hostContext.moduleMode || '-'} actor=${this.hostContext.actorUid || '-'} session=${this.hostContext.hostSessionId || '-'}`;
+            if (!this.validateHostContext(this.hostContext, this.user && this.user.uid ? this.user.uid : '')) {
+              this.fatalError = 'INVALID_HOST_CONTEXT';
+              this.status = 'Launch blocked';
+              return;
+            }
+            this.peerUid = this.hostContext.peerUid || '';
+            this.threadId = this.hostContext.threadId || '';
+            await this.loadThreads();
+            if (this.threadId) {
+              await this.loadMessages();
+            }
+            this.status = 'Ready';
+          } catch (error) {
+            this.fatalError = error && error.message ? error.message : String(error);
+            this.status = 'Init failed';
+          }
+        },
+        threadLabel(item) {
+          if (!item || typeof item !== 'object') return '';
+          const members = Array.isArray(item.members) ? item.members.join(', ') : '';
+          return members ? `members: ${members}` : '';
+        },
+        selectThread(threadId) {
+          if (!threadId || typeof threadId !== 'string') return;
+          this.threadId = threadId;
+          this.loadMessages();
+        },
+        async openThread() {
+          if (this.fatalError) return;
+          const uid = typeof this.peerUid === 'string' ? this.peerUid.trim() : '';
+          if (!uid) {
+            this.status = 'Peer UID is required';
+            return;
+          }
+          try {
+            const result = await this.client.socialDmOpenThread(uid);
+            this.threadId = result && typeof result.threadId === 'string' ? result.threadId : '';
+            await this.loadThreads();
+            await this.loadMessages();
+            this.status = this.threadId ? 'Thread opened' : 'Thread open completed';
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            this.status = message.includes('BLOCKED_RELATION')
+              ? 'Blocked relation: DM denied'
+              : message;
+          }
+        },
+        async loadThreads() {
+          if (this.fatalError) return;
+          try {
+            const rows = await this.client.socialDmListThreads();
+            this.threads = Array.isArray(rows) ? rows : [];
+          } catch (error) {
+            this.status = error && error.message ? error.message : String(error);
+          }
+        },
+        async loadMessages() {
+          if (this.fatalError || !this.threadId) return;
+          try {
+            this.messages = await this.client.socialDmListMessages(this.threadId);
+            this.status = `Loaded ${this.messages.length} message(s)`;
+          } catch (error) {
+            this.status = error && error.message ? error.message : String(error);
+          }
+        },
+        async send() {
+          if (this.fatalError || !this.threadId || !this.draftText.trim()) return;
+          try {
+            await this.client.socialDmSendMessage(this.threadId, this.draftText.trim());
+            this.draftText = '';
+            await this.loadMessages();
+          } catch (error) {
+            this.status = error && error.message ? error.message : String(error);
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

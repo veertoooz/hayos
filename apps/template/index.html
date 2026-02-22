@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="templateApp()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">HayOS App Template</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full">
+  <div class="h-full" x-cloak>
+    <div class="drawer lg:drawer-open h-full">
+      <input id="app-sidebar" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
+      <div class="drawer-content h-full p-4 lg:p-6 overflow-auto">
+        <div class="mb-4 lg:hidden">
+          <label for="app-sidebar" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-bars mr-2"></i>
+            <span x-text="t('menuBtn')"></span>
+          </label>
+        </div>
+
+        <div x-show="currentPage === 'overview'" class="space-y-4">
+          <div class="card bg-base-200 shadow p-5">
+            <h1 class="text-xl font-semibold" x-text="t('starterTitle')"></h1>
+            <p class="text-sm opacity-70 mt-1" x-text="t('starterDescription')"></p>
+          </div>
+          <div class="card bg-base-200 shadow p-5">
+            <div class="text-sm">
+              <span class="font-semibold" x-text="`${t('statusLabel')}:`"></span>
+              <span x-text="status"></span>
+            </div>
+            <div class="mt-2 text-sm">
+              <span class="font-semibold" x-text="`${t('themeLabel')}:`"></span>
+              <span x-text="osTheme || '(not resolved)'"></span>
+            </div>
+            <div class="mt-2 text-sm">
+              <span class="font-semibold" x-text="`${t('languageLabel')}:`"></span>
+              <span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span>
+            </div>
+            <div class="mt-2 text-sm" x-show="user">
+              <span class="font-semibold" x-text="`${t('userLabel')}:`"></span>
+              <span x-text="user?.email || user?.displayName || user?.uid"></span>
+            </div>
+            <div class="mt-3 text-warning text-sm">
+              <span x-text="t('permissionNote')"></span>
+            </div>
+            <div class="mt-3 text-error text-sm" x-show="error" x-text="error"></div>
+          </div>
+        </div>
+
+        <div x-show="currentPage === 'music'" class="card bg-base-200 shadow p-5">
+          <h2 class="text-lg font-semibold" x-text="t('musicTitle')"></h2>
+          <p class="text-sm opacity-70 mt-1" x-text="t('musicDescription')"></p>
+          <div class="mt-4 border border-base-300 rounded-lg p-4">
+            <p class="text-sm" x-text="t('musicPlaceholder')"></p>
+          </div>
+        </div>
+
+        <div x-show="currentPage === 'files'" class="card bg-base-200 shadow p-5">
+          <h2 class="text-lg font-semibold" x-text="t('filesTitle')"></h2>
+          <p class="text-sm opacity-70 mt-1" x-text="t('filesDescription')"></p>
+          <div class="mt-4 border border-base-300 rounded-lg p-4">
+            <p class="text-sm" x-text="t('filesPlaceholder')"></p>
+          </div>
+        </div>
+
+        <div x-show="currentPage === 'actions'" class="card bg-base-200 shadow p-5" x-cloak>
+          <h2 class="font-semibold mb-3" x-text="t('actionsTitle')"></h2>
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary" @click="refresh()" x-text="t('refreshBtn')"></button>
+            <button class="btn" @click="loadCurrentUser()" x-text="t('reloadUserBtn')"></button>
+          </div>
+          <pre class="mt-4 p-3 rounded bg-base-300 text-xs overflow-auto" x-text="debugText"></pre>
+        </div>
+
+        <div x-show="currentPage === 'settings'" class="card bg-base-200 shadow p-5">
+          <h2 class="text-lg font-semibold" x-text="t('settingsTitle')"></h2>
+          <p class="text-sm opacity-70 mt-1" x-text="t('settingsDescription')"></p>
+        </div>
+      </div>
+
+      <div class="drawer-side">
+        <label for="app-sidebar" class="drawer-overlay"></label>
+        <aside class="min-h-full w-72 bg-base-200 border-r border-base-300 p-4">
+          <div class="mb-4">
+            <p class="text-xs uppercase tracking-wide opacity-60" x-text="t('sidebarLabel')"></p>
+          </div>
+          <ul class="menu gap-1">
+            <template x-for="item in navItems" :key="item.key">
+              <li>
+                <button
+                  class="justify-start"
+                  :class="{ 'active': currentPage === item.key }"
+                  @click="setPage(item.key)">
+                  <i :class="item.icon"></i>
+                  <span x-text="t(item.labelKey)"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function templateApp() {
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'template-app',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        currentPage: 'overview',
+        sidebarOpen: false,
+        debugText: 'Ready.',
+        navItems: [
+          { key: 'overview', labelKey: 'menuOverview', icon: 'fa-solid fa-house' },
+          { key: 'music', labelKey: 'menuMusic', icon: 'fa-solid fa-music' },
+          { key: 'files', labelKey: 'menuFiles', icon: 'fa-solid fa-folder-tree' },
+          { key: 'actions', labelKey: 'menuActions', icon: 'fa-solid fa-wrench' },
+          { key: 'settings', labelKey: 'menuSettings', icon: 'fa-solid fa-gear' },
+        ],
+        i18n: {
+          en: {
+            pageTitle: 'HayOS App Template',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuOverview: 'Overview',
+            menuMusic: 'Music Player',
+            menuFiles: 'File Manager',
+            menuActions: 'Actions',
+            menuSettings: 'Settings',
+            starterTitle: 'App Starter Template',
+            starterDescription: 'Includes base libraries + silent auth bootstrap.',
+            statusLabel: 'Status',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            permissionNote: 'Note: resolving ui.theme requires app permission firestore.read.',
+            musicTitle: 'Music Player Page',
+            musicDescription: 'Use this page as a base for your player controls and playlist UI.',
+            musicPlaceholder: 'Add player controls, queue, and current track metadata here.',
+            filesTitle: 'File Manager Page',
+            filesDescription: 'Use this page for folders, files, and file actions.',
+            filesPlaceholder: 'Add file tree, list, and operation buttons here.',
+            actionsTitle: 'Starter Actions',
+            refreshBtn: 'Refresh',
+            reloadUserBtn: 'Reload User',
+            settingsTitle: 'Settings Page',
+            settingsDescription: 'Place application-level settings and preferences here.',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+          },
+          hy: {
+            pageTitle: 'HayOS Հավելվածի Տեմփլեյթ',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuOverview: 'Ընդհանուր',
+            menuMusic: 'Երաժշտական նվագարկիչ',
+            menuFiles: 'Ֆայլերի կառավարիչ',
+            menuActions: 'Գործողություններ',
+            menuSettings: 'Կարգավորումներ',
+            starterTitle: 'Հավելվածի մեկնարկային տեմփլեյթ',
+            starterDescription: 'Ներառում է հիմնական գրադարաններ + silent auth bootstrap։',
+            statusLabel: 'Կարգավիճակ',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է firestore.read permission։',
+            musicTitle: 'Երաժշտական նվագարկչի էջ',
+            musicDescription: 'Օգտագործեք այս էջը նվագարկիչի կառավարիչների և playlist-ի UI-ի համար։',
+            musicPlaceholder: 'Այստեղ ավելացրեք player controls, queue և current track տվյալները։',
+            filesTitle: 'Ֆայլերի կառավարչի էջ',
+            filesDescription: 'Օգտագործեք այս էջը թղթապանակների, ֆայլերի և file actions-ի համար։',
+            filesPlaceholder: 'Այստեղ ավելացրեք file tree, list և գործառնական կոճակները։',
+            actionsTitle: 'Սկզբնական գործողություններ',
+            refreshBtn: 'Թարմացնել',
+            reloadUserBtn: 'Վերբեռնել օգտատիրոջը',
+            settingsTitle: 'Կարգավորումների էջ',
+            settingsDescription: 'Այստեղ ավելացրեք ծրագրի կարգավորումները և նախընտրությունները։',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'template-app';
+
+            this.client = new HayOSClient(this.appId);
+            this.resolvePageFromHash();
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+            this.status = this.t('statusAuthCheck');
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+              this.status = this.t('statusReady');
+            });
+            this.status = this.t('statusAuthenticated');
+            await this.loadOsTheme();
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+              2,
+            );
+
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusAuthFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadCurrentUser() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            this.user = await this.client.getCurrentUser();
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+              2,
+            );
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async refresh() {
+          this.error = '';
+          await this.loadOsTheme();
+          this.status = this.t('statusReady');
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+          this.sidebarOpen = false;
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'overview';
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async firestoreGet(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreGet(collection, documentId);
+        },
+
+        async firestoreQuery(collection, queryParams) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreQuery(collection, queryParams);
+        },
+
+        async firestoreAdd(collection, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreAdd(collection, data);
+        },
+
+        async firestoreUpdate(collection, documentId, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreUpdate(collection, documentId, data);
+        },
+
+        async firestoreDelete(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreDelete(collection, documentId);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

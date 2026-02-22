@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="roleUpgradeApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Դիմում</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+<body class="h-full">
+  <div class="max-w-4xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <h1 class="text-xl font-semibold">Developer Դիմում</h1>
+      <p class="text-sm opacity-70">Ուղարկիր դիմում user -> developer role upgrade-ի համար։</p>
+      <p class="text-sm mt-2"><span class="font-semibold">Status:</span> <span x-text="status"></span></p>
+      <p class="text-error text-sm mt-2" x-show="error" x-text="error"></p>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5 space-y-4">
+      <label class="form-control">
+        <span class="label-text">Ինչու ես ուզում դառնալ Developer</span>
+        <textarea class="textarea textarea-bordered" rows="4" x-model="note"></textarea>
+      </label>
+      <button class="btn btn-primary" :disabled="submitting" @click="submitRequest()" x-text="submitting ? 'Ուղարկվում է...' : 'Դիմել'"></button>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Իմ դիմումները</h2>
+        <button class="btn btn-sm" @click="loadRequests()">Թարմացնել</button>
+      </div>
+      <div class="overflow-x-auto mt-3">
+        <table class="table table-zebra table-sm">
+          <thead><tr><th>ID</th><th>State</th><th>Updated</th><th>Reason</th></tr></thead>
+          <tbody>
+            <template x-for="item in requests" :key="item.id">
+              <tr>
+                <td class="font-mono text-xs" x-text="item.id"></td>
+                <td><span class="badge" :class="badgeClass(item.status)" x-text="item.status || 'pending'"></span></td>
+                <td x-text="item.updatedAt || '-' "></td>
+                <td x-text="item.reviewReason || '-' "></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function roleUpgradeApp() {
+      return {
+        client: null,
+        appId: 'role-upgrade',
+        status: 'Initializing...',
+        error: '',
+        note: '',
+        requests: [],
+        submitting: false,
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            this.client = new HayOSClient(this.appId);
+            await this.client.ensureAuthenticated();
+            this.status = 'Ready';
+            await this.loadRequests();
+          } catch (error) {
+            this.error = error?.message || String(error);
+            this.status = 'Failed';
+          }
+        },
+
+        badgeClass(status) {
+          if (status === 'approved') return 'badge-success';
+          if (status === 'rejected') return 'badge-error';
+          if (status === 'reviewing') return 'badge-warning';
+          return 'badge-info';
+        },
+
+        async submitRequest() {
+          if (!this.client) return;
+          this.error = '';
+          this.submitting = true;
+          try {
+            await this.client.firestoreAdd('roleUpgradeRequests', {
+              note: this.note || '',
+              requestedRole: 'developer',
+              status: 'pending',
+            });
+            this.note = '';
+            await this.loadRequests();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.submitting = false;
+          }
+        },
+
+        async loadRequests() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            const rows = await this.client.firestoreQuery('roleUpgradeRequests', {});
+            this.requests = Array.isArray(rows) ? rows : [];
+          } catch (error) {
+            this.error = error?.message || String(error);
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

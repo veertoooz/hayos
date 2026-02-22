@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="globalSpacesApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">HayOS - Global Spaces</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+
+<body class="h-full">
+  <div class="h-full" x-cloak>
+    <div class="drawer lg:drawer-open h-full">
+      <input id="global-spaces-sidebar" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
+
+      <div class="drawer-content h-full p-4 lg:p-6 overflow-auto">
+        <div class="mb-4 lg:hidden">
+          <label for="global-spaces-sidebar" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-bars mr-2"></i>
+            <span x-text="t('menuBtn')"></span>
+          </label>
+        </div>
+
+        <div class="card bg-base-200 shadow p-4 mb-4">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-sm">
+              <span class="font-semibold" x-text="`${t('statusLabel')}:`"></span>
+              <span x-text="statusText"></span>
+            </p>
+            <p class="text-sm" x-show="selectedSpace">
+              <span class="font-semibold" x-text="`${t('selectedSpaceLabel')}:`"></span>
+              <span x-text="selectedSpace?.name || selectedSpace?.id"></span>
+            </p>
+            <p class="text-sm" x-show="user">
+              <span class="font-semibold" x-text="`${t('userLabel')}:`"></span>
+              <span x-text="user?.email || user?.displayName || user?.uid"></span>
+            </p>
+          </div>
+          <p class="mt-2 text-warning text-sm" x-text="t('permissionNote')"></p>
+          <p class="mt-2 text-error text-sm break-words" x-show="error" x-text="error"></p>
+        </div>
+
+        <div x-show="currentPage === 'spaces'" class="space-y-4">
+          <div class="card bg-base-200 shadow p-5">
+            <h1 class="text-xl font-semibold" x-text="t('spacesTitle')"></h1>
+            <p class="text-sm opacity-70 mt-1" x-text="t('spacesDescription')"></p>
+            <button class="btn btn-primary mt-4 w-full sm:w-auto" @click="setPage('create')" x-text="t('createFromSpacesBtn')"></button>
+          </div>
+
+          <div class="space-y-3" x-show="spaces.length > 0">
+            <template x-for="space in spaces" :key="space.id">
+              <article class="card bg-base-200 shadow p-4">
+                <button
+                  class="btn h-auto w-full justify-between text-left px-4 py-3"
+                  :class="selectedSpaceId === space.id ? 'btn-primary' : 'btn-outline'"
+                  @click="selectSpace(space.id)"
+                >
+                  <span class="font-medium break-words" x-text="space.name || space.id"></span>
+                  <span
+                    class="badge badge-sm"
+                    :class="selectedSpaceId === space.id ? 'badge-neutral' : 'badge-ghost'"
+                    x-text="selectedSpaceId === space.id ? t('selectedBadge') : t('selectSpaceBtn')"
+                  ></span>
+                </button>
+                <p class="mt-3 text-xs opacity-70 break-all" x-text="space.id"></p>
+                <p class="mt-1 text-sm opacity-70 break-words" x-text="space.description || ''"></p>
+                <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                  <button class="btn btn-sm btn-outline flex-1" @click="selectSpace(space.id, 'schema')" x-text="t('openSchemaBtn')"></button>
+                  <button class="btn btn-sm btn-outline flex-1" @click="selectSpace(space.id, 'records')" x-text="t('openRecordsBtn')"></button>
+                </div>
+              </article>
+            </template>
+          </div>
+
+          <div class="card bg-base-200 shadow p-5 text-sm opacity-70" x-show="spaces.length === 0" x-text="t('spacesEmpty')"></div>
+        </div>
+
+        <div x-show="currentPage === 'create'" class="space-y-4">
+          <div class="card bg-base-200 shadow p-5">
+            <h2 class="text-xl font-semibold" x-text="t('createTitle')"></h2>
+            <p class="text-sm opacity-70 mt-1" x-text="t('createDescription')"></p>
+          </div>
+
+          <div class="card bg-base-200 shadow p-5">
+            <form class="grid grid-cols-1 md:grid-cols-2 gap-3" @submit.prevent="createSpace()">
+              <label class="form-control w-full">
+                <span class="label-text text-sm" x-text="t('spaceNameLabel')"></span>
+                <input class="input input-bordered w-full" x-model="draftSpace.name" required :placeholder="t('spaceNamePlaceholder')" />
+              </label>
+              <label class="form-control w-full">
+                <span class="label-text text-sm" x-text="t('spaceSlugLabel')"></span>
+                <input class="input input-bordered w-full" x-model="draftSpace.slug" :placeholder="t('spaceSlugPlaceholder')" />
+              </label>
+              <label class="form-control w-full md:col-span-2">
+                <span class="label-text text-sm" x-text="t('spaceDescriptionLabel')"></span>
+                <input class="input input-bordered w-full" x-model="draftSpace.description" :placeholder="t('spaceDescriptionPlaceholder')" />
+              </label>
+              <button type="submit" class="btn btn-primary md:col-span-2" x-text="t('createSpaceBtn')"></button>
+            </form>
+          </div>
+        </div>
+
+        <div x-show="currentPage === 'schema'" class="space-y-4">
+          <template x-if="!selectedSpace">
+            <div class="card bg-base-200 shadow p-5">
+              <h2 class="font-semibold text-lg" x-text="t('noSelectedSpaceTitle')"></h2>
+              <p class="text-sm opacity-70 mt-1" x-text="t('noSelectedSpaceBody')"></p>
+              <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                <button class="btn btn-outline" @click="setPage('spaces')" x-text="t('goToSpacesBtn')"></button>
+                <button class="btn btn-outline" @click="setPage('create')" x-text="t('goToCreateBtn')"></button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="selectedSpace">
+            <div class="space-y-4">
+              <div class="card bg-base-200 shadow p-5">
+                <h2 class="font-semibold text-lg break-words" x-text="selectedSpace.name"></h2>
+                <p class="text-sm opacity-70 mt-1 break-all" x-text="selectedSpace.id"></p>
+                <p class="text-sm opacity-70 mt-2 break-words" x-text="selectedSpace.description || ''"></p>
+              </div>
+
+              <div class="card bg-base-200 shadow p-5">
+                <h3 class="font-semibold mb-3" x-text="t('schemaTitle')"></h3>
+                <p class="text-sm opacity-70 mb-4" x-text="t('schemaDescription')"></p>
+                <form class="grid grid-cols-1 md:grid-cols-4 gap-3" @submit.prevent="saveSchemaField()">
+                  <label class="form-control w-full">
+                    <span class="label-text text-sm" x-text="t('fieldKeyLabel')"></span>
+                    <input class="input input-bordered w-full" x-model="draftField.key" required placeholder="title" />
+                  </label>
+                  <label class="form-control w-full">
+                    <span class="label-text text-sm" x-text="t('fieldLabelLabel')"></span>
+                    <input class="input input-bordered w-full" x-model="draftField.label" required placeholder="Title" />
+                  </label>
+                  <label class="form-control w-full">
+                    <span class="label-text text-sm" x-text="t('fieldTypeLabel')"></span>
+                    <select class="select select-bordered w-full" x-model="draftField.type">
+                      <option value="text">text</option>
+                      <option value="number">number</option>
+                      <option value="boolean">boolean</option>
+                      <option value="date">date</option>
+                      <option value="imageUrl">imageUrl</option>
+                      <option value="json">json</option>
+                    </select>
+                  </label>
+                  <label class="label cursor-pointer gap-2">
+                    <span class="label-text" x-text="t('fieldRequiredLabel')"></span>
+                    <input class="checkbox checkbox-sm" type="checkbox" x-model="draftField.required" />
+                  </label>
+                  <button type="submit" class="btn btn-primary md:col-span-4" x-text="t('saveFieldBtn')"></button>
+                </form>
+
+                <div class="hidden lg:block overflow-x-auto mt-4" x-show="schema.length > 0">
+                  <table class="table table-zebra table-sm">
+                    <thead>
+                      <tr>
+                        <th x-text="t('fieldKeyHeader')"></th>
+                        <th x-text="t('fieldLabelHeader')"></th>
+                        <th x-text="t('fieldTypeHeader')"></th>
+                        <th x-text="t('fieldRequiredHeader')"></th>
+                        <th x-text="t('actionsHeader')"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="field in schema" :key="field.id">
+                        <tr>
+                          <td class="break-all" x-text="field.key || field.id"></td>
+                          <td class="break-words" x-text="field.label || ''"></td>
+                          <td x-text="field.type || ''"></td>
+                          <td x-text="field.required ? t('yes') : t('no')"></td>
+                          <td>
+                            <div class="flex gap-2">
+                              <button class="btn btn-xs btn-outline" @click="editSchemaField(field)" x-text="t('editBtn')"></button>
+                              <button class="btn btn-xs btn-error btn-outline" @click="deleteSchemaField(field)" x-text="t('deleteBtn')"></button>
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="lg:hidden space-y-3 mt-4" x-show="schema.length > 0">
+                  <template x-for="field in schema" :key="'card-' + field.id">
+                    <article class="card bg-base-300/40 border border-base-300 p-4">
+                      <p class="text-xs uppercase tracking-wide opacity-70" x-text="t('fieldKeyHeader')"></p>
+                      <p class="font-mono break-all" x-text="field.key || field.id"></p>
+
+                      <p class="text-xs uppercase tracking-wide opacity-70 mt-3" x-text="t('fieldLabelHeader')"></p>
+                      <p class="break-words" x-text="field.label || ''"></p>
+
+                      <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p class="text-xs uppercase tracking-wide opacity-70" x-text="t('fieldTypeHeader')"></p>
+                          <p x-text="field.type || ''"></p>
+                        </div>
+                        <div>
+                          <p class="text-xs uppercase tracking-wide opacity-70" x-text="t('fieldRequiredHeader')"></p>
+                          <p x-text="field.required ? t('yes') : t('no')"></p>
+                        </div>
+                      </div>
+
+                      <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                        <button class="btn btn-sm btn-outline flex-1" @click="editSchemaField(field)" x-text="t('editBtn')"></button>
+                        <button class="btn btn-sm btn-error btn-outline flex-1" @click="deleteSchemaField(field)" x-text="t('deleteBtn')"></button>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+
+                <p class="text-sm opacity-70 mt-4" x-show="schema.length === 0" x-text="t('schemaEmpty')"></p>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="currentPage === 'records'" class="space-y-4">
+          <template x-if="!selectedSpace">
+            <div class="card bg-base-200 shadow p-5">
+              <h2 class="font-semibold text-lg" x-text="t('noSelectedSpaceTitle')"></h2>
+              <p class="text-sm opacity-70 mt-1" x-text="t('noSelectedSpaceBody')"></p>
+              <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                <button class="btn btn-outline" @click="setPage('spaces')" x-text="t('goToSpacesBtn')"></button>
+                <button class="btn btn-outline" @click="setPage('create')" x-text="t('goToCreateBtn')"></button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="selectedSpace">
+            <div class="space-y-4">
+              <div class="card bg-base-200 shadow p-5">
+                <h2 class="font-semibold text-lg break-words" x-text="t('recordsTitle')"></h2>
+                <p class="text-sm opacity-70 mt-1" x-text="t('recordsDescription')"></p>
+              </div>
+
+              <div class="card bg-base-200 shadow p-5" x-show="schema.length === 0">
+                <p class="text-sm opacity-70" x-text="t('recordsNoSchema')"></p>
+                <div class="mt-4">
+                  <button class="btn btn-outline" @click="setPage('schema')" x-text="t('openSchemaBtn')"></button>
+                </div>
+              </div>
+
+              <div class="card bg-base-200 shadow p-5" x-show="schema.length > 0">
+                <form class="grid grid-cols-1 md:grid-cols-2 gap-3" @submit.prevent="saveRecord()">
+                  <template x-for="field in schema" :key="field.id">
+                    <label class="form-control w-full" :class="field.type === 'json' ? 'md:col-span-2' : ''">
+                      <span class="label-text text-sm" x-text="(field.label || field.key) + (field.required ? ' *' : '')"></span>
+
+                      <template x-if="field.type === 'boolean'">
+                        <input
+                          class="toggle toggle-primary mt-2"
+                          type="checkbox"
+                          :checked="Boolean(draftRecord[field.key])"
+                          @change="setDraftRecordValue(field.key, $event.target.checked)"
+                        />
+                      </template>
+
+                      <template x-if="field.type === 'number'">
+                        <input
+                          class="input input-bordered w-full"
+                          type="number"
+                          :value="draftRecord[field.key] ?? ''"
+                          @input="setDraftRecordValue(field.key, $event.target.value)"
+                        />
+                      </template>
+
+                      <template x-if="field.type === 'date'">
+                        <input
+                          class="input input-bordered w-full"
+                          type="date"
+                          :value="formatDateInputValue(draftRecord[field.key])"
+                          @input="setDraftRecordValue(field.key, $event.target.value)"
+                        />
+                      </template>
+
+                      <template x-if="field.type === 'json'">
+                        <textarea
+                          class="textarea textarea-bordered w-full"
+                          rows="4"
+                          :placeholder="t('jsonPlaceholder')"
+                          :value="formatJsonFieldValue(draftRecord[field.key])"
+                          @input="setDraftRecordValue(field.key, $event.target.value)"
+                        ></textarea>
+                      </template>
+
+                      <template x-if="field.type !== 'boolean' && field.type !== 'number' && field.type !== 'date' && field.type !== 'json'">
+                        <input
+                          class="input input-bordered w-full"
+                          type="text"
+                          :value="draftRecord[field.key] ?? ''"
+                          @input="setDraftRecordValue(field.key, $event.target.value)"
+                        />
+                      </template>
+                    </label>
+                  </template>
+
+                  <button
+                    class="btn btn-primary md:col-span-2"
+                    type="submit"
+                    x-text="editRecordId ? t('updateRecordBtn') : t('createRecordBtn')"
+                  ></button>
+                </form>
+
+                <div class="mt-3" x-show="editRecordId">
+                  <button class="btn btn-sm btn-outline w-full sm:w-auto" @click="cancelRecordEdit()" x-text="t('cancelRecordEditBtn')"></button>
+                </div>
+
+                <div class="hidden lg:block overflow-x-auto mt-4" x-show="records.length > 0">
+                  <table class="table table-zebra table-sm">
+                    <thead>
+                      <tr>
+                        <template x-for="field in schema" :key="'head-' + field.id">
+                          <th class="break-all" x-text="field.key"></th>
+                        </template>
+                        <th x-text="t('actionsHeader')"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="record in records" :key="record.id">
+                        <tr>
+                          <template x-for="field in schema" :key="record.id + '-' + field.id">
+                            <td class="break-all" x-text="renderCell(record[field.key])"></td>
+                          </template>
+                          <td>
+                            <div class="flex gap-2">
+                              <button class="btn btn-xs btn-outline" @click="editRecord(record)" x-text="t('editBtn')"></button>
+                              <button class="btn btn-xs btn-error btn-outline" @click="deleteRecord(record)" x-text="t('deleteBtn')"></button>
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="lg:hidden space-y-3 mt-4" x-show="records.length > 0">
+                  <template x-for="record in records" :key="'record-card-' + record.id">
+                    <article class="card bg-base-300/40 border border-base-300 p-4">
+                      <div class="space-y-2">
+                        <template x-for="field in schema" :key="record.id + '-card-' + field.id">
+                          <div class="text-sm">
+                            <p class="text-xs uppercase tracking-wide opacity-70 break-all" x-text="field.label || field.key"></p>
+                            <p class="mt-1 break-all" x-text="renderCell(record[field.key])"></p>
+                          </div>
+                        </template>
+                      </div>
+
+                      <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                        <button class="btn btn-sm btn-outline flex-1" @click="editRecord(record)" x-text="t('editBtn')"></button>
+                        <button class="btn btn-sm btn-error btn-outline flex-1" @click="deleteRecord(record)" x-text="t('deleteBtn')"></button>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+              </div>
+
+              <div class="card bg-base-200 shadow p-5 text-sm opacity-70" x-show="records.length === 0 && schema.length > 0" x-text="t('recordsEmpty')"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="drawer-side">
+        <label for="global-spaces-sidebar" class="drawer-overlay"></label>
+        <aside class="min-h-full w-72 bg-base-200 border-r border-base-300 p-4">
+          <div class="mb-4">
+            <p class="text-xs uppercase tracking-wide opacity-60" x-text="t('sidebarLabel')"></p>
+          </div>
+          <ul class="menu gap-1">
+            <template x-for="item in navItems" :key="item.key">
+              <li>
+                <button
+                  class="justify-start"
+                  :class="{ 'active': currentPage === item.key }"
+                  @click="setPage(item.key)"
+                >
+                  <i :class="item.icon"></i>
+                  <span x-text="t(item.labelKey)"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function globalSpacesApp() {
+      return {
+        loading: true,
+        error: '',
+        statusKey: 'statusInitializing',
+        statusArgs: {},
+        appId: 'global-spaces-manager',
+        user: null,
+        client: null,
+        selectedSpaceId: null,
+        spaces: [],
+        schema: [],
+        records: [],
+        osTheme: '',
+        editRecordId: null,
+        currentPage: 'spaces',
+        sidebarOpen: false,
+        language: 'en',
+        navItems: [
+          { key: 'spaces', labelKey: 'menuSpaces', icon: 'fa-solid fa-layer-group' },
+          { key: 'create', labelKey: 'menuCreate', icon: 'fa-solid fa-square-plus' },
+          { key: 'schema', labelKey: 'menuSchema', icon: 'fa-solid fa-table-columns' },
+          { key: 'records', labelKey: 'menuRecords', icon: 'fa-solid fa-database' },
+        ],
+        draftSpace: {
+          name: '',
+          slug: '',
+          description: '',
+        },
+        draftField: {
+          key: '',
+          label: '',
+          type: 'text',
+          required: false,
+        },
+        draftRecord: {},
+        i18n: {
+          en: {
+            pageTitle: 'HayOS - Global Spaces',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuSpaces: 'Spaces',
+            menuCreate: 'Create Space',
+            menuSchema: 'Schema',
+            menuRecords: 'Records',
+            statusLabel: 'Status',
+            selectedSpaceLabel: 'Selected space',
+            userLabel: 'User',
+            permissionNote: 'Note: resolving ui.theme requires app permission firestore.read.',
+            spacesTitle: 'Global Spaces',
+            spacesDescription: 'Choose a space to edit schema and records.',
+            createFromSpacesBtn: 'Create New Space',
+            spacesEmpty: 'No spaces yet.',
+            selectedBadge: 'Selected',
+            selectSpaceBtn: 'Select',
+            openSchemaBtn: 'Open Schema',
+            openRecordsBtn: 'Open Records',
+            createTitle: 'Create Space',
+            createDescription: 'Create a new global data space.',
+            spaceNameLabel: 'Name',
+            spaceSlugLabel: 'Slug (optional)',
+            spaceDescriptionLabel: 'Description',
+            spaceNamePlaceholder: 'Example: Movies',
+            spaceSlugPlaceholder: 'movies',
+            spaceDescriptionPlaceholder: 'What data this space stores',
+            createSpaceBtn: 'Create Space',
+            schemaTitle: 'Schema Fields',
+            schemaDescription: 'Manage field definitions for this space.',
+            noSelectedSpaceTitle: 'No space selected',
+            noSelectedSpaceBody: 'Select a space from the Spaces page to continue.',
+            goToSpacesBtn: 'Go to Spaces',
+            goToCreateBtn: 'Go to Create',
+            fieldKeyLabel: 'Key',
+            fieldLabelLabel: 'Label',
+            fieldTypeLabel: 'Type',
+            fieldRequiredLabel: 'Required',
+            saveFieldBtn: 'Save Field',
+            schemaEmpty: 'No schema fields yet.',
+            fieldKeyHeader: 'Key',
+            fieldLabelHeader: 'Label',
+            fieldTypeHeader: 'Type',
+            fieldRequiredHeader: 'Required',
+            actionsHeader: 'Actions',
+            editBtn: 'Edit',
+            deleteBtn: 'Delete',
+            recordsTitle: 'Records',
+            recordsDescription: 'Create and manage space records.',
+            recordsNoSchema: 'Add schema fields first to create records.',
+            jsonPlaceholder: '{"key":"value"}',
+            createRecordBtn: 'Create Record',
+            updateRecordBtn: 'Update Record',
+            cancelRecordEditBtn: 'Cancel Edit',
+            recordsEmpty: 'No records yet.',
+            yes: 'Yes',
+            no: 'No',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+            statusLoadingSpaces: 'Loading spaces...',
+            statusLoadingSpace: 'Loading {spaceId}...',
+            statusCreatingSpace: 'Creating space...',
+            statusSavingField: 'Saving field...',
+            statusDeletingField: 'Deleting field...',
+            statusCreatingRecord: 'Creating record...',
+            statusUpdatingRecord: 'Updating record...',
+            statusDeletingRecord: 'Deleting record...',
+            statusFailed: 'Failed',
+            errorClientNotInitialized: 'HayOS client is not initialized',
+            errorFieldRequired: 'Field "{key}" is required',
+            errorFieldMustBeNumber: 'Field "{key}" must be a number',
+            errorFieldMustBeJson: 'Field "{key}" must be valid JSON',
+          },
+          hy: {
+            pageTitle: 'HayOS - Տարածքներ',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuSpaces: 'Տարածքներ',
+            menuCreate: 'Ստեղծել',
+            menuSchema: 'Schema',
+            menuRecords: 'Records',
+            statusLabel: 'Կարգավիճակ',
+            selectedSpaceLabel: 'Ընտրված տարածք',
+            userLabel: 'Օգտատեր',
+            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է firestore.read permission։',
+            spacesTitle: 'Գլոբալ տարածքներ',
+            spacesDescription: 'Ընտրիր տարածք, որպեսզի խմբագրես schema-ն և records-ը։',
+            createFromSpacesBtn: 'Ստեղծել նոր տարածք',
+            spacesEmpty: 'Տարածքներ դեռ չկան։',
+            selectedBadge: 'Ընտրված',
+            selectSpaceBtn: 'Ընտրել',
+            openSchemaBtn: 'Բացել Schema',
+            openRecordsBtn: 'Բացել Records',
+            createTitle: 'Ստեղծել տարածք',
+            createDescription: 'Ստեղծիր նոր global data տարածք։',
+            spaceNameLabel: 'Անուն',
+            spaceSlugLabel: 'Slug (ըստ ցանկության)',
+            spaceDescriptionLabel: 'Նկարագրություն',
+            spaceNamePlaceholder: 'Օրինակ՝ Ֆիլմեր',
+            spaceSlugPlaceholder: 'films',
+            spaceDescriptionPlaceholder: 'Ինչ տվյալներ է պահում այս տարածքը',
+            createSpaceBtn: 'Ստեղծել տարածք',
+            schemaTitle: 'Schema դաշտեր',
+            schemaDescription: 'Կառավարիր այս տարածքի դաշտերի սահմանումները։',
+            noSelectedSpaceTitle: 'Տարածք ընտրված չէ',
+            noSelectedSpaceBody: 'Շարունակելու համար ընտրիր տարածք «Տարածքներ» էջից։',
+            goToSpacesBtn: 'Բացել Տարածքներ',
+            goToCreateBtn: 'Բացել Ստեղծել',
+            fieldKeyLabel: 'Key',
+            fieldLabelLabel: 'Label',
+            fieldTypeLabel: 'Type',
+            fieldRequiredLabel: 'Պարտադիր',
+            saveFieldBtn: 'Պահպանել դաշտը',
+            schemaEmpty: 'Schema դաշտեր դեռ չկան։',
+            fieldKeyHeader: 'Key',
+            fieldLabelHeader: 'Label',
+            fieldTypeHeader: 'Type',
+            fieldRequiredHeader: 'Պարտադիր',
+            actionsHeader: 'Գործողություններ',
+            editBtn: 'Խմբագրել',
+            deleteBtn: 'Ջնջել',
+            recordsTitle: 'Records',
+            recordsDescription: 'Ստեղծիր և կառավարիր records-ները։',
+            recordsNoSchema: 'Records ստեղծելու համար նախ ավելացրու schema դաշտեր։',
+            jsonPlaceholder: '{"key":"value"}',
+            createRecordBtn: 'Ստեղծել record',
+            updateRecordBtn: 'Թարմացնել record',
+            cancelRecordEditBtn: 'Չեղարկել խմբագրումը',
+            recordsEmpty: 'Records դեռ չկան։',
+            yes: 'Այո',
+            no: 'Ոչ',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+            statusLoadingSpaces: 'Բեռնվում են տարածքները...',
+            statusLoadingSpace: 'Բեռնվում է {spaceId}...',
+            statusCreatingSpace: 'Ստեղծվում է տարածքը...',
+            statusSavingField: 'Պահպանվում է դաշտը...',
+            statusDeletingField: 'Ջնջվում է դաշտը...',
+            statusCreatingRecord: 'Ստեղծվում է record...',
+            statusUpdatingRecord: 'Թարմացվում է record...',
+            statusDeletingRecord: 'Ջնջվում է record...',
+            statusFailed: 'Սխալ',
+            errorClientNotInitialized: 'HayOS client-ը նախնականացված չէ',
+            errorFieldRequired: '"{key}" դաշտը պարտադիր է',
+            errorFieldMustBeNumber: '"{key}" դաշտը պետք է թիվ լինի',
+            errorFieldMustBeJson: '"{key}" դաշտը պետք է լինի վավեր JSON',
+          },
+        },
+
+        get selectedSpace() {
+          return this.spaces.find((space) => space.id === this.selectedSpaceId) || null;
+        },
+
+        get statusText() {
+          return this.translate(this.statusKey, this.statusArgs);
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        translate(key, params = {}) {
+          return this.interpolate(this.t(key), params);
+        },
+
+        interpolate(template, params = {}) {
+          return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (_, token) => {
+            const value = params[token];
+            return value === null || typeof value === 'undefined' ? '' : String(value);
+          });
+        },
+
+        normalizeLanguage(language) {
+          return language === 'hy' ? 'hy' : 'en';
+        },
+
+        setStatus(key, params = {}) {
+          this.statusKey = key;
+          this.statusArgs = params;
+        },
+
+        setPage(pageKey) {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          if (!allowedPages.has(pageKey)) return;
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+          this.sidebarOpen = false;
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'spaces';
+        },
+
+        initializePageFromQuery(urlParams) {
+          const view = (urlParams.get('view') || '').trim();
+          if (view === 'spaces') {
+            this.currentPage = 'spaces';
+            window.location.hash = 'spaces';
+            return true;
+          }
+          if (view === 'space') {
+            this.currentPage = 'schema';
+            window.location.hash = 'schema';
+            return true;
+          }
+          return false;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'global-spaces-manager';
+            this.selectedSpaceId = urlParams.get('spaceId');
+
+            const queryApplied = this.initializePageFromQuery(urlParams);
+            if (!queryApplied) {
+              this.resolvePageFromHash();
+            }
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+
+            this.client = new HayOSClient(this.appId);
+            this.setStatus('statusAuthCheck');
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = this.normalizeLanguage(await this.client.getLanguage());
+            document.documentElement.lang = this.language;
+            document.title = this.t('pageTitle');
+            this.client.onLanguageChanged((language) => {
+              this.language = this.normalizeLanguage(language);
+              document.documentElement.lang = this.language;
+              document.title = this.t('pageTitle');
+            });
+            this.setStatus('statusAuthenticated');
+
+            await this.loadSpaces();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusAuthFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async sendGlobalRequest(action) {
+          if (!this.client || typeof this.client._sendRequest !== 'function') {
+            throw new Error(this.t('errorClientNotInitialized'));
+          }
+          const response = await this.client._sendRequest(action);
+          if (!response.ok) {
+            throw new Error(response.error || this.t('statusFailed'));
+          }
+          return response.data;
+        },
+
+        async loadSpaces() {
+          this.error = '';
+          this.setStatus('statusLoadingSpaces');
+          await this.loadOsTheme();
+          const spaces = await this.sendGlobalRequest({ kind: 'globalSpace.list' });
+          this.spaces = Array.isArray(spaces) ? spaces : [];
+
+          if (!this.selectedSpaceId && this.spaces.length > 0) {
+            this.selectedSpaceId = this.spaces[0].id;
+          }
+          if (this.selectedSpaceId && !this.spaces.some((space) => space.id === this.selectedSpaceId)) {
+            this.selectedSpaceId = this.spaces[0] ? this.spaces[0].id : null;
+          }
+          await this.loadSelectedSpace();
+          this.setStatus('statusReady');
+        },
+
+        async loadOsTheme() {
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async loadSelectedSpace() {
+          if (!this.selectedSpaceId) {
+            this.schema = [];
+            this.records = [];
+            this.editRecordId = null;
+            this.draftRecord = {};
+            return;
+          }
+
+          this.setStatus('statusLoadingSpace', { spaceId: this.selectedSpaceId });
+          const schema = await this.sendGlobalRequest({
+            kind: 'globalSpace.getSchema',
+            spaceId: this.selectedSpaceId,
+          });
+          const records = await this.sendGlobalRequest({
+            kind: 'globalSpace.listRecords',
+            spaceId: this.selectedSpaceId,
+          });
+          this.schema = Array.isArray(schema) ? schema : [];
+          this.records = Array.isArray(records) ? records : [];
+          this.cancelRecordEdit();
+          this.setStatus('statusReady');
+        },
+
+        async selectSpace(spaceId, nextPage = '') {
+          if (!spaceId) return;
+          this.selectedSpaceId = spaceId;
+          this.error = '';
+          try {
+            await this.loadSelectedSpace();
+            if (nextPage) {
+              this.setPage(nextPage);
+            }
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+
+        async createSpace() {
+          this.error = '';
+          try {
+            this.setStatus('statusCreatingSpace');
+            const created = await this.sendGlobalRequest({
+              kind: 'globalSpace.create',
+              data: {
+                name: (this.draftSpace.name || '').trim(),
+                slug: (this.draftSpace.slug || '').trim(),
+                description: (this.draftSpace.description || '').trim(),
+              },
+            });
+            this.draftSpace = { name: '', slug: '', description: '' };
+            this.selectedSpaceId = created.id;
+            await this.loadSpaces();
+            this.setPage('schema');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+
+        async saveSchemaField() {
+          if (!this.selectedSpaceId) return;
+          this.error = '';
+          try {
+            this.setStatus('statusSavingField');
+            await this.sendGlobalRequest({
+              kind: 'globalSpace.upsertSchemaField',
+              spaceId: this.selectedSpaceId,
+              fieldId: (this.draftField.key || '').trim(),
+              field: {
+                key: (this.draftField.key || '').trim(),
+                label: (this.draftField.label || '').trim(),
+                type: this.draftField.type,
+                required: Boolean(this.draftField.required),
+              },
+            });
+            this.draftField = { key: '', label: '', type: 'text', required: false };
+            await this.loadSelectedSpace();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+
+        editSchemaField(field) {
+          this.draftField = {
+            key: field.key || field.id || '',
+            label: field.label || '',
+            type: field.type || 'text',
+            required: Boolean(field.required),
+          };
+        },
+
+        async deleteSchemaField(field) {
+          if (!this.selectedSpaceId || !field) return;
+          const fieldId = field.id || field.key;
+          if (!fieldId) return;
+          this.error = '';
+          try {
+            this.setStatus('statusDeletingField');
+            await this.sendGlobalRequest({
+              kind: 'globalSpace.deleteSchemaField',
+              spaceId: this.selectedSpaceId,
+              fieldId,
+            });
+            await this.loadSelectedSpace();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+
+        setDraftRecordValue(key, value) {
+          this.draftRecord = {
+            ...this.draftRecord,
+            [key]: value,
+          };
+        },
+
+        formatDateInputValue(value) {
+          if (typeof value !== 'string') return '';
+          return value.length >= 10 ? value.slice(0, 10) : value;
+        },
+
+        formatJsonFieldValue(value) {
+          if (typeof value === 'undefined') return '';
+          if (typeof value === 'string') return value;
+          try {
+            return JSON.stringify(value, null, 2);
+          } catch {
+            return '';
+          }
+        },
+
+        renderCell(value) {
+          if (value === null || typeof value === 'undefined') return '';
+          if (typeof value === 'boolean') {
+            return value ? this.t('yes') : this.t('no');
+          }
+          if (typeof value === 'object') {
+            try {
+              return JSON.stringify(value);
+            } catch {
+              return '[object]';
+            }
+          }
+          return String(value);
+        },
+
+        normalizeRecordPayload() {
+          const payload = {};
+          for (const field of this.schema) {
+            const key = field.key;
+            const raw = this.draftRecord[key];
+
+            if (field.type === 'boolean') {
+              payload[key] = Boolean(raw);
+              continue;
+            }
+
+            if (raw === '' || raw === null || typeof raw === 'undefined') {
+              if (field.required) {
+                throw new Error(this.translate('errorFieldRequired', { key }));
+              }
+              continue;
+            }
+
+            if (field.type === 'number') {
+              const parsed = Number(raw);
+              if (Number.isNaN(parsed)) {
+                throw new Error(this.translate('errorFieldMustBeNumber', { key }));
+              }
+              payload[key] = parsed;
+              continue;
+            }
+
+            if (field.type === 'json') {
+              if (typeof raw === 'string') {
+                try {
+                  payload[key] = JSON.parse(raw);
+                } catch {
+                  throw new Error(this.translate('errorFieldMustBeJson', { key }));
+                }
+              } else {
+                payload[key] = raw;
+              }
+              continue;
+            }
+
+            payload[key] = raw;
+          }
+
+          return payload;
+        },
+
+        async saveRecord() {
+          if (!this.selectedSpaceId || this.schema.length === 0) return;
+          this.error = '';
+          try {
+            const payload = this.normalizeRecordPayload();
+            if (this.editRecordId) {
+              this.setStatus('statusUpdatingRecord');
+              await this.sendGlobalRequest({
+                kind: 'globalSpace.updateRecord',
+                spaceId: this.selectedSpaceId,
+                recordId: this.editRecordId,
+                data: payload,
+              });
+            } else {
+              this.setStatus('statusCreatingRecord');
+              await this.sendGlobalRequest({
+                kind: 'globalSpace.createRecord',
+                spaceId: this.selectedSpaceId,
+                data: payload,
+              });
+            }
+            this.cancelRecordEdit();
+            await this.loadSelectedSpace();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+
+        editRecord(record) {
+          this.editRecordId = record.id;
+          const next = {};
+          for (const field of this.schema) {
+            next[field.key] = record[field.key];
+          }
+          this.draftRecord = next;
+        },
+
+        cancelRecordEdit() {
+          this.editRecordId = null;
+          this.draftRecord = {};
+        },
+
+        async deleteRecord(record) {
+          if (!this.selectedSpaceId || !record || !record.id) return;
+          this.error = '';
+          try {
+            this.setStatus('statusDeletingRecord');
+            await this.sendGlobalRequest({
+              kind: 'globalSpace.deleteRecord',
+              spaceId: this.selectedSpaceId,
+              recordId: record.id,
+            });
+            if (this.editRecordId === record.id) {
+              this.cancelRecordEdit();
+            }
+            await this.loadSelectedSpace();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.setStatus('statusFailed');
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-transparent" data-theme="black" x-data="templateApp()" x-init="init()">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Greech App</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <script src="../shared/contract.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .mobile-shell {
+      width: min(100vw, 460px);
+      margin: 0 auto;
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 100% -10%, rgba(63, 130, 255, 0.16), transparent 35%),
+        radial-gradient(circle at 0% 120%, rgba(54, 191, 130, 0.12), transparent 35%),
+        color-mix(in oklab, var(--fallback-b1, #121212) 97%, #000);
+    }
+
+    .safe-main {
+      padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    }
+
+    .mobile-nav {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    *:focus-visible {
+      outline: 2px solid color-mix(in oklab, var(--fallback-p, #4f46e5) 80%, white);
+      outline-offset: 2px;
+    }
+
+    .slang-token {
+      border-bottom: 1px dashed currentColor;
+    }
+  </style>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full bg-base-100">
+  <div class="mobile-shell border-x border-base-300/40" x-cloak>
+    <header class="sticky top-0 z-20 px-4 pt-4 pb-3 border-b border-base-300/70 bg-base-100/90 backdrop-blur">
+      <div class="flex items-center justify-between gap-2">
+        <h1 class="text-base font-semibold truncate" x-text="t('pageTitle')"></h1>
+        <span class="badge badge-outline text-[11px]" x-text="status"></span>
+      </div>
+      <p class="text-xs opacity-70 mt-1 truncate" x-show="user" x-text="user?.email || user?.displayName || user?.uid"></p>
+      <p class="text-xs text-error mt-1" x-show="error" x-text="error"></p>
+    </header>
+
+    <main class="safe-main px-4 py-4 space-y-4">
+      <section x-show="currentPage === 'overview'" class="space-y-4">
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4">
+            <h2 class="text-base font-semibold" x-text="t('starterTitle')"></h2>
+            <p class="text-sm opacity-80 mt-1" x-text="t('starterDescription')"></p>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold" x-text="t('textSourceTitle')"></h3>
+              <span class="badge badge-outline text-[11px]" x-text="textSource === 'library' ? t('librarySource') : t('customSource')"></span>
+            </div>
+
+            <div class="join w-full">
+              <button class="btn btn-sm join-item flex-1" :class="textSource === 'library' ? 'btn-primary' : ''" @click="setTextSource('library')" x-text="t('librarySource')"></button>
+              <button class="btn btn-sm join-item flex-1" :class="textSource === 'custom' ? 'btn-primary' : ''" @click="setTextSource('custom')" x-text="t('customSource')"></button>
+            </div>
+
+            <div x-show="textSource === 'library'" class="space-y-2">
+              <label class="label py-0"><span class="label-text text-xs" x-text="t('libraryLabel')"></span></label>
+              <select class="select select-bordered select-sm w-full" x-model="selectedTextId" @change="pickLibraryText(selectedTextId)">
+                <template x-for="item in libraryTexts" :key="item.id">
+                  <option :value="item.id" x-text="item.title"></option>
+                </template>
+              </select>
+            </div>
+
+            <div x-show="textSource === 'custom'" class="space-y-2">
+              <label class="label py-0"><span class="label-text text-xs" x-text="t('customLabel')"></span></label>
+              <textarea class="textarea textarea-bordered h-28 w-full" x-model="customText" @input="syncCustomText()" :placeholder="t('customPlaceholder')"></textarea>
+            </div>
+
+            <div class="rounded-lg border border-base-300 bg-base-100 p-3 space-y-3">
+              <div class="flex items-center justify-between">
+                <p class="text-xs opacity-60" x-text="t('activeTextLabel')"></p>
+                <div class="join">
+                  <button class="btn btn-xs join-item" :class="textViewMode === 'text' ? 'btn-primary' : ''" @click="setTextViewMode('text')" x-text="t('textMode')"></button>
+                  <button class="btn btn-xs join-item" :class="textViewMode === 'slang' ? 'btn-primary' : ''" @click="setTextViewMode('slang')" x-text="t('slangMode')"></button>
+                  <button class="btn btn-xs join-item" :class="textViewMode === 'forum' ? 'btn-primary' : ''" @click="setTextViewMode('forum')" x-text="t('forumMode')"></button>
+                </div>
+              </div>
+
+              <p x-show="textViewMode === 'text'" class="text-sm mt-1 whitespace-pre-wrap break-words" x-text="activeText || t('activeTextEmpty')"></p>
+
+              <div x-show="textViewMode === 'slang'" class="space-y-2">
+                <p class="text-xs opacity-70" x-text="t('slangHint')"></p>
+                <p class="text-sm whitespace-pre-wrap break-words leading-7">
+                  <template x-for="(token, idx) in tokenizedActiveText" :key="`${token.value}-${idx}`">
+                    <span>
+                      <span x-show="!token.slangKey" x-text="token.value"></span>
+                      <button
+                        x-show="token.slangKey"
+                        class="slang-token text-info font-medium"
+                        @click="selectSlang(token.slangKey)"
+                        x-text="token.value"></button>
+                    </span>
+                  </template>
+                </p>
+                <p class="text-xs opacity-60" x-show="!hasSlangTokens" x-text="t('slangNoTerms')"></p>
+
+                <div class="rounded-lg bg-info/15 border border-info/35 p-3" x-show="selectedSlangKey">
+                  <p class="text-xs uppercase opacity-65" x-text="t('slangExplanationTitle')"></p>
+                  <p class="text-sm font-semibold mt-1" x-text="selectedSlangKey"></p>
+                  <p class="text-sm mt-1" x-text="selectedSlangMeaning"></p>
+                </div>
+                <p class="text-xs opacity-60" x-show="hasSlangTokens && !selectedSlangKey" x-text="t('slangNoneSelected')"></p>
+              </div>
+
+              <div x-show="textViewMode === 'forum'" class="space-y-3">
+                <p class="text-xs opacity-70" x-text="t('forumHint')"></p>
+
+                <div class="flex gap-2 overflow-x-auto pb-1">
+                  <template x-for="(snippet, idx) in forumSnippets" :key="`${idx}-${snippet}`">
+                    <button
+                      class="btn btn-xs whitespace-nowrap"
+                      :class="forumDraftSnippet === snippet ? 'btn-primary' : 'btn-outline'"
+                      @click="forumDraftSnippet = snippet"
+                      x-text="snippet"></button>
+                  </template>
+                </div>
+
+                <p class="text-xs opacity-60" x-show="!forumSnippets.length" x-text="t('forumNoSnippets')"></p>
+
+                <input class="input input-bordered input-sm w-full" x-model="forumDraftTitle" :placeholder="t('forumThreadTitlePlaceholder')">
+                <textarea class="textarea textarea-bordered h-24 w-full" x-model="forumDraftBody" :placeholder="t('forumThreadBodyPlaceholder')"></textarea>
+
+                <button
+                  class="btn btn-sm btn-primary w-full"
+                  @click="createForumThread()"
+                  :disabled="!forumDraftSnippet || !forumDraftTitle.trim() || !forumDraftBody.trim()">
+                  <i class="fa-solid fa-comments mr-2"></i>
+                  <span x-text="t('forumCreateThread')"></span>
+                </button>
+
+                <div class="divider my-1"></div>
+
+                <div class="space-y-3" x-show="forumThreadsForActive.length">
+                  <template x-for="thread in forumThreadsForActive" :key="thread.id">
+                    <article class="rounded-lg border border-base-300 bg-base-200 p-3">
+                      <p class="text-xs opacity-60" x-text="thread.snippet"></p>
+                      <h4 class="text-sm font-semibold mt-1" x-text="thread.title"></h4>
+                      <p class="text-sm mt-1 opacity-85" x-text="thread.body"></p>
+
+                      <div class="mt-2 space-y-1">
+                        <template x-for="(reply, idx) in thread.replies" :key="`${thread.id}-r-${idx}`">
+                          <p class="text-xs rounded bg-base-100 px-2 py-1" x-text="reply"></p>
+                        </template>
+                      </div>
+
+                      <div class="mt-2 flex gap-2">
+                        <input class="input input-bordered input-xs flex-1" x-model="thread.replyDraft" :placeholder="t('forumReplyPlaceholder')">
+                        <button class="btn btn-xs" @click="addForumReply(thread.id, thread.replyDraft)" :aria-label="t('forumReplySendAria')">
+                          <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+
+                <p class="text-xs opacity-60" x-show="!forumThreadsForActive.length" x-text="t('forumNoThreads')"></p>
+              </div>
+
+              <button
+                class="btn btn-sm btn-accent w-full"
+                @click="sendToGeer()"
+                :disabled="!activeText.trim()">
+                <i class="fa-solid fa-arrow-right mr-2"></i>
+                <span x-text="t('sendToGeerBtn')"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 space-y-2 text-sm">
+            <p><span class="font-semibold" x-text="t('statusLabel')"></span>: <span x-text="status"></span></p>
+            <p><span class="font-semibold" x-text="t('themeLabel')"></span>: <span x-text="osTheme || '(not resolved)'"></span></p>
+            <p><span class="font-semibold" x-text="t('languageLabel')"></span>: <span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span></p>
+            <p x-show="user"><span class="font-semibold" x-text="t('userLabel')"></span>: <span x-text="user?.email || user?.displayName || user?.uid"></span></p>
+            <p class="text-warning text-xs pt-1" x-text="t('permissionNote')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'music'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold" x-text="t('musicTitle')"></h2>
+          <p class="text-sm opacity-75 mt-1" x-text="t('musicDescription')"></p>
+          <div class="mt-3 border border-base-300 rounded-lg p-3">
+            <p class="text-sm" x-text="t('musicPlaceholder')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'files'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold" x-text="t('filesTitle')"></h2>
+          <p class="text-sm opacity-75 mt-1" x-text="t('filesDescription')"></p>
+          <div class="mt-3 border border-base-300 rounded-lg p-3">
+            <p class="text-sm" x-text="t('filesPlaceholder')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'actions'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold mb-3" x-text="t('actionsTitle')"></h2>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn btn-primary btn-sm" @click="refresh()" x-text="t('refreshBtn')"></button>
+            <button class="btn btn-sm" @click="loadCurrentUser()" x-text="t('reloadUserBtn')"></button>
+          </div>
+          <pre class="mt-3 p-3 rounded bg-base-300 text-xs overflow-auto" x-text="debugText"></pre>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'settings'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold" x-text="t('settingsTitle')"></h2>
+          <p class="text-sm opacity-75 mt-1" x-text="t('settingsDescription')"></p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="mobile-nav fixed bottom-0 left-0 right-0 mx-auto w-[min(100vw,460px)] bg-base-100/95 backdrop-blur border-t border-base-300 z-30">
+      <div class="grid grid-cols-5">
+        <template x-for="item in navItems" :key="item.key">
+          <button class="btn btn-ghost rounded-none h-14" :class="currentPage === item.key ? 'text-primary' : ''" @click="setPage(item.key)" :aria-label="t(item.labelKey)">
+            <div class="flex flex-col items-center gap-1 text-[11px] leading-none">
+              <i :class="item.icon"></i>
+              <span x-text="t(item.labelKey)"></span>
+            </div>
+          </button>
+        </template>
+      </div>
+    </nav>
+  </div>
+
+  <script>
+    function templateApp() {
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'greech-app',
+        user: null,
+        client: null,
+        language: 'hy',
+        osTheme: '',
+        currentPage: 'overview',
+        sidebarOpen: false,
+        debugText: 'Ready.',
+        textSource: 'library',
+        selectedTextId: 'gr-1',
+        customText: '',
+        activeText: '',
+        textViewMode: 'text',
+        selectedSlangKey: '',
+        forumDraftSnippet: '',
+        forumDraftTitle: '',
+        forumDraftBody: '',
+        forumThreads: [],
+        libraryTexts: [
+          {
+            id: 'gr-1',
+            title: 'Street Verse 01',
+            text: 'Քուչեն լուռ չի, beat-ը խոսում ա, ու բառերը մնալու են երկար։',
+          },
+          {
+            id: 'gr-2',
+            title: 'Poetry Drift 02',
+            text: 'Գիշերվա մեջ բառը հնչեց, ու հին պատերն էլ հիշեցին ռիթմը։',
+          },
+          {
+            id: 'gr-3',
+            title: 'Battle Draft 03',
+            text: 'Line-ը ուղիղ է, միտքը ծանր, crowd-ը սպասում ա հաջորդ հարվածին։',
+          },
+        ],
+        slangAliases: {
+          'beatը': 'beat',
+          'crowdը': 'crowd',
+          'lineը': 'line',
+          'vibeը': 'vibe',
+        },
+        slangDictionary: {
+          beat: {
+            hy: 'Երաժշտական ռիթմի հիմք, որի վրա կառուցվում է հոսքը։',
+            en: 'The core rhythmic instrumental base of a track.',
+          },
+          crowd: {
+            hy: 'Լսարան կամ հավաքված մարդիկ, որոնք արձագանքում են կատարողին։',
+            en: 'Audience energy and people reacting to the performance.',
+          },
+          line: {
+            hy: 'Ռեփ/պոեզիայի մեկ առանձին տող կամ բարդություն։',
+            en: 'A single rap or poetry line/bar.',
+          },
+          vibe: {
+            hy: 'Ընդհանուր մթնոլորտն ու զգացողությունը տվյալ պահին։',
+            en: 'Overall mood and feeling of the moment.',
+          },
+          քուչեն: {
+            hy: 'Փողոցային միջավայր, street context։',
+            en: 'Street environment and local neighborhood context.',
+          },
+          ռիթմը: {
+            hy: 'Բառի և երաժշտության ռիթմական շարժը։',
+            en: 'Rhythmic pulse of words and beat movement.',
+          },
+        },
+        navItems: [
+          { key: 'overview', labelKey: 'menuOverview', icon: 'fa-solid fa-house' },
+          { key: 'music', labelKey: 'menuMusic', icon: 'fa-solid fa-music' },
+          { key: 'files', labelKey: 'menuFiles', icon: 'fa-solid fa-folder-tree' },
+          { key: 'actions', labelKey: 'menuActions', icon: 'fa-solid fa-wrench' },
+          { key: 'settings', labelKey: 'menuSettings', icon: 'fa-solid fa-gear' },
+        ],
+        i18n: {
+          en: {
+            pageTitle: 'Greech App',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuOverview: 'Overview',
+            menuMusic: 'Music Player',
+            menuFiles: 'File Manager',
+            menuActions: 'Actions',
+            menuSettings: 'Settings',
+            starterTitle: 'App Starter Template',
+            starterDescription: 'Includes base libraries + silent auth bootstrap.',
+            textSourceTitle: 'Text Source',
+            librarySource: 'Library',
+            customSource: 'Custom',
+            libraryLabel: 'Select text',
+            customLabel: 'Paste custom text',
+            customPlaceholder: 'Paste rap or poetry text...',
+            activeTextLabel: 'Active text',
+            activeTextEmpty: 'No text selected yet.',
+            textMode: 'Text',
+            slangMode: 'Slang',
+            forumMode: 'Forum',
+            slangHint: 'Tap highlighted words to see slang meaning.',
+            slangExplanationTitle: 'Explanation',
+            slangNoneSelected: 'Select a highlighted word to open explanation.',
+            slangNoTerms: 'No slang terms detected in this text yet.',
+            forumHint: 'Choose a text snippet, open a thread, and discuss it.',
+            forumNoSnippets: 'No snippet available yet.',
+            forumThreadTitlePlaceholder: 'Thread title',
+            forumThreadBodyPlaceholder: 'What do you want to discuss about this snippet?',
+            forumCreateThread: 'Open thread',
+            forumReplyPlaceholder: 'Write a reply...',
+            forumNoThreads: 'No forum threads yet.',
+            forumReplySendAria: 'Send reply',
+            sendToGeerBtn: 'Use in Geer',
+            statusLabel: 'Status',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            permissionNote: 'Note: resolving ui.theme requires app permission firestore.read.',
+            musicTitle: 'Music Player Page',
+            musicDescription: 'Use this page as a base for your player controls and playlist UI.',
+            musicPlaceholder: 'Add player controls, queue, and current track metadata here.',
+            filesTitle: 'File Manager Page',
+            filesDescription: 'Use this page for folders, files, and file actions.',
+            filesPlaceholder: 'Add file tree, list, and operation buttons here.',
+            actionsTitle: 'Starter Actions',
+            refreshBtn: 'Refresh',
+            reloadUserBtn: 'Reload User',
+            settingsTitle: 'Settings Page',
+            settingsDescription: 'Place application-level settings and preferences here.',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+          },
+          hy: {
+            pageTitle: 'Greech Հավելված',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuOverview: 'Ընդհանուր',
+            menuMusic: 'Երաժշտական նվագարկիչ',
+            menuFiles: 'Ֆայլերի կառավարիչ',
+            menuActions: 'Գործողություններ',
+            menuSettings: 'Կարգավորումներ',
+            starterTitle: 'Հավելվածի մեկնարկային տեմփլեյթ',
+            starterDescription: 'Ներառում է հիմնական գրադարաններ + silent auth bootstrap։',
+            textSourceTitle: 'Տեքստի աղբյուր',
+            librarySource: 'Գրադարան',
+            customSource: 'Սեփական',
+            libraryLabel: 'Ընտրիր տեքստ',
+            customLabel: 'Փակցրու քո տեքստը',
+            customPlaceholder: 'Փակցրու ռեփ կամ պոեզիա...',
+            activeTextLabel: 'Ակտիվ տեքստ',
+            activeTextEmpty: 'Տեքստ դեռ ընտրված չէ։',
+            textMode: 'Տեքստ',
+            slangMode: 'Սլենգ',
+            forumMode: 'Ֆորում',
+            slangHint: 'Սեղմիր ընդգծված բառի վրա՝ բացատրությունը տեսնելու համար։',
+            slangExplanationTitle: 'Բացատրություն',
+            slangNoneSelected: 'Ընտրիր ընդգծված բառը՝ բացատրությունը բացելու համար։',
+            slangNoTerms: 'Այս տեքստում առայժմ սլենգային բառ չի գտնվել։',
+            forumHint: 'Ընտրիր տեքստի հատվածը, բացիր թեմա և քննարկիր։',
+            forumNoSnippets: 'Հատված դեռ հասանելի չէ։',
+            forumThreadTitlePlaceholder: 'Թեմայի վերնագիր',
+            forumThreadBodyPlaceholder: 'Ինչ ես ուզում քննարկել այս հատվածի մասին?',
+            forumCreateThread: 'Բացել թեմա',
+            forumReplyPlaceholder: 'Գրիր պատասխան...',
+            forumNoThreads: 'Ֆորումի թեմա դեռ չկա։',
+            forumReplySendAria: 'Ուղարկել պատասխանը',
+            sendToGeerBtn: 'Ուղարկել Geer',
+            statusLabel: 'Կարգավիճակ',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է firestore.read permission։',
+            musicTitle: 'Երաժշտական նվագարկչի էջ',
+            musicDescription: 'Օգտագործեք այս էջը նվագարկիչի կառավարիչների և playlist-ի UI-ի համար։',
+            musicPlaceholder: 'Այստեղ ավելացրեք player controls, queue և current track տվյալները։',
+            filesTitle: 'Ֆայլերի կառավարչի էջ',
+            filesDescription: 'Օգտագործեք այս էջը թղթապանակների, ֆայլերի և file actions-ի համար։',
+            filesPlaceholder: 'Այստեղ ավելացրեք file tree, list և գործառնական կոճակները։',
+            actionsTitle: 'Սկզբնական գործողություններ',
+            refreshBtn: 'Թարմացնել',
+            reloadUserBtn: 'Վերբեռնել օգտատիրոջը',
+            settingsTitle: 'Կարգավորումների էջ',
+            settingsDescription: 'Այստեղ ավելացրեք ծրագրի կարգավորումները և նախընտրությունները։',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.hy;
+          return dict[key] || this.i18n.hy[key] || this.i18n.en[key] || key;
+        },
+
+        get tokenizedActiveText() {
+          const source = this.activeText || '';
+          const parts = source.split(/(\s+)/);
+          return parts.map((part) => {
+            const normalized = part.toLowerCase().replace(/[^a-z0-9ա-ֆ]+/gi, '');
+            if (!normalized) {
+              return { value: part, slangKey: '' };
+            }
+            const slangKey = this.slangAliases[normalized] || (this.slangDictionary[normalized] ? normalized : '');
+            return { value: part, slangKey };
+          });
+        },
+
+        get hasSlangTokens() {
+          return this.tokenizedActiveText.some((token) => Boolean(token.slangKey));
+        },
+
+        get selectedSlangMeaning() {
+          if (!this.selectedSlangKey) return '';
+          const entry = this.slangDictionary[this.selectedSlangKey];
+          if (!entry) return '';
+          return this.language === 'hy' ? (entry.hy || entry.en || '') : (entry.en || entry.hy || '');
+        },
+
+        get forumSnippets() {
+          const text = (this.activeText || '').trim();
+          if (!text) return [];
+          return text
+            .split(/\n|[.!?։]+/)
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .slice(0, 10);
+        },
+
+        get forumThreadsForActive() {
+          const sourceKey = (this.activeText || '').trim();
+          return this.forumThreads.filter((thread) => thread.sourceKey === sourceKey);
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'greech-app';
+
+            this.client = new HayOSClient(this.appId);
+            this.resolvePageFromHash();
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+            this.status = this.t('statusAuthCheck');
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+              this.status = this.t('statusReady');
+            });
+            this.status = this.t('statusAuthenticated');
+            await this.loadOsTheme();
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+              2,
+            );
+
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusAuthFailed');
+          } finally {
+            this.pickLibraryText(this.selectedTextId);
+            this.loading = false;
+          }
+        },
+
+        async loadCurrentUser() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            this.user = await this.client.getCurrentUser();
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+              2,
+            );
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async refresh() {
+          this.error = '';
+          await this.loadOsTheme();
+          this.status = this.t('statusReady');
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          this.syncHash();
+          this.sidebarOpen = false;
+        },
+
+        normalizeTextViewMode(mode) {
+          return mode === 'slang' || mode === 'forum' ? mode : 'text';
+        },
+
+        setTextViewMode(mode) {
+          this.textViewMode = this.normalizeTextViewMode(mode);
+          this.syncHash();
+        },
+
+        syncHash() {
+          const page = this.currentPage || 'overview';
+          if (page === 'overview') {
+            window.location.hash = `${page}?view=${this.normalizeTextViewMode(this.textViewMode)}`;
+            return;
+          }
+          window.location.hash = page;
+        },
+
+        setTextSource(source) {
+          this.textSource = source === 'custom' ? 'custom' : 'library';
+          if (this.textSource === 'library') {
+            this.pickLibraryText(this.selectedTextId);
+            return;
+          }
+          this.syncCustomText();
+        },
+
+        pickLibraryText(textId) {
+          const picked = this.libraryTexts.find((item) => item.id === textId) || this.libraryTexts[0];
+          if (!picked) {
+            this.activeText = '';
+            this.selectedSlangKey = '';
+            this.resetForumDraft();
+            return;
+          }
+          this.selectedTextId = picked.id;
+          this.activeText = picked.text;
+          this.selectedSlangKey = '';
+          this.resetForumDraft();
+        },
+
+        syncCustomText() {
+          if (this.textSource !== 'custom') return;
+          this.activeText = this.customText.trim();
+          this.selectedSlangKey = '';
+          this.resetForumDraft();
+        },
+
+        selectSlang(slangKey) {
+          this.selectedSlangKey = slangKey || '';
+        },
+
+        resetForumDraft() {
+          this.forumDraftSnippet = '';
+          this.forumDraftTitle = '';
+          this.forumDraftBody = '';
+        },
+
+        createForumThread() {
+          const snippet = (this.forumDraftSnippet || '').trim();
+          const title = (this.forumDraftTitle || '').trim();
+          const body = (this.forumDraftBody || '').trim();
+          if (!snippet || !title || !body) return;
+
+          this.forumThreads.unshift({
+            id: `th-${Date.now()}`,
+            sourceKey: (this.activeText || '').trim(),
+            snippet,
+            title,
+            body,
+            replies: [],
+            replyDraft: '',
+          });
+
+          this.forumDraftTitle = '';
+          this.forumDraftBody = '';
+        },
+
+        addForumReply(threadId, replyText) {
+          const value = (replyText || '').trim();
+          if (!value) return;
+          const thread = this.forumThreads.find((item) => item.id === threadId);
+          if (!thread) return;
+          thread.replies.push(value);
+          thread.replyDraft = '';
+        },
+
+        sendToGeer() {
+          const text = (this.activeText || '').trim();
+          if (!text) return;
+
+          const payload = {
+            text,
+            sourceType: this.textSource,
+            sourceApp: 'greech',
+            selectedTextId: this.textSource === 'library' ? this.selectedTextId : '',
+            language: this.language,
+            context: {
+              viewMode: this.textViewMode,
+              selectedSlangKey: this.selectedSlangKey || '',
+            },
+          };
+
+          if (window.HopContract && typeof window.HopContract.setHandoff === 'function') {
+            window.HopContract.setHandoff(payload);
+          } else {
+            localStorage.setItem('hop.geer.handoffText', text);
+            localStorage.setItem('hop.geer.handoffSource', this.textSource === 'custom' ? 'custom' : 'greech');
+          }
+
+          this.pushLocalActivity('Greech', 'Sent text to Geer', text.slice(0, 120));
+          window.location.href = '/apps/geer-app/index.html?appId=geer-app&source=greech';
+        },
+
+        pushLocalActivity(app, title, details) {
+          let feed = [];
+          try {
+            feed = JSON.parse(localStorage.getItem('hop.activity.feed') || '[]');
+          } catch (_error) {
+            feed = [];
+          }
+          feed.unshift({
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            app,
+            title,
+            details,
+            ts: Date.now(),
+          });
+          localStorage.setItem('hop.activity.feed', JSON.stringify(feed.slice(0, 20)));
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const rawHash = window.location.hash.replace('#', '').trim();
+          const [rawPage, queryString] = rawHash.split('?');
+          const page = allowedPages.has(rawPage) ? rawPage : 'overview';
+          this.currentPage = page;
+
+          if (page !== 'overview') return;
+          const params = new URLSearchParams(queryString || '');
+          const viewFromHash = params.get('view');
+          if (!viewFromHash) return;
+          this.textViewMode = this.normalizeTextViewMode(viewFromHash);
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async firestoreGet(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreGet(collection, documentId);
+        },
+
+        async firestoreQuery(collection, queryParams) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreQuery(collection, queryParams);
+        },
+
+        async firestoreAdd(collection, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreAdd(collection, data);
+        },
+
+        async firestoreUpdate(collection, documentId, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreUpdate(collection, documentId, data);
+        },
+
+        async firestoreDelete(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreDelete(collection, documentId);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>
