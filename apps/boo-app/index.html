@@ -1,25 +1,49 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full" data-theme="black" x-data="booApp()" x-init="init()">
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="booApp()" x-init="init()">
 
 <head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Boo</title>
+  <title>Boo Messenger UI</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-
-  <style>
-    [x-cloak] {
-      display: none !important;
-    }
-  </style>
-
   <script>
     function loadHayOSClient() {
+      if (typeof HayOSClient !== 'undefined') {
+        return Promise.resolve();
+      }
+
       const isLocalhost =
         window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1';
@@ -31,1058 +55,2615 @@
         const script = document.createElement('script');
         script.src = clientUrl;
         script.onload = resolve;
-        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
         document.head.appendChild(script);
       });
     }
   </script>
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    .thread-shell {
+      height: calc(100dvh - 0.75rem);
+      min-height: 34rem;
+    }
+
+    .bubble-out {
+      border-radius: 1.1rem 1.1rem .35rem 1.1rem;
+    }
+
+    .bubble-in {
+      border-radius: 1.1rem 1.1rem 1.1rem .35rem;
+    }
+
+    .chat-row-active {
+      background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+    }
+
+    .composer-textarea {
+      resize: none;
+      max-height: 7rem;
+    }
+  </style>
 </head>
 
-<body class="h-full min-h-dvh bg-base-200">
-  <main class="min-h-dvh p-3 sm:p-4" style="padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);" x-cloak>
-    <div class="mx-auto w-full max-w-md">
-      <section class="bg-base-100 border border-base-300 rounded-box shadow-sm overflow-hidden min-h-[calc(100dvh-1.5rem)] flex flex-col">
-        <header class="navbar min-h-0 px-3 py-2 border-b border-base-300">
-          <button class="btn btn-ghost btn-sm btn-circle mr-2" x-show="currentView !== 'chats'" x-cloak @click="backToChats()">
-            <i class="fa-solid fa-arrow-left"></i>
-          </button>
-          <div class="flex items-center gap-2 min-w-0">
-            <div class="avatar" x-show="currentView !== 'conversation'" x-cloak>
-              <div class="w-7 rounded-full ring ring-base-300 ring-offset-base-100 ring-offset-1">
-                <img :src="profilePhoto" alt="Profile photo" loading="lazy" />
+<body class="h-full">
+  <main class="mx-auto w-full max-w-md p-2 sm:p-3" x-cloak>
+    <section class="thread-shell relative rounded-3xl border border-base-300 bg-base-100 shadow-sm overflow-hidden">
+
+      <div x-show="view === 'chats'" x-transition.opacity class="flex h-full flex-col">
+        <header class="border-b border-base-200 bg-base-100 px-3.5 pt-2.5 pb-3">
+          <div class="navbar min-h-0 p-0">
+            <div class="flex-1">
+              <div>
+                <h1 class="text-[22px] font-semibold leading-none tracking-tight">Boo</h1>
+                <p class="mt-1 text-[11px] opacity-60" x-text="t('allConversations')"></p>
               </div>
             </div>
-            <div class="avatar" x-show="currentView === 'conversation'" x-cloak>
-              <div class="w-7 rounded-full ring ring-base-300 ring-offset-base-100 ring-offset-1">
-                <img :src="activePeer?.photoUrl || profilePhoto" alt="Peer photo" loading="lazy" />
-              </div>
-            </div>
-            <div class="min-w-0">
-              <h1 class="text-sm font-semibold truncate" x-text="viewTitle"></h1>
-              <p class="text-[11px] opacity-60 truncate" x-text="currentView === 'conversation' ? (activeThreadId || '') : profileUsername"></p>
+            <div class="flex-none gap-1.5">
+              <button
+                x-show="debugEnabled"
+                class="btn btn-ghost btn-sm btn-circle bg-base-200/60 border border-base-300/50"
+                type="button"
+                aria-label="Toggle diagnostics"
+                @click="debugPanelOpen = !debugPanelOpen">
+                <i class="fa-solid fa-bug"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm btn-circle bg-base-200/60 border border-base-300/50" type="button" aria-label="Filter">
+                <i class="fa-solid fa-sliders"></i>
+              </button>
+              <button
+                class="btn btn-ghost btn-sm btn-circle bg-base-200/60 border border-base-300/50"
+                type="button"
+                aria-label="New chat"
+                @click="openNewChatComposer()">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
             </div>
           </div>
-          <div class="ml-auto">
-            <span class="badge badge-outline badge-sm" x-text="language === 'hy' ? 'Հայ' : 'EN'"></span>
+          <label class="input input-bordered input-sm mt-3 flex items-center gap-2 rounded-full border-base-300/80 bg-base-100 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition">
+            <i class="fa-solid fa-magnifying-glass opacity-70"></i>
+            <input type="text" class="grow text-sm text-base-content/90 placeholder:opacity-70" :placeholder="t('searchChats')" x-model="searchQuery" />
+          </label>
+          <div class="tabs tabs-box bg-base-200/60 mt-2.5 p-0.5 rounded-2xl">
+            <button
+              type="button"
+              class="tab tab-sm h-9 flex-1 gap-1.5 rounded-xl text-xs font-medium"
+              :class="activeTab === 'all' ? 'tab-active bg-base-100 shadow-sm' : 'opacity-75'"
+              @click="activeTab = 'all'">
+              <span x-text="t('allTab')"></span>
+              <span class="badge badge-ghost badge-xs min-w-5 px-1.5" x-text="chats.length"></span>
+            </button>
+            <button
+              type="button"
+              class="tab tab-sm h-9 flex-1 gap-1.5 rounded-xl text-xs font-medium"
+              :class="activeTab === 'unread' ? 'tab-active bg-base-100 shadow-sm' : 'opacity-75'"
+              @click="activeTab = 'unread'">
+              <span x-text="t('unreadTab')"></span>
+              <span class="badge badge-primary badge-xs min-w-5 px-1.5" x-text="unreadChatsCount()"></span>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] opacity-65" x-show="isLoadingChats || isLoadingBlockedUsers" x-text="status"></p>
+          <p class="mt-1 text-[11px] text-error" x-show="error" x-text="error"></p>
+          <div
+            x-show="debugEnabled && debugPanelOpen"
+            class="mt-2 rounded-xl border border-base-300/70 bg-base-200/50 p-2 text-[10px]">
+            <p class="font-semibold opacity-80">Diagnostics</p>
+            <p class="mt-1 opacity-70">mode: <span x-text="integrationMode"></span> | appId: <span x-text="appId"></span></p>
+            <p class="opacity-70">uid: <span x-text="currentUserId || 'unknown'"></span></p>
+            <p class="opacity-70">last sync: <span x-text="lastSuccessfulSyncAt || 'never'"></span></p>
+            <template x-if="lastFailure">
+              <div class="mt-1 rounded-lg border border-error/30 bg-error/10 p-1.5 text-error">
+                <p class="font-semibold">last failure: <span x-text="lastFailure.operation"></span></p>
+                <p>at: <span x-text="lastFailure.at"></span></p>
+                <p>error: <span x-text="lastFailure.rawError"></span></p>
+                <p x-show="lastFailure.mappedError">mapped: <span x-text="lastFailure.mappedError"></span></p>
+                <p x-show="lastFailure.retried">retried: yes</p>
+              </div>
+            </template>
+            <div class="mt-1.5 max-h-24 overflow-y-auto rounded-lg border border-base-300/60 bg-base-100/70 p-1">
+              <template x-for="event in debugEvents.slice(0, 8)" :key="event.at + JSON.stringify(event.payload)">
+                <p class="truncate opacity-75">
+                  <span x-text="event.at"></span>
+                  <span class="mx-1">|</span>
+                  <span x-text="formatDebugEventLine(event)"></span>
+                </p>
+              </template>
+            </div>
           </div>
         </header>
 
-        <div class="flex-1 min-h-0">
-          <div class="h-full p-3 space-y-3 overflow-auto" x-show="currentView === 'chats'" x-cloak>
-            <div class="card bg-base-200 border border-base-300">
-              <div class="card-body p-3 gap-2">
-                <div class="flex items-center justify-between gap-2">
-                  <h2 class="text-sm font-semibold">Recent chats</h2>
-                  <button class="btn btn-xs btn-ghost" @click="loadRecentThreads()">Refresh</button>
-                </div>
-                <div class="alert alert-info py-2" x-show="isThreadListLoading" x-cloak>
-                  <span class="loading loading-spinner loading-xs"></span>
-                  <span class="text-sm">Loading chats...</span>
-                </div>
-                <div class="alert alert-error py-2" x-show="threadListError" x-cloak>
-                  <div class="flex w-full items-center justify-between gap-2">
-                    <span class="text-sm" x-text="threadListError"></span>
-                    <button class="btn btn-xs btn-outline" @click="loadRecentThreads()">Retry</button>
-                  </div>
-                </div>
-                <ul class="menu bg-base-100 rounded-box border border-base-300 p-1" x-show="filteredRecentThreads.length > 0" x-cloak>
-                  <template x-for="thread in filteredRecentThreads" :key="thread.threadId">
-                    <li>
-                      <button class="flex items-center gap-2" @click="openThreadFromList(thread)">
-                        <div class="avatar">
-                          <div class="w-9 rounded-full">
-                            <img :src="peerPhotoFor(thread)" alt="Thread peer avatar" loading="lazy" />
-                          </div>
-                        </div>
-                        <div class="min-w-0 text-left">
-                          <p class="text-sm font-medium truncate" x-text="thread.username"></p>
-                          <p class="text-xs opacity-60 truncate" x-text="thread.subtitle"></p>
-                        </div>
-                        <span class="ml-auto text-[10px] opacity-60" x-text="formatMessageTime(thread.lastActivityAt)"></span>
-                      </button>
-                    </li>
-                  </template>
-                </ul>
-                <p class="text-xs opacity-70" x-show="!isThreadListLoading && !threadListError && filteredRecentThreads.length === 0" x-cloak>No chats yet. Search by username to start.</p>
-              </div>
+        <div class="flex-1 overflow-y-auto px-2 py-1.5">
+          <div x-show="filteredChats().length === 0" class="px-3 py-8 text-center">
+            <div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-base-200">
+              <i class="fa-solid fa-inbox opacity-70"></i>
             </div>
-
-            <div class="join w-full">
-              <input
-                type="text"
-                class="input input-bordered join-item w-full"
-                placeholder="Search username..."
-                x-model="searchQuery"
-                @input="onSearchInput()"
-              />
-              <button class="btn join-item" @click="retrySearch()">Go</button>
-            </div>
-            <p class="text-xs opacity-70" x-show="searchQuery.trim().length > 0 && searchQuery.trim().length < 2" x-cloak>Type at least 2 characters.</p>
-
-            <div class="alert alert-info py-2" x-show="isSearchLoading" x-cloak>
-              <span class="loading loading-spinner loading-xs"></span>
-              <span class="text-sm">Searching...</span>
-            </div>
-
-            <div class="alert alert-error py-2" x-show="searchError" x-cloak>
-              <div class="flex w-full items-center justify-between gap-2">
-                <span class="text-sm" x-text="searchError"></span>
-                <button class="btn btn-xs btn-outline" @click="retrySearch()">Retry</button>
-              </div>
-            </div>
-
-            <div class="text-xs opacity-70" x-show="!isSearchLoading && !searchError && searchQuery.trim().length >= 2 && searchResults.length === 0" x-cloak>No users found.</div>
-
-            <ul class="menu bg-base-100 rounded-box border border-base-300 p-1" x-show="searchResults.length > 0" x-cloak>
-              <template x-for="item in searchResults" :key="item.uid">
-                <li>
-                  <button class="flex items-center gap-2" @click="openThreadForResult(item)">
-                    <div class="avatar">
-                      <div class="w-9 rounded-full">
-                        <img :src="item.photoUrl || profilePhoto" alt="Result avatar" loading="lazy" />
-                      </div>
-                    </div>
-                    <div class="min-w-0 text-left">
-                      <p class="text-sm font-medium truncate" x-text="item.username"></p>
-                      <p class="text-xs opacity-60 truncate" x-text="item.uid"></p>
-                    </div>
-                    <span class="ml-auto text-xs opacity-70">Open</span>
-                  </button>
-                </li>
-              </template>
-            </ul>
-
-            <div class="alert alert-info py-2" x-show="isBootReady && activePeer && activeThreadId" x-cloak>
-              <div class="w-full flex items-center justify-between gap-2">
-                <span class="text-sm truncate" x-text="`Active chat: ${activePeer?.username || '-'}`"></span>
-                <button class="btn btn-xs btn-primary" @click="switchView('conversation')">Open Chat</button>
-              </div>
-            </div>
+            <p class="text-sm font-medium" x-text="t('noChatsFound')"></p>
+            <p class="mt-1 text-xs opacity-60" x-text="t('trySearchFilter')"></p>
           </div>
-
-          <div class="h-full flex flex-col" x-show="currentView === 'conversation'" x-cloak>
-            <div class="px-3 pt-3">
-              <div class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-2">
+          <template x-for="chat in filteredChats()" :key="chat.id">
+            <button
+              type="button"
+              class="w-full rounded-2xl border border-transparent px-3 py-2.5 text-left transition hover:bg-base-200/70 active:scale-[0.995]"
+              :class="{ 'chat-row-active border-primary/15': chat.id === activeChatId }"
+              @click="openChat(chat.id)">
+              <div class="flex items-center gap-3">
                 <div class="avatar">
-                  <div class="w-10 rounded-full">
-                    <img :src="peerPhotoFor(activePeer)" alt="Active peer avatar" loading="lazy" />
+                  <div class="size-10 rounded-2xl bg-base-200/80 text-base-content ring-1 ring-base-300/40 overflow-hidden">
+                    <img
+                      x-show="chat.participant.photoUrl"
+                      :src="chat.participant.photoUrl"
+                      :alt="chat.participant.name"
+                      class="h-full w-full object-cover" />
+                    <span
+                      x-show="!chat.participant.photoUrl"
+                      class="flex h-full w-full items-center justify-center text-[15px] font-semibold tracking-tight"
+                      x-text="chat.participant.initials"></span>
                   </div>
                 </div>
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold truncate" x-text="activePeerTitle"></p>
-                  <p class="text-xs opacity-70 truncate" x-text="activePeerSubtitle"></p>
-                </div>
-              </div>
-            </div>
-            <div class="px-3 pt-3" x-show="threadError" x-cloak>
-              <div class="alert alert-error py-2">
-                <div class="flex w-full items-center justify-between gap-2">
-                  <span class="text-sm" x-text="threadError"></span>
-                  <button class="btn btn-xs btn-outline" @click="reloadThread()">Retry</button>
-                </div>
-              </div>
-            </div>
-            <div class="px-3 pt-3" x-show="isThreadLoading" x-cloak>
-              <div class="alert alert-info py-2">
-                <span class="loading loading-spinner loading-xs"></span>
-                <span class="text-sm">Loading messages...</span>
-              </div>
-            </div>
-            <div class="flex-1 min-h-0 overflow-auto px-3 py-3 space-y-2" x-ref="messagesViewport">
-              <template x-for="msg in threadMessages" :key="msg.id">
-                <div class="chat" :class="msg.senderUid === user?.uid ? 'chat-end' : 'chat-start'">
-                  <div class="chat-bubble chat-bubble-primary" :class="msg.senderUid === user?.uid ? '' : 'chat-bubble-neutral'">
-                    <p class="break-words" x-text="msg.text || ''"></p>
-                    <p class="mt-1 text-[10px] opacity-70 text-right" x-text="formatMessageTime(msg.createdAt || msg.created_at || msg.timestamp || msg.sentAt)"></p>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="truncate text-sm font-semibold" x-text="chat.participant.name"></p>
+                    <p class="shrink-0 text-[10px] opacity-50" x-text="chat.lastTime"></p>
+                  </div>
+                  <div class="mt-0.5 flex items-center justify-between gap-2">
+                    <p class="truncate text-[12px] opacity-65" x-text="chat.lastMessage.text"></p>
+                    <span class="badge badge-primary badge-xs min-w-5 px-1.5" x-show="chat.unreadCount > 0" x-text="chat.unreadCount"></span>
                   </div>
                 </div>
-              </template>
-              <p class="text-xs opacity-60" x-show="!isThreadLoading && threadMessages.length === 0" x-cloak>No messages yet.</p>
-            </div>
-            <div class="border-t border-base-300 p-3" style="padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);">
-              <form class="join w-full" @submit.prevent="sendMessage()">
-                <input
-                  type="text"
-                  class="input input-bordered join-item w-full"
-                  placeholder="Write a message..."
-                  x-model="messageDraft"
-                  maxlength="4000"
-                  :disabled="isSendingMessage || !activeThreadId"
-                />
-                <button type="submit" class="btn btn-primary join-item" :disabled="isSendingMessage || !activeThreadId || !messageDraft.trim()">
-                  <span class="loading loading-spinner loading-xs" x-show="isSendingMessage" x-cloak></span>
-                  <span x-text="isSendingMessage ? '...' : 'Send'"></span>
-                </button>
-              </form>
-            </div>
-          </div>
+              </div>
+            </button>
+          </template>
+        </div>
+      </div>
 
-          <div class="h-full p-3 space-y-3 overflow-auto" x-show="currentView === 'profile'" x-cloak>
-            <div class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-2" x-show="isBootReady" x-cloak>
+      <div x-show="view === 'thread'" x-transition.opacity class="relative flex h-full flex-col">
+        <header class="border-b border-base-200 bg-base-100 px-2 py-2">
+          <div class="navbar min-h-0 p-0">
+            <div class="flex-none">
+              <button class="btn btn-sm btn-ghost btn-circle" type="button" @click="goBack()" aria-label="Back">
+                <i class="fa-solid fa-chevron-left"></i>
+              </button>
+            </div>
+            <div class="flex-1 min-w-0 gap-2 pl-1">
               <div class="avatar">
-                <div class="w-10 rounded-full">
-                  <img :src="profilePhoto" alt="Profile avatar" loading="lazy" />
+                <div class="h-8 w-8 rounded-xl bg-base-200/80 text-base-content ring-1 ring-base-300/40 overflow-hidden">
+                  <img
+                    x-show="activeChat()?.participant.photoUrl"
+                    :src="activeChat()?.participant.photoUrl || ''"
+                    :alt="activeChat()?.participant.name || 'Chat'"
+                    class="h-full w-full object-cover" />
+                  <span
+                    x-show="!activeChat()?.participant.photoUrl"
+                    class="flex h-full w-full items-center justify-center text-[11px] font-semibold tracking-tight"
+                    x-text="activeChat()?.participant.initials || '?'"></span>
                 </div>
               </div>
               <div class="min-w-0">
-                <p class="text-sm font-medium truncate" x-text="profileUsername"></p>
-                <p class="text-xs opacity-70 truncate" x-text="user?.email || user?.uid || '-'"></p>
+                <p class="truncate text-sm font-semibold" x-text="activeChat()?.participant.name || 'Chat'"></p>
+                <p class="text-[11px] opacity-60" x-text="activeChat()?.participant.status || t('offline')"></p>
               </div>
             </div>
+            <div class="flex-none">
+              <button
+                class="btn btn-sm btn-ghost btn-circle"
+                type="button"
+                :disabled="isUpdatingBlock || !activeChat()?.peerUid"
+                :aria-label="isPeerBlocked(activeChat()?.peerUid) ? t('unblockUserAction') : t('blockUserAction')"
+                :title="isPeerBlocked(activeChat()?.peerUid) ? t('unblockUserAction') : t('blockUserAction')"
+                @click="toggleActivePeerBlock()">
+                <i
+                  class="fa-solid"
+                  :class="isPeerBlocked(activeChat()?.peerUid) ? 'fa-user-lock' : 'fa-user-slash'"></i>
+              </button>
+            </div>
+          </div>
+        </header>
 
-            <div class="card bg-base-200 border border-base-300" x-show="isBootReady && needsUsernameSetup" x-cloak>
-              <div class="card-body p-3 gap-2">
-                <h3 class="text-sm font-semibold">Set your username</h3>
-                <form class="space-y-2" @submit.prevent="saveUsername()">
-                  <input type="text" class="input input-bordered w-full" placeholder="username" maxlength="30" x-model="usernameDraft" autocomplete="nickname" />
-                  <button type="submit" class="btn btn-primary btn-sm w-full" :disabled="isSavingUsername">
-                    <span class="loading loading-spinner loading-xs" x-show="isSavingUsername" x-cloak></span>
-                    <span x-text="isSavingUsername ? 'Saving...' : 'Save Username'"></span>
+        <div
+          x-ref="messagesList"
+          class="flex-1 space-y-2 overflow-y-auto px-3 py-2.5"
+          @scroll.passive="updateMessagesPinnedState()">
+          <div x-show="activeChatRawMessages().length === 0" class="flex h-full items-center justify-center">
+            <div class="text-center">
+              <div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-base-200">
+                <i class="fa-regular fa-message opacity-70"></i>
+              </div>
+              <p class="text-sm font-medium" x-text="t('noMessagesYet')"></p>
+              <p class="mt-1 text-xs opacity-60" x-text="t('startConversation')"></p>
+            </div>
+          </div>
+
+          <template x-for="message in activeChatMessages()" :key="message.id">
+            <div>
+              <div x-show="message.type === 'separator'" class="my-2 flex justify-center">
+                <span class="rounded-full bg-base-200 px-3 py-1 text-[11px] opacity-70" x-text="message.label"></span>
+              </div>
+              <div x-show="message.type !== 'separator'" class="chat" :class="messageDirection(message) === 'outgoing' ? 'chat-end' : 'chat-start'">
+                <div class="chat-bubble text-sm" :class="messageDirection(message) === 'outgoing' ? 'bg-primary text-primary-content bubble-out' : 'bg-base-200 bubble-in'" x-text="message.text"></div>
+                <div class="chat-footer mt-1 flex items-center gap-1 text-[10px] opacity-60">
+                  <span x-text="message.timestamp"></span>
+                  <span x-show="messageDirection(message) === 'outgoing'" x-text="message.status || 'Sent'"></span>
+                  <button
+                    x-show="canDeleteMessage(message)"
+                    class="btn btn-ghost btn-xs btn-circle"
+                    type="button"
+                    :disabled="isMessageDeleting(message.id)"
+                    :aria-label="t('deleteMessageAction')"
+                    :title="t('deleteMessageAction')"
+                    @click="deleteMessage(message)">
+                    <i
+                      class="fa-regular"
+                      :class="isMessageDeleting(message.id) ? 'fa-circle-notch fa-spin' : 'fa-trash-can'"></i>
                   </button>
-                </form>
-              </div>
-            </div>
-
-            <div class="card bg-base-200 border border-base-300" x-show="debugEnabled" x-cloak>
-              <div class="card-body p-3 gap-1">
-                <h3 class="text-sm font-semibold">Debug</h3>
-                <p class="text-xs break-all"><span class="opacity-70">Last action:</span> <span x-text="debugLastAction || '-'"></span></p>
-                <p class="text-xs break-all"><span class="opacity-70">Thread ID:</span> <span x-text="activeThreadId || '-'"></span></p>
-                <p class="text-xs break-all"><span class="opacity-70">Last error:</span> <span x-text="debugLastError || '-'"></span></p>
-                <div class="rounded-box border border-base-300 bg-base-100 p-2 max-h-32 overflow-auto text-[11px] space-y-1" x-show="debugEvents.length > 0" x-cloak>
-                  <template x-for="(line, idx) in debugEvents" :key="idx">
-                    <p class="break-all opacity-80 font-mono" x-text="line"></p>
-                  </template>
                 </div>
               </div>
             </div>
+          </template>
+
+          <div x-show="isTypingActive()" class="chat chat-start">
+            <div class="chat-bubble bubble-in bg-base-200">
+              <span class="loading loading-dots loading-sm"></span>
+            </div>
+          </div>
+          <div x-show="activeChatIsBlocked()" class="rounded-2xl border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-warning-content">
+            <span x-text="t('blockedHint')"></span>
+          </div>
+          <div
+            x-show="!activeChatIsBlocked() && isActiveChatRateLimited()"
+            class="rounded-2xl border border-error/30 bg-error/10 px-3 py-2 text-[11px] text-error">
+            <span x-text="activeChatCooldownText()"></span>
           </div>
         </div>
 
-        <footer class="border-t border-base-300 p-2 bg-base-100" x-show="isBootReady" x-cloak>
-          <div class="tabs tabs-boxed grid grid-cols-3">
-            <a class="tab" :class="{ 'tab-active': currentView === 'chats' }" @click="switchView('chats')">Chats</a>
-            <a class="tab" :class="{ 'tab-active': currentView === 'conversation' }" @click="switchView('conversation')" :disabled="!activeThreadId">Chat</a>
-            <a class="tab" :class="{ 'tab-active': currentView === 'profile' }" @click="switchView('profile')">Profile</a>
+        <div
+          x-show="showJumpToLatestButton()"
+          class="pointer-events-none absolute inset-x-0 bottom-20 z-10 flex justify-center px-3">
+          <button
+            class="btn btn-sm btn-primary pointer-events-auto rounded-full shadow-lg"
+            type="button"
+            @click="jumpToLatestMessages()">
+            <i class="fa-solid fa-arrow-down"></i>
+            <span x-text="t('jumpToLatest')"></span>
+            <span class="badge badge-neutral badge-sm" x-text="pendingIncomingCountForActiveChat()"></span>
+          </button>
+        </div>
+
+        <footer class="border-t border-base-200 bg-base-100 px-3 py-3">
+          <div class="flex items-end gap-2">
+            <button class="btn btn-sm btn-ghost btn-circle" type="button" aria-label="Attach">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <label class="flex min-h-10 flex-1 items-end gap-2 rounded-2xl border border-base-300 bg-base-100 px-3 py-2">
+              <textarea
+                x-ref="composer"
+                class="composer-textarea w-full bg-transparent text-sm leading-5 outline-none"
+                :placeholder="activeChatIsBlocked() ? t('blockedComposerPlaceholder') : t('composerPlaceholder')"
+                rows="1"
+                x-model="composerText"
+                :disabled="activeChatIsBlocked()"
+                @input="autoGrowComposer()"
+                @keydown.enter.exact.prevent="sendMessage()"></textarea>
+              <i class="fa-regular fa-face-smile opacity-60"></i>
+            </label>
+            <button
+              class="btn btn-sm btn-primary btn-circle"
+              type="button"
+              aria-label="Send"
+              :disabled="!canSendMessage()"
+              @click="sendMessage()">
+              <i class="fa-solid fa-arrow-up"></i>
+            </button>
           </div>
         </footer>
-      </section>
+      </div>
 
-      <div class="mt-3 space-y-2">
-        <div class="alert alert-info py-2" x-show="loading || isBootLoading" x-cloak>
-          <span class="loading loading-spinner loading-xs"></span>
-          <span class="text-sm" x-text="bootState === 'auth-check' ? 'Checking authentication...' : 'Initializing...'"></span>
-        </div>
-        <div class="alert alert-error py-2" x-show="errorMessage" x-cloak>
-          <span class="text-sm" x-text="errorMessage"></span>
-        </div>
-        <div class="alert alert-success py-2" x-show="successMessage" x-cloak>
-          <span class="text-sm" x-text="successMessage"></span>
-        </div>
-        <div class="card-actions pt-1" x-show="isBootError" x-cloak>
-          <button class="btn btn-sm btn-outline" @click="init()">Retry</button>
+      <div
+        x-show="composeChatOpen"
+        x-transition.opacity
+        class="absolute inset-0 z-30 flex items-end bg-base-content/25 p-3 sm:p-4"
+        @keydown.escape.window="closeNewChatComposer()">
+        <div class="w-full rounded-3xl border border-base-300 bg-base-100 shadow-xl">
+          <div class="flex items-center justify-between border-b border-base-200 px-4 py-3">
+            <div>
+              <h2 class="text-sm font-semibold" x-text="t('newChatTitle')"></h2>
+              <p class="mt-0.5 text-[11px] opacity-65" x-text="t('newChatHint')"></p>
+            </div>
+            <button class="btn btn-ghost btn-xs btn-circle" type="button" @click="closeNewChatComposer()" :aria-label="t('closeLabel')">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="px-4 pt-3 pb-4">
+            <label class="input input-bordered input-sm flex items-center gap-2 rounded-full border-base-300/80 bg-base-100 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition">
+              <i class="fa-solid fa-at opacity-70"></i>
+              <input
+                type="text"
+                class="grow text-sm text-base-content/90 placeholder:opacity-70"
+                :placeholder="t('searchUsersPlaceholder')"
+                x-model="newChatQuery"
+                @input="debounceNewChatSearch()" />
+            </label>
+            <p class="mt-2 text-[11px] text-error" x-show="newChatError" x-text="newChatError"></p>
+            <div class="mt-2 max-h-72 space-y-1 overflow-y-auto">
+              <p class="px-1 py-2 text-[11px] opacity-65" x-show="isSearchingProfiles" x-text="t('searchingUsers')"></p>
+              <template x-for="profile in newChatResults" :key="profile.uid">
+                <button
+                  type="button"
+                  class="w-full rounded-2xl border border-transparent px-2.5 py-2 text-left transition hover:bg-base-200/70 active:scale-[0.995]"
+                  :disabled="isOpeningThread"
+                  @click="openChatWithProfile(profile)">
+                  <div class="flex items-center gap-2.5">
+                    <div class="avatar">
+                      <div class="size-9 rounded-xl bg-base-200/80 text-base-content ring-1 ring-base-300/40 overflow-hidden">
+                        <img
+                          x-show="profile.photoUrl"
+                          :src="profile.photoUrl"
+                          :alt="profile.displayName || profile.username || profile.uid"
+                          class="h-full w-full object-cover" />
+                        <span
+                          x-show="!profile.photoUrl"
+                          class="flex h-full w-full items-center justify-center text-[12px] font-semibold tracking-tight"
+                          x-text="buildInitials(profile.displayName || profile.username || fallbackUserLabel(profile.uid))"></span>
+                      </div>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-semibold" x-text="profile.displayName || profile.username || fallbackUserLabel(profile.uid)"></p>
+                      <p class="truncate text-[11px] opacity-65" x-text="profile.username ? `@${profile.username}` : fallbackUserLabel(profile.uid)"></p>
+                    </div>
+                    <span
+                      class="badge badge-xs"
+                      :class="isPeerBlocked(profile.uid) ? 'badge-warning' : (hasExistingChatWithPeer(profile.uid) ? 'badge-outline' : 'badge-primary')"
+                      x-text="isPeerBlocked(profile.uid) ? t('blockedStateLabel') : (hasExistingChatWithPeer(profile.uid) ? t('openChatAction') : t('startChatAction'))"></span>
+                  </div>
+                </button>
+              </template>
+              <p
+                class="px-1 py-2 text-[11px] opacity-65"
+                x-show="!isSearchingProfiles && normalizedNewChatQuery().length >= 2 && newChatResults.length === 0"
+                x-text="t('noUsersFound')"></p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+
+    </section>
   </main>
 
   <script>
     function booApp() {
       return {
-        appId: 'boo',
-        client: null,
-        user: null,
-        profileData: null,
-        language: 'en',
-        currentView: 'chats',
-        loading: true,
-        bootState: 'initializing',
-        errorMessage: '',
-        successMessage: '',
-        usernameDraft: '',
-        isSavingUsername: false,
+        view: 'chats',
+        activeTab: 'all',
+        activeChatId: null,
         searchQuery: '',
-        searchResults: [],
-        searchError: '',
-        isSearching: false,
-        searchState: 'idle',
-        searchDebounceHandle: null,
-        searchTokenCounter: 0,
-        activeSearchToken: 0,
-        searchDebounceMs: 350,
-        recentThreads: [],
-        threadListState: 'idle',
-        threadListError: '',
-        threadListPollHandle: null,
-        activePeer: null,
-        activeThreadId: '',
-        threadMessages: [],
-        threadLoading: false,
-        threadState: 'idle',
-        threadError: '',
-        threadLoadToken: 0,
-        messageDraft: '',
-        messagePollHandle: null,
-        lastMessageSignature: '',
-        isSendingMessage: false,
-        profilesByUid: {},
-        debugLastAction: '',
-        debugLastError: '',
+        composerText: '',
+        chats: [],
+        currentUserId: 'u_me',
+        typingChatId: null,
+        typingTimerId: null,
+        integrationMode: 'mock',
+        client: null,
+        appId: 'boo',
+        language: 'en',
+        osTheme: 'black',
+        status: 'Initializing...',
+        error: '',
         debugEnabled: false,
+        debugPanelOpen: true,
         debugEvents: [],
-        detachProfileUpdateListener: null,
-        detachDebugTraceListener: null,
-
-        get statusLabel() {
-          if (this.bootState === 'ready') return 'ready';
-          if (this.bootState === 'auth-check') return 'auth-check';
-          if (this.bootState === 'auth-failed') return 'auth-failed';
-          if (this.bootState === 'error') return 'error';
-          return 'initializing';
+        lastFailure: null,
+        lastSuccessfulSyncAt: '',
+        isLoadingChats: false,
+        isSendingMessage: false,
+        sendingMessageByThreadId: {},
+        profileCacheByUid: {},
+        composeChatOpen: false,
+        newChatQuery: '',
+        newChatResults: [],
+        newChatError: '',
+        isSearchingProfiles: false,
+        isOpeningThread: false,
+        newChatSearchTimerId: null,
+        newChatSearchToken: 0,
+        blockedByMe: {},
+        isLoadingBlockedUsers: false,
+        isUpdatingBlock: false,
+        deletingMessageIds: {},
+        chatsPollTimerId: null,
+        chatPollingIntervalMs: 8000,
+        activeThreadPollTimerId: null,
+        activeThreadPollingIntervalMs: 1400,
+        isRefreshingActiveThread: false,
+        messagesPinnedToBottom: true,
+        messageListBottomThresholdPx: 80,
+        threadScrollRafId: null,
+        threadScrollRafNestedId: null,
+        messageRefreshSeqByChatId: {},
+        messageRefreshLatestSeqByChatId: {},
+        lifecycleHooksBound: false,
+        uiWatchersBound: false,
+        visibilityChangeHandler: null,
+        beforeUnloadHandler: null,
+        resizeHandler: null,
+        messageListObserver: null,
+        sendCooldownUntilByChat: {},
+        pendingIncomingCountByChat: {},
+        sendCooldownTickerId: null,
+        cooldownNowMs: Date.now(),
+        syncRequestCounter: 0,
+        latestSyncRequestId: 0,
+        i18n: {
+          en: {
+            allConversations: 'All conversations',
+            searchChats: 'Search chats',
+            allTab: 'All',
+            unreadTab: 'Unread',
+            noChatsFound: 'No chats found',
+            trySearchFilter: 'Try changing search or filter.',
+            offline: 'offline',
+            noMessagesYet: 'No messages yet',
+            startConversation: 'Start the conversation with a new message.',
+            composerPlaceholder: 'iMessage',
+            today: 'Today',
+            yesterday: 'Yesterday',
+            syncingChats: 'Syncing chats...',
+            connectedReady: 'Connected and ready',
+            syncFailed: 'Sync failed',
+            pending: 'Sending',
+            failed: 'Failed',
+            sent: 'Sent',
+            newChatTitle: 'New chat',
+            newChatHint: 'Search people by username from Profile',
+            searchUsersPlaceholder: 'Search username...',
+            searchingUsers: 'Searching users...',
+            noUsersFound: 'No users found',
+            openChatAction: 'Open',
+            startChatAction: 'Start',
+            closeLabel: 'Close',
+            newChatUnavailable: 'New chat is unavailable in mock mode',
+            blockUserAction: 'Block user',
+            unblockUserAction: 'Unblock user',
+            blockedHint: 'You blocked this user. Unblock to send messages.',
+            blockedComposerPlaceholder: 'Unblock this user to send a message',
+            blockedStateLabel: 'Blocked',
+            blockedStatus: 'User blocked',
+            unblockedStatus: 'User unblocked',
+            blockActionFailed: 'Failed to update block state',
+            blockedRelationError: 'Messaging is blocked between these users',
+            permissionDeniedError: 'Permission denied for this action',
+            rateLimitedError: 'Too many messages. Try again in {seconds}s.',
+            deleteMessageAction: 'Delete message',
+            messageDeletedStatus: 'Message deleted',
+            deleteMessageFailed: 'Failed to delete message',
+            jumpToLatest: 'New messages',
+          },
+          hy: {
+            allConversations: 'Բոլոր զրույցները',
+            searchChats: 'Որոնել զրույցներ',
+            allTab: 'Բոլորը',
+            unreadTab: 'Չընթերցված',
+            noChatsFound: 'Զրույցներ չեն գտնվել',
+            trySearchFilter: 'Փորձեք փոխել որոնումը կամ ֆիլտրը։',
+            offline: 'օֆլայն',
+            noMessagesYet: 'Հաղորդագրություններ դեռ չկան',
+            startConversation: 'Սկսեք զրույցը նոր հաղորդագրությամբ։',
+            composerPlaceholder: 'Հաղորդագրություն',
+            today: 'Այսօր',
+            yesterday: 'Երեկ',
+            syncingChats: 'Զրույցները համաժամացվում են...',
+            connectedReady: 'Կապը պատրաստ է',
+            syncFailed: 'Համաժամացումը ձախողվեց',
+            pending: 'Ուղարկվում է',
+            failed: 'Ձախողվեց',
+            sent: 'Ուղարկված',
+            newChatTitle: 'Նոր զրույց',
+            newChatHint: 'Փնտրիր մարդկանց username-ով Profile-ից',
+            searchUsersPlaceholder: 'Փնտրել username...',
+            searchingUsers: 'Օգտատերերը որոնվում են...',
+            noUsersFound: 'Օգտատերեր չեն գտնվել',
+            openChatAction: 'Բացել',
+            startChatAction: 'Սկսել',
+            closeLabel: 'Փակել',
+            newChatUnavailable: 'Mock ռեժիմում նոր զրույց բացելը հասանելի չէ',
+            blockUserAction: 'Բլոքել օգտատիրոջը',
+            unblockUserAction: 'Հանել բլոքից',
+            blockedHint: 'Դու բլոքել ես այս օգտատիրոջը։ Հանիր բլոքից՝ հաղորդագրություն ուղարկելու համար։',
+            blockedComposerPlaceholder: 'Հանիր բլոքից՝ հաղորդագրություն ուղարկելու համար',
+            blockedStateLabel: 'Բլոքված',
+            blockedStatus: 'Օգտատերը բլոքվեց',
+            unblockedStatus: 'Օգտատերը հանվեց բլոքից',
+            blockActionFailed: 'Չհաջողվեց թարմացնել բլոքի կարգավիճակը',
+            blockedRelationError: 'Այս օգտատերերի միջև նամակագրությունը արգելված է',
+            permissionDeniedError: 'Այս գործողության համար permission չկա',
+            rateLimitedError: 'Չափազանց շատ հաղորդագրություններ։ Փորձիր նորից {seconds}վ հետո։',
+            deleteMessageAction: 'Ջնջել հաղորդագրությունը',
+            messageDeletedStatus: 'Հաղորդագրությունը ջնջվեց',
+            deleteMessageFailed: 'Չհաջողվեց ջնջել հաղորդագրությունը',
+            jumpToLatest: 'Նոր հաղորդագրություններ',
+          },
         },
 
-        get isBootReady() {
-          return this.bootState === 'ready';
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
         },
 
-        get isBootLoading() {
-          return this.bootState === 'initializing' || this.bootState === 'auth-check';
+        formatRateLimitedMessage(seconds) {
+          const safeSeconds = Number.isFinite(seconds) && seconds > 0
+            ? Math.max(1, Math.floor(seconds))
+            : 8;
+          return this.t('rateLimitedError').replace('{seconds}', String(safeSeconds));
         },
 
-        get isBootError() {
-          return this.bootState === 'auth-failed' || this.bootState === 'error';
+        extractRateLimitSeconds(error) {
+          const raw = typeof error === 'string'
+            ? error
+            : (error && typeof error.message === 'string' ? error.message : String(error || ''));
+          const normalized = raw.trim();
+          const match = /^RATE_LIMITED(?::(\d{1,3}))?$/.exec(normalized);
+          if (!match) return null;
+          const parsed = Number(match[1]);
+          if (Number.isFinite(parsed) && parsed > 0) {
+            return Math.min(120, Math.floor(parsed));
+          }
+          return 8;
         },
 
-        get isSearchLoading() {
-          return this.searchState === 'loading';
+        isPermissionDeniedError(error) {
+          const raw = typeof error === 'string'
+            ? error
+            : (error && typeof error.message === 'string' ? error.message : String(error || ''));
+          const normalized = raw.trim().toLowerCase();
+          return normalized === 'permission_denied'
+            || normalized.includes('missing or insufficient permissions');
         },
 
-        get isThreadLoading() {
-          return this.threadState === 'loading';
+        mapSocialError(error) {
+          const raw = typeof error === 'string'
+            ? error
+            : (error && typeof error.message === 'string' ? error.message : String(error || ''));
+          const normalized = raw.trim();
+          const normalizedLower = normalized.toLowerCase();
+          const rateLimitSeconds = this.extractRateLimitSeconds(normalized);
+          if (rateLimitSeconds !== null) {
+            return this.formatRateLimitedMessage(rateLimitSeconds);
+          }
+          if (normalized === 'BLOCKED_RELATION') return this.t('blockedRelationError');
+          if (normalized === 'PERMISSION_DENIED') return this.t('permissionDeniedError');
+          if (normalizedLower.includes('missing or insufficient permissions')) return this.t('permissionDeniedError');
+          if (normalized.length > 0) return normalized;
+          return this.t('syncFailed');
         },
 
-        get isThreadListLoading() {
-          return this.threadListState === 'loading';
-        },
-
-        get filteredRecentThreads() {
-          const query = String(this.searchQuery || '').trim().toLowerCase();
-          if (!query) return this.recentThreads;
-          return this.recentThreads.filter((thread) => {
-            const username = String(thread?.username || '').toLowerCase();
-            const subtitle = String(thread?.subtitle || '').toLowerCase();
-            return username.includes(query) || subtitle.includes(query);
+        captureFailure(operation, error, extra = {}) {
+          const raw = typeof error === 'string'
+            ? error
+            : (error && typeof error.message === 'string' ? error.message : String(error || ''));
+          const mapped = this.mapSocialError(error);
+          this.lastFailure = {
+            at: new Date().toISOString(),
+            operation,
+            rawError: raw.trim(),
+            mappedError: mapped,
+            retried: Boolean(extra?.retried),
+            context: extra,
+          };
+          this.appendDebugEvent({
+            kind: 'boo.failure',
+            payload: {
+              operation,
+              rawError: raw.trim(),
+              mappedError: mapped,
+              ...extra,
+            },
           });
         },
 
-        get viewTitle() {
-          if (this.currentView === 'conversation') return 'Chat';
-          if (this.currentView === 'profile') {
-            return 'My Profile';
+        formatDebugEventLine(event) {
+          const payload = event && typeof event.payload === 'object' ? event.payload : {};
+          const kind = typeof payload.kind === 'string' ? payload.kind : '';
+          const trace = payload && typeof payload.payload === 'object' ? payload.payload : {};
+          const stage = typeof trace.stage === 'string' ? trace.stage : '';
+          const action = typeof trace.action === 'string' ? trace.action : '';
+          const error = typeof trace.error === 'string' ? trace.error : '';
+          if (kind === 'boo.failure') {
+            const operation = typeof trace.operation === 'string' ? trace.operation : '';
+            return `boo.failure ${operation} ${error || ''}`.trim();
           }
-          return 'Boo';
-        },
-
-        get profileUsername() {
-          const socialName = typeof this.profileData?.username === 'string'
-            ? this.profileData.username.trim()
-            : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName.trim() : '');
-          const fallbackName = typeof this.user?.displayName === 'string' ? this.user.displayName.trim() : '';
-          return socialName || fallbackName || 'No username';
-        },
-
-        get needsUsernameSetup() {
-          const socialName = typeof this.profileData?.username === 'string'
-            ? this.profileData.username.trim()
-            : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName.trim() : '');
-          return socialName.length === 0;
-        },
-
-        get profilePhoto() {
-          const socialPhoto = typeof this.profileData?.photoUrl === 'string'
-            ? this.profileData.photoUrl.trim()
-            : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl.trim() : '');
-          const authPhoto = typeof this.user?.photoURL === 'string' ? this.user.photoURL.trim() : '';
-          if (socialPhoto) return socialPhoto;
-          if (authPhoto) return authPhoto;
-          const seed = (this.profileUsername || 'U').charAt(0).toUpperCase();
-          const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"128\" height=\"128\"><rect width=\"100%\" height=\"100%\" fill=\"#2a323c\"/><text x=\"50%\" y=\"50%\" fill=\"#ffffff\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"56\">${seed}</text></svg>`;
-          return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-        },
-
-        get activePeerTitle() {
-          return this.activePeer?.username || 'Unknown user';
-        },
-
-        get activePeerSubtitle() {
-          if (!this.activePeer) return '';
-          if (this.isThreadLoading) return 'Loading...';
-          return this.activePeer.uid || '';
-        },
-
-        mapError(error) {
-          return this.normalizeError(error).message;
-        },
-
-        normalizeError(error, fallback = '') {
-          const text = error && error.message ? error.message : String(error || '');
-          const raw = String(text || '').trim();
-          const upper = raw.toUpperCase();
-          if (upper.includes('NOT AUTHENTICATED')) {
-            return { kind: 'auth', message: 'Authentication failed. Please sign in again.' };
+          if (kind === 'boo.sync.start') {
+            const operation = typeof trace.operation === 'string' ? trace.operation : '';
+            return `boo.sync.start ${operation}`.trim();
           }
-          if (upper.includes('PERMISSION_DENIED')) {
-            return { kind: 'permission', message: 'Permission denied for this app.' };
+          if (kind === 'boo.sync.ok') {
+            const operation = typeof trace.operation === 'string' ? trace.operation : '';
+            const count = typeof trace.chatCount === 'number' ? trace.chatCount : 0;
+            return `boo.sync.ok ${operation} chats=${count}`.trim();
           }
-          if (upper.includes('USERNAME_TAKEN') || upper.includes('CONFLICT_ALREADY_EXISTS')) {
-            return { kind: 'conflict', message: 'Username is already taken.' };
+          if (kind === 'boo.recovery.start') {
+            const reason = typeof trace.reason === 'string' ? trace.reason : '';
+            return `boo.recovery.start ${reason}`.trim();
           }
-          if (upper.includes('VALIDATION_ERROR')) {
-            return { kind: 'validation', message: 'Validation failed. Check your input values.' };
+          if (kind === 'boo.recovery.ok') {
+            return 'boo.recovery.ok';
           }
-          if (upper.includes('NOT_FOUND')) {
-            return { kind: 'not_found', message: 'Requested data was not found.' };
+          if (kind === 'boo.recovery.fail') {
+            const recoveryError = typeof trace.error === 'string' ? trace.error : '';
+            return `boo.recovery.fail ${recoveryError}`.trim();
           }
-          if (upper.includes('BLOCKED_RELATION')) {
-            return { kind: 'conflict', message: 'User relationship does not allow this action.' };
+          if (kind === 'boo.auth.refresh') {
+            const operation = typeof trace.operation === 'string' ? trace.operation : '';
+            return `boo.auth.refresh ${operation}`.trim();
           }
-          if (upper.includes('REQUEST TIMEOUT') || upper.includes('NETWORK') || upper.includes('FAILED TO FETCH')) {
-            return { kind: 'network', message: 'Network error. Please retry.' };
+          if (kind === 'debug.trace') {
+            return `bridge ${action} ${stage} ${error}`.trim();
           }
-          return { kind: 'unknown', message: raw || fallback || 'Unexpected error.' };
+          return kind || 'event';
         },
 
-        setDebugAction(action) {
-          this.debugLastAction = String(action || '').trim();
-          this.appendDebugEvent({ source: 'boo', stage: 'action', action: this.debugLastAction });
-        },
-
-        setBootState(nextState) {
-          const allowed = ['initializing', 'auth-check', 'ready', 'auth-failed', 'error'];
-          this.bootState = allowed.includes(nextState) ? nextState : 'error';
-        },
-
-        setSearchState(nextState) {
-          const allowed = ['idle', 'loading', 'ready', 'error'];
-          this.searchState = allowed.includes(nextState) ? nextState : 'error';
-          this.isSearching = this.searchState === 'loading';
-        },
-
-        setThreadState(nextState) {
-          const allowed = ['idle', 'loading', 'sending', 'ready', 'error'];
-          this.threadState = allowed.includes(nextState) ? nextState : 'error';
-          this.threadLoading = this.threadState === 'loading';
-          this.isSendingMessage = this.threadState === 'sending';
-        },
-
-        switchView(nextView) {
-          const allowed = nextView === 'chats' || nextView === 'conversation' || nextView === 'profile';
-          if (!allowed) return;
-          if (nextView === 'conversation' && !this.activeThreadId) return;
-          this.currentView = nextView;
-          if (nextView === 'conversation') {
-            this.stopChatsAutoRefresh();
-            this.startConversationAutoRefresh();
-            return;
-          }
-          if (nextView === 'chats') {
-            this.startChatsAutoRefresh();
-            this.stopConversationAutoRefresh();
-            return;
-          }
-          this.stopConversationAutoRefresh();
-          this.stopChatsAutoRefresh();
-        },
-
-        backToChats() {
-          this.stopConversationAutoRefresh();
-          this.startChatsAutoRefresh();
-          this.currentView = 'chats';
-        },
-
-        captureDebugError(context, error) {
-          const message = error && error.message ? String(error.message) : String(error);
-          this.debugLastError = `${String(context || 'unknown')}: ${message}`;
-          this.appendDebugEvent({ source: 'boo', stage: 'error', context, message });
-        },
-
-        isDebugEnabledFromQuery() {
+        async attemptSessionRecovery(reason = 'unknown') {
+          if (!this.client) return false;
+          this.appendDebugEvent({
+            kind: 'boo.recovery.start',
+            payload: {
+              reason,
+              appId: this.appId,
+              uid: this.currentUserId,
+            },
+          });
           try {
-            const params = new URLSearchParams(window.location.search);
-            return params.get('debug') === '1';
-          } catch {
+            if (typeof this.client.ensureAuthenticated === 'function') {
+              const auth = await this.client.ensureAuthenticated();
+              if (auth && auth.user && typeof auth.user.uid === 'string' && auth.user.uid.trim()) {
+                this.currentUserId = auth.user.uid.trim();
+              }
+            } else {
+              if (typeof this.client.getCurrentUser === 'function') {
+                const user = await this.client.getCurrentUser();
+                if (user && typeof user.uid === 'string' && user.uid.trim()) {
+                  this.currentUserId = user.uid.trim();
+                }
+              }
+              if (typeof this.client.getIdToken === 'function') {
+                await this.client.getIdToken(true);
+              }
+            }
+            if (typeof this.loadBlockedUsers === 'function') {
+              await this.loadBlockedUsers();
+            }
+            this.appendDebugEvent({
+              kind: 'boo.recovery.ok',
+              payload: { reason, uid: this.currentUserId },
+            });
+            return true;
+          } catch (error) {
+            this.appendDebugEvent({
+              kind: 'boo.recovery.fail',
+              payload: {
+                reason,
+                error: error && error.message ? error.message : String(error),
+              },
+            });
             return false;
           }
         },
 
-        appendDebugEvent(payload) {
-          if (!this.debugEnabled) return;
-          const now = new Date();
-          const hh = String(now.getHours()).padStart(2, '0');
-          const mm = String(now.getMinutes()).padStart(2, '0');
-          const ss = String(now.getSeconds()).padStart(2, '0');
-          const stage = typeof payload?.stage === 'string' ? payload.stage : 'event';
-          const action = typeof payload?.action === 'string' ? payload.action : '';
-          const message = typeof payload?.message === 'string' ? payload.message : '';
-          const line = `[${hh}:${mm}:${ss}] ${stage}${action ? `:${action}` : ''}${message ? ` ${message}` : ''}`;
-          this.debugEvents.unshift(line);
-          if (this.debugEvents.length > 30) {
-            this.debugEvents = this.debugEvents.slice(0, 30);
-          }
+        normalizedNewChatQuery() {
+          const raw = typeof this.newChatQuery === 'string' ? this.newChatQuery : '';
+          return raw.trim().replace(/^@+/, '');
         },
 
-        formatMessageTime(value) {
-          if (!value) return '';
-          try {
-            const parsed = new Date(value);
-            if (Number.isNaN(parsed.getTime())) return '';
-            return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          } catch {
-            return '';
-          }
+        isPeerBlocked(peerUid) {
+          const uid = this.normalizeUid(peerUid);
+          return Boolean(uid && this.blockedByMe[uid]);
         },
 
-        peerPhotoFor(item) {
-          const raw = typeof item?.photoUrl === 'string' ? item.photoUrl.trim() : '';
-          return raw || this.profilePhoto;
+        activeChatIsBlocked() {
+          const chat = this.activeChat();
+          if (!chat) return false;
+          return this.isPeerBlocked(chat.peerUid || chat?.participant?.id);
         },
 
-        setThreadListState(nextState) {
-          const allowed = ['idle', 'loading', 'ready', 'error'];
-          this.threadListState = allowed.includes(nextState) ? nextState : 'error';
+        isBusyForBackgroundSync() {
+          if (this.isSendingMessage || this.isOpeningThread || this.isUpdatingBlock) return true;
+          if (this.isRefreshingActiveThread) return true;
+          if (this.composeChatOpen) return true;
+          return Object.keys(this.deletingMessageIds || {}).length > 0;
         },
 
-        peerUidFromThreadRow(row) {
-          const members = Array.isArray(row?.members) ? row.members.filter((item) => typeof item === 'string') : [];
-          const ownUid = this.user?.uid || '';
-          return members.find((uid) => uid !== ownUid) || '';
-        },
-
-        normalizeThreadRow(row) {
-          const threadId = typeof row?.id === 'string' ? row.id.trim() : '';
-          if (!threadId) return null;
-          const peerUid = this.peerUidFromThreadRow(row);
-          if (!peerUid) return null;
-          const cached = this.profilesByUid[peerUid] || null;
-          const username = cached?.displayName || `user:${peerUid.slice(0, 6)}`;
-          const photoUrl = cached?.avatarUrl || '';
-          const lastActivityAt = typeof row?.lastMessageAt === 'string' && row.lastMessageAt.trim()
-            ? row.lastMessageAt
-            : (typeof row?.updatedAt === 'string' ? row.updatedAt : '');
-          return {
-            threadId,
-            peerUid,
-            username,
-            photoUrl,
-            subtitle: peerUid,
-            lastActivityAt,
-          };
-        },
-
-        async hydrateThreadPeers(rows) {
-          const list = Array.isArray(rows) ? rows : [];
-          const pending = [];
-          for (const row of list) {
-            const peerUid = this.peerUidFromThreadRow(row);
-            if (!peerUid) continue;
-            if (!this.profilesByUid[peerUid]) pending.push(peerUid);
-          }
-          if (pending.length === 0) return;
-          await Promise.all(pending.map(async (peerUid) => {
-            await this.refreshPeerIdentity(peerUid);
-          }));
-        },
-
-        messageSignature(rows) {
-          if (!Array.isArray(rows) || rows.length === 0) return '';
-          const last = rows[rows.length - 1] || {};
-          const id = typeof last.id === 'string' ? last.id : '';
-          const text = typeof last.text === 'string' ? last.text : '';
-          const stamp = typeof last.createdAt === 'string'
-            ? last.createdAt
-            : (typeof last.created_at === 'string' ? last.created_at : '');
-          return `${rows.length}:${id}:${text.length}:${stamp}`;
-        },
-
-        scrollThreadToBottom(behavior = 'auto') {
-          this.$nextTick(() => {
-            const node = this.$refs?.messagesViewport;
-            if (!node) return;
-            node.scrollTo({ top: node.scrollHeight, behavior });
-          });
-        },
-
-        // Core data API wrappers (logic freeze layer for upcoming UI refactors).
-        async apiGetProfile(uid) {
-          return this.client.socialProfileGet(uid);
-        },
-
-        async apiSearchProfiles(query, limitCount) {
-          return this.client.socialProfileSearch(query, limitCount);
-        },
-
-        async apiOpenThread(peerUid) {
-          return this.client.socialDmOpenThread(peerUid);
-        },
-
-        async apiListThreads() {
-          return this.client.socialDmListThreads();
-        },
-
-        async apiListMessages(threadId, cursor, limitCount) {
-          return this.client.socialDmListMessages(threadId, cursor, limitCount);
-        },
-
-        async apiSendMessage(threadId, text) {
-          return this.client.socialDmSendMessage(threadId, text);
-        },
-
-        usernameIsValid(value) {
-          const normalized = (value || '').trim();
-          if (normalized.length < 3 || normalized.length > 30) return false;
-          return /^[a-zA-Z0-9._-]+$/.test(normalized);
-        },
-
-        async loadProfileIdentity() {
-          if (!this.client) return;
-          try {
-            this.profileData = await this.apiGetProfile();
-            this.usernameDraft = typeof this.profileData?.username === 'string'
-              ? this.profileData.username
-              : (typeof this.profileData?.displayName === 'string' ? this.profileData.displayName : '');
-          } catch (error) {
-            const text = this.mapError(error);
-            if (text.includes('Profile not found.')) {
-              this.profileData = null;
-              this.usernameDraft = '';
+        bindLifecycleHooks() {
+          if (this.lifecycleHooksBound) return;
+          this.visibilityChangeHandler = () => {
+            if (document.hidden) {
+              this.stopChatsPolling();
+              this.stopActiveThreadPolling();
               return;
             }
-            throw error;
-          }
-        },
-
-        async refreshPeerIdentity(uid) {
-          const targetUid = String(uid || '').trim();
-          if (!targetUid || !this.client) return;
-          try {
-            const profile = await this.apiGetProfile(targetUid);
-            const username = typeof profile?.username === 'string'
-              ? profile.username.trim()
-              : (typeof profile?.displayName === 'string' ? profile.displayName.trim() : '');
-            const photoUrl = typeof profile?.photoUrl === 'string'
-              ? profile.photoUrl.trim()
-              : (typeof profile?.avatarUrl === 'string' ? profile.avatarUrl.trim() : '');
-            if (!username) return;
-            const normalized = {
-              uid: targetUid,
-              username,
-              photoUrl: photoUrl || null,
-            };
-            this.profilesByUid[targetUid] = {
-              uid: targetUid,
-              displayName: username,
-              avatarUrl: normalized.photoUrl,
-            };
-            if (this.activePeer?.uid === targetUid) {
-              this.activePeer = { ...this.activePeer, ...normalized };
-            }
-            this.searchResults = this.searchResults.map((row) => (
-              row.uid === targetUid ? { ...row, username, photoUrl: normalized.photoUrl } : row
-            ));
-            this.recentThreads = this.recentThreads.map((row) => (
-              row.peerUid === targetUid
-                ? { ...row, username, photoUrl: normalized.photoUrl, subtitle: targetUid }
-                : row
-            ));
-          } catch {
-            // Ignore peer refresh failures; realtime event should never break chat flow.
-          }
-        },
-
-        async handleProfileRealtimeUpdate(payload) {
-          const changedUid = typeof payload?.uid === 'string' ? payload.uid.trim() : '';
-          if (!changedUid) return;
-          if (changedUid === this.user?.uid) {
-            await this.loadProfileIdentity();
-            return;
-          }
-          await this.refreshPeerIdentity(changedUid);
-        },
-
-        async saveUsername() {
-          if (!this.client || this.isSavingUsername || this.bootState !== 'ready') return;
-          this.setDebugAction('save-username');
-          this.errorMessage = '';
-          this.successMessage = '';
-
-          const normalized = (this.usernameDraft || '').trim();
-          if (!this.usernameIsValid(normalized)) {
-            this.errorMessage = 'Username must be 3-30 characters and contain only letters, numbers, . _ -';
-            return;
-          }
-
-          this.isSavingUsername = true;
-          try {
-            const payload = {
-              username: normalized,
-              displayName: normalized,
-              photoUrl: typeof this.profileData?.photoUrl === 'string'
-                ? this.profileData.photoUrl
-                : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl : null),
-              avatarUrl: typeof this.profileData?.photoUrl === 'string'
-                ? this.profileData.photoUrl
-                : (typeof this.profileData?.avatarUrl === 'string' ? this.profileData.avatarUrl : null),
-              bio: typeof this.profileData?.bio === 'string' ? this.profileData.bio : '',
-              defaultVisibility: typeof this.profileData?.defaultVisibility === 'string'
-                ? this.profileData.defaultVisibility
-                : 'followers',
-              schemaVersion: 2,
-            };
-            const nextProfile = await this.client.socialProfileUpdate(payload);
-            this.profileData = nextProfile || payload;
-            this.usernameDraft = normalized;
-            this.successMessage = 'Username saved.';
-          } catch (error) {
-            this.errorMessage = this.mapError(error);
-            this.captureDebugError('save-username', error);
-          } finally {
-            this.isSavingUsername = false;
-          }
-        },
-
-        clearSearchState() {
-          this.searchResults = [];
-          this.searchError = '';
-          this.setSearchState('idle');
-        },
-
-        nextSearchToken() {
-          this.searchTokenCounter += 1;
-          this.activeSearchToken = this.searchTokenCounter;
-          return this.activeSearchToken;
-        },
-
-        onSearchInput() {
-          this.searchError = '';
-          if (this.searchDebounceHandle) {
-            window.clearTimeout(this.searchDebounceHandle);
-            this.searchDebounceHandle = null;
-          }
-          const query = (this.searchQuery || '').trim();
-          if (!query) {
-            this.clearSearchState();
-            return;
-          }
-          if (query.length < 2) {
-            this.searchResults = [];
-            this.setSearchState('idle');
-            return;
-          }
-          const token = this.nextSearchToken();
-          this.searchDebounceHandle = window.setTimeout(() => {
-            this.runUsernameSearch(query, token);
-          }, this.searchDebounceMs);
-        },
-
-        async performUsernameSearch(query) {
-          const normalizedQuery = String(query || '').trim().toLowerCase();
-          if (!this.client || !normalizedQuery) return [];
-          const rows = await this.apiSearchProfiles(normalizedQuery, 30);
-          if (!Array.isArray(rows)) return [];
-          const ownUid = this.user?.uid || '';
-          const results = [];
-          for (const row of rows) {
-            const uid = typeof row?.uid === 'string' ? row.uid.trim() : '';
-            const username = typeof row?.username === 'string'
-              ? row.username.trim()
-              : (typeof row?.displayName === 'string' ? row.displayName.trim() : '');
-            const photoUrl = typeof row?.photoUrl === 'string'
-              ? row.photoUrl.trim()
-              : (typeof row?.avatarUrl === 'string' ? row.avatarUrl.trim() : '');
-            if (!uid || !username || uid === ownUid) continue;
-            if (!username.toLowerCase().includes(normalizedQuery)) continue;
-            results.push({ uid, username, photoUrl });
-          }
-          return results;
-        },
-
-        async runUsernameSearch(query, token) {
-          this.setDebugAction('search');
-          this.setSearchState('loading');
-          this.searchError = '';
-          try {
-            const results = await this.performUsernameSearch(query);
-            if (token !== this.activeSearchToken) return;
-            this.searchResults = Array.isArray(results) ? results : [];
-            this.setSearchState('ready');
-          } catch (error) {
-            if (token !== this.activeSearchToken) return;
-            this.searchResults = [];
-            this.searchError = this.mapError(error);
-            this.setSearchState('error');
-            this.captureDebugError('search', error);
-          } finally {
-            if (token === this.activeSearchToken) {
-              if (!this.searchError && this.searchState !== 'ready') {
-                this.setSearchState(this.searchResults.length > 0 ? 'ready' : 'idle');
+            if (this.integrationMode === 'connected') {
+              this.startChatsPolling();
+              if (this.view === 'thread') {
+                this.startActiveThreadPolling();
+                void this.pollActiveThreadSilently();
               }
+              void this.pollChatsSilently();
             }
-          }
-        },
-
-        retrySearch() {
-          const query = (this.searchQuery || '').trim();
-          if (!query || query.length < 2) return;
-          if (this.searchDebounceHandle) {
-            window.clearTimeout(this.searchDebounceHandle);
-            this.searchDebounceHandle = null;
-          }
-          const token = this.nextSearchToken();
-          this.runUsernameSearch(query, token);
-        },
-
-        async loadRecentThreads() {
-          if (!this.client) return;
-          this.setDebugAction('list-threads');
-          this.threadListError = '';
-          this.setThreadListState('loading');
-          try {
-            const rows = await this.apiListThreads();
-            await this.hydrateThreadPeers(rows);
-            const mapped = (Array.isArray(rows) ? rows : [])
-              .map((row) => this.normalizeThreadRow(row))
-              .filter((row) => !!row);
-            this.recentThreads = mapped;
-            this.setThreadListState('ready');
-          } catch (error) {
-            this.recentThreads = [];
-            this.threadListError = this.mapError(error);
-            this.setThreadListState('error');
-            this.captureDebugError('list-threads', error);
-          }
-        },
-
-        nextThreadLoadToken() {
-          this.threadLoadToken += 1;
-          return this.threadLoadToken;
-        },
-
-        async openThreadFromList(item) {
-          if (!item?.threadId || !item?.peerUid) return;
-          this.activePeer = {
-            uid: item.peerUid,
-            username: item.username,
-            photoUrl: item.photoUrl || null,
           };
-          this.activeThreadId = item.threadId;
-          this.threadError = '';
-          this.threadMessages = [];
-          this.lastMessageSignature = '';
-          await this.reloadThread();
-          this.switchView('conversation');
+          this.beforeUnloadHandler = () => {
+            this.stopChatsPolling();
+            this.stopActiveThreadPolling();
+            this.stopSendCooldownTicker();
+            this.cancelScheduledThreadScroll();
+            this.unbindMessagesListObserver();
+            this.clearNewChatSearchTimer();
+            if (this.typingTimerId) {
+              clearTimeout(this.typingTimerId);
+              this.typingTimerId = null;
+            }
+          };
+          this.resizeHandler = () => {
+            if (this.view !== 'thread') return;
+            if (!this.messagesPinnedToBottom) return;
+            this.scheduleScrollThreadToBottom({ smooth: false });
+          };
+          document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+          window.addEventListener('beforeunload', this.beforeUnloadHandler);
+          window.addEventListener('resize', this.resizeHandler, { passive: true });
+          this.lifecycleHooksBound = true;
         },
 
-        async openThreadForResult(item) {
-          if (!this.client || !item || !item.uid) return;
-          this.setDebugAction(`open-thread:${item.uid}`);
-          if (item.uid === this.user?.uid) {
-            this.threadError = 'You cannot message yourself.';
-            this.setThreadState('error');
+        bindUiWatchers() {
+          if (this.uiWatchersBound) return;
+          if (typeof this.$watch !== 'function') return;
+          this.$watch('view', (nextView) => {
+            if (nextView !== 'thread') {
+              this.cancelScheduledThreadScroll();
+              this.unbindMessagesListObserver();
+              return;
+            }
+            this.$nextTick(() => {
+              this.bindMessagesListObserver();
+              this.updateMessagesPinnedState();
+              if (this.messagesPinnedToBottom) {
+                this.clearPendingIncomingForActiveChat();
+                this.scheduleScrollThreadToBottom({ smooth: false });
+              }
+            });
+          });
+          this.$watch('activeChatId', (nextChatId) => {
+            this.clearPendingIncoming(nextChatId);
+            this.messagesPinnedToBottom = true;
+          });
+          this.uiWatchersBound = true;
+        },
+
+        startChatsPolling() {
+          if (this.integrationMode !== 'connected') return;
+          if (this.chatsPollTimerId) return;
+          this.chatsPollTimerId = setInterval(() => {
+            void this.pollChatsSilently();
+          }, this.chatPollingIntervalMs);
+        },
+
+        stopChatsPolling() {
+          if (!this.chatsPollTimerId) return;
+          clearInterval(this.chatsPollTimerId);
+          this.chatsPollTimerId = null;
+        },
+
+        async pollChatsSilently() {
+          if (this.integrationMode !== 'connected') return;
+          if (document.hidden) return;
+          if (this.isBusyForBackgroundSync()) return;
+          await this.loadChatsFromApi({ silent: true });
+        },
+
+        startActiveThreadPolling() {
+          if (this.integrationMode !== 'connected') return;
+          if (this.view !== 'thread') return;
+          const activeId = this.normalizeUid(this.activeChatId);
+          if (!activeId) return;
+          if (this.activeThreadPollTimerId) return;
+          this.activeThreadPollTimerId = setInterval(() => {
+            void this.pollActiveThreadSilently();
+          }, this.activeThreadPollingIntervalMs);
+        },
+
+        stopActiveThreadPolling() {
+          if (!this.activeThreadPollTimerId) return;
+          clearInterval(this.activeThreadPollTimerId);
+          this.activeThreadPollTimerId = null;
+        },
+
+        async pollActiveThreadSilently() {
+          if (this.integrationMode !== 'connected') return;
+          if (document.hidden) return;
+          if (this.view !== 'thread') return;
+          const activeId = this.normalizeUid(this.activeChatId);
+          if (!activeId) return;
+          if (this.isRefreshingActiveThread) return;
+          if (this.isOpeningThread || this.isUpdatingBlock || this.composeChatOpen) return;
+          if (Object.keys(this.deletingMessageIds || {}).length > 0) return;
+          this.isRefreshingActiveThread = true;
+          try {
+            await this.refreshChatMessages(activeId, { markAsRead: true });
+          } finally {
+            this.isRefreshingActiveThread = false;
+          }
+        },
+
+        isStaleSyncRequest(requestId) {
+          if (!Number.isFinite(requestId)) return false;
+          return requestId < this.latestSyncRequestId;
+        },
+
+        nextMessageRefreshSeq(chatId) {
+          const normalizedChatId = this.normalizeUid(chatId);
+          if (!normalizedChatId) return 0;
+          const current = Number(this.messageRefreshSeqByChatId[normalizedChatId] || 0);
+          const next = Number.isFinite(current) ? current + 1 : 1;
+          this.messageRefreshSeqByChatId = {
+            ...this.messageRefreshSeqByChatId,
+            [normalizedChatId]: next,
+          };
+          this.messageRefreshLatestSeqByChatId = {
+            ...this.messageRefreshLatestSeqByChatId,
+            [normalizedChatId]: next,
+          };
+          return next;
+        },
+
+        isStaleMessageRefresh(chatId, seq) {
+          const normalizedChatId = this.normalizeUid(chatId);
+          if (!normalizedChatId || !Number.isFinite(seq)) return false;
+          const latest = Number(this.messageRefreshLatestSeqByChatId[normalizedChatId] || 0);
+          return seq < latest;
+        },
+
+        startSendCooldownTicker() {
+          if (this.sendCooldownTickerId) return;
+          this.sendCooldownTickerId = setInterval(() => {
+            this.pruneExpiredSendCooldowns();
+          }, 1000);
+        },
+
+        stopSendCooldownTicker() {
+          if (!this.sendCooldownTickerId) return;
+          clearInterval(this.sendCooldownTickerId);
+          this.sendCooldownTickerId = null;
+        },
+
+        pruneExpiredSendCooldowns() {
+          const now = Date.now();
+          this.cooldownNowMs = now;
+          const source = this.sendCooldownUntilByChat && typeof this.sendCooldownUntilByChat === 'object'
+            ? this.sendCooldownUntilByChat
+            : {};
+          const next = {};
+          Object.entries(source).forEach(([chatId, until]) => {
+            const value = typeof until === 'number' ? until : Number(until);
+            if (!Number.isFinite(value) || value <= now) return;
+            next[chatId] = value;
+          });
+          this.sendCooldownUntilByChat = next;
+          if (Object.keys(next).length === 0) {
+            this.stopSendCooldownTicker();
+          }
+        },
+
+        startSendCooldown(chatId, seconds) {
+          const normalizedChatId = this.normalizeUid(chatId);
+          if (!normalizedChatId) return;
+          const safeSeconds = Number.isFinite(seconds) && seconds > 0
+            ? Math.min(120, Math.floor(seconds))
+            : 8;
+          const now = Date.now();
+          const nextUntil = now + safeSeconds * 1000;
+          const currentUntil = Number(this.sendCooldownUntilByChat[normalizedChatId] || 0);
+          this.sendCooldownUntilByChat = {
+            ...this.sendCooldownUntilByChat,
+            [normalizedChatId]: Math.max(currentUntil, nextUntil),
+          };
+          this.cooldownNowMs = now;
+          this.startSendCooldownTicker();
+        },
+
+        getSendCooldownSeconds(chatId) {
+          const normalizedChatId = this.normalizeUid(chatId);
+          if (!normalizedChatId) return 0;
+          const until = Number(this.sendCooldownUntilByChat[normalizedChatId] || 0);
+          if (!Number.isFinite(until) || until <= 0) return 0;
+          const remainingMs = until - this.cooldownNowMs;
+          if (remainingMs <= 0) return 0;
+          return Math.max(1, Math.ceil(remainingMs / 1000));
+        },
+
+        activeChatCooldownSeconds() {
+          return this.getSendCooldownSeconds(this.activeChatId);
+        },
+
+        isActiveChatRateLimited() {
+          return this.activeChatCooldownSeconds() > 0;
+        },
+
+        activeChatCooldownText() {
+          const seconds = this.activeChatCooldownSeconds();
+          if (seconds <= 0) return '';
+          return this.formatRateLimitedMessage(seconds);
+        },
+
+        async loadBlockedUsers() {
+          if (!this.client || typeof this.client.socialBlockList !== 'function') return;
+          this.isLoadingBlockedUsers = true;
+          try {
+            const rows = await this.client.socialBlockList();
+            const next = {};
+            (Array.isArray(rows) ? rows : []).forEach((row) => {
+              const uid = this.normalizeUid(row?.targetUid);
+              if (!uid) return;
+              next[uid] = true;
+            });
+            this.blockedByMe = next;
+          } catch (error) {
+            console.warn('Failed to load blocked users for Boo:', error);
+          } finally {
+            this.isLoadingBlockedUsers = false;
+          }
+        },
+
+        async toggleActivePeerBlock() {
+          if (this.isUpdatingBlock) return;
+          const chat = this.activeChat();
+          if (!chat) return;
+          const peerUid = this.normalizeUid(chat.peerUid || chat?.participant?.id);
+          if (!peerUid) return;
+          if (
+            this.integrationMode !== 'connected'
+            || !this.client
+            || typeof this.client.socialBlockCreate !== 'function'
+            || typeof this.client.socialBlockDelete !== 'function'
+          ) {
+            this.error = this.t('newChatUnavailable');
             return;
           }
-          this.threadError = '';
-          this.setThreadState('loading');
-          this.activePeer = item;
-          if (item?.uid) {
-            this.profilesByUid[item.uid] = {
-              uid: item.uid,
-              displayName: item.username,
-              avatarUrl: item.photoUrl || null,
-            };
-          }
-          this.threadMessages = [];
-          this.lastMessageSignature = '';
-          this.messageDraft = '';
 
+          this.isUpdatingBlock = true;
+          this.error = '';
           try {
-            const opened = await this.apiOpenThread(item.uid);
-            const threadId = typeof opened?.threadId === 'string' ? opened.threadId : '';
-            if (!threadId) {
-              throw new Error('Failed to open thread.');
+            if (this.isPeerBlocked(peerUid)) {
+              await this.client.socialBlockDelete(peerUid);
+              const next = { ...this.blockedByMe };
+              delete next[peerUid];
+              this.blockedByMe = next;
+              this.status = this.t('unblockedStatus');
+            } else {
+              await this.client.socialBlockCreate(peerUid);
+              this.blockedByMe = {
+                ...this.blockedByMe,
+                [peerUid]: true,
+              };
+              this.status = this.t('blockedStatus');
             }
-            this.activeThreadId = threadId;
-            this.setDebugAction(`open-thread-ok:${threadId}`);
-            await this.reloadThread();
-            await this.loadRecentThreads();
-            this.switchView('conversation');
           } catch (error) {
-            this.threadError = this.mapError(error);
-            this.setThreadState('error');
-            this.captureDebugError('open-thread', error);
+            this.error = this.mapSocialError(error) || this.t('blockActionFailed');
+            console.warn('Failed to update block state in Boo:', error);
+          } finally {
+            this.isUpdatingBlock = false;
           }
         },
 
-        async reloadThread() {
-          if (!this.client || !this.activeThreadId) return;
-          this.setDebugAction(`list-messages:${this.activeThreadId}`);
-          const token = this.nextThreadLoadToken();
-          this.setThreadState('loading');
-          this.threadError = '';
+        clearNewChatSearchTimer() {
+          if (this.newChatSearchTimerId) {
+            clearTimeout(this.newChatSearchTimerId);
+            this.newChatSearchTimerId = null;
+          }
+        },
+
+        openNewChatComposer() {
+          this.composeChatOpen = true;
+          this.newChatError = '';
+          this.newChatQuery = '';
+          this.newChatResults = [];
+          this.isSearchingProfiles = false;
+          this.isOpeningThread = false;
+          this.newChatSearchToken += 1;
+          this.clearNewChatSearchTimer();
+        },
+
+        closeNewChatComposer() {
+          this.composeChatOpen = false;
+          this.newChatError = '';
+          this.newChatQuery = '';
+          this.newChatResults = [];
+          this.isSearchingProfiles = false;
+          this.isOpeningThread = false;
+          this.newChatSearchToken += 1;
+          this.clearNewChatSearchTimer();
+        },
+
+        debounceNewChatSearch() {
+          this.newChatError = '';
+          this.clearNewChatSearchTimer();
+          const query = this.normalizedNewChatQuery();
+          if (query.length === 0) {
+            this.newChatResults = [];
+            this.isSearchingProfiles = false;
+            return;
+          }
+          this.newChatSearchTimerId = setTimeout(() => {
+            this.newChatSearchTimerId = null;
+            void this.searchProfilesForNewChat();
+          }, 220);
+        },
+
+        hasExistingChatWithPeer(peerUid) {
+          const uid = this.normalizeUid(peerUid);
+          if (!uid) return false;
+          return this.chats.some((chat) => chat.peerUid === uid || chat.participant.id === uid);
+        },
+
+        normalizeProfileSearchRows(rows) {
+          const unique = new Set();
+          const list = [];
+          const sourceRows = Array.isArray(rows) ? rows : [];
+          sourceRows.forEach((row) => {
+            const uid = this.normalizeUid(row?.uid);
+            if (!uid || uid === this.currentUserId || unique.has(uid)) return;
+            unique.add(uid);
+            const username = typeof row?.username === 'string' ? row.username.trim() : '';
+            const displayName = typeof row?.displayName === 'string' ? row.displayName.trim() : username;
+            const photoRaw = typeof row?.photoUrl === 'string'
+              ? row.photoUrl
+              : (typeof row?.avatarUrl === 'string' ? row.avatarUrl : '');
+            const photoUrl = photoRaw && photoRaw.trim().length > 0 ? photoRaw.trim() : null;
+            list.push({
+              uid,
+              username,
+              displayName: displayName || username || this.fallbackUserLabel(uid),
+              photoUrl,
+              avatarUrl: photoUrl,
+            });
+          });
+          return list;
+        },
+
+        async searchProfilesForNewChat() {
+          const query = this.normalizedNewChatQuery();
+          const requestToken = this.newChatSearchToken + 1;
+          this.newChatSearchToken = requestToken;
+          if (query.length < 2) {
+            this.newChatResults = [];
+            this.isSearchingProfiles = false;
+            return;
+          }
+          if (
+            this.integrationMode !== 'connected'
+            || !this.client
+            || typeof this.client.socialProfileSearch !== 'function'
+          ) {
+            this.newChatResults = [];
+            this.newChatError = this.t('newChatUnavailable');
+            this.isSearchingProfiles = false;
+            return;
+          }
+
+          this.isSearchingProfiles = true;
+          this.newChatError = '';
           try {
-            const rows = await this.apiListMessages(this.activeThreadId, undefined, 120);
-            if (token !== this.threadLoadToken) return;
-            this.threadMessages = Array.isArray(rows) ? rows : [];
-            const nextSignature = this.messageSignature(this.threadMessages);
-            const hasNewData = nextSignature !== this.lastMessageSignature;
-            this.lastMessageSignature = nextSignature;
-            this.setThreadState('ready');
-            if (hasNewData) this.scrollThreadToBottom('smooth');
+            const rows = await this.client.socialProfileSearch(query, 12);
+            if (requestToken !== this.newChatSearchToken) return;
+            const normalized = this.normalizeProfileSearchRows(rows);
+            this.newChatResults = normalized;
+            if (normalized.length > 0) {
+              const nextCache = { ...this.profileCacheByUid };
+              normalized.forEach((item) => {
+                nextCache[item.uid] = {
+                  uid: item.uid,
+                  username: item.username,
+                  displayName: item.displayName,
+                  photoUrl: item.photoUrl,
+                  avatarUrl: item.avatarUrl,
+                };
+              });
+              this.profileCacheByUid = nextCache;
+            }
           } catch (error) {
-            if (token !== this.threadLoadToken) return;
-            this.threadError = this.mapError(error);
-            this.setThreadState('error');
-            this.captureDebugError('list-messages', error);
+            if (requestToken !== this.newChatSearchToken) return;
+            this.newChatResults = [];
+            this.newChatError = this.mapSocialError(error);
+          } finally {
+            if (requestToken === this.newChatSearchToken) {
+              this.isSearchingProfiles = false;
+            }
           }
-        },
-
-        async sendMessage() {
-          if (!this.client || !this.activeThreadId || this.isSendingMessage) return;
-          this.setDebugAction(`send-message:${this.activeThreadId}`);
-          const text = (this.messageDraft || '').trim();
-          if (!text) return;
-          this.setThreadState('sending');
-          this.threadError = '';
-          try {
-            await this.apiSendMessage(this.activeThreadId, text);
-            this.messageDraft = '';
-            await this.reloadThread();
-            await this.loadRecentThreads();
-            this.scrollThreadToBottom('smooth');
-          } catch (error) {
-            this.threadError = this.mapError(error);
-            this.setThreadState('error');
-            this.captureDebugError('send-message', error);
-          }
-        },
-
-        startConversationAutoRefresh() {
-          if (this.messagePollHandle) {
-            window.clearInterval(this.messagePollHandle);
-            this.messagePollHandle = null;
-          }
-          if (!this.client || !this.activeThreadId) return;
-          this.messagePollHandle = window.setInterval(() => {
-            if (this.currentView !== 'conversation') return;
-            if (!this.activeThreadId) return;
-            if (this.isThreadLoading || this.isSendingMessage) return;
-            this.reloadThread();
-          }, 3000);
-        },
-
-        stopConversationAutoRefresh() {
-          if (!this.messagePollHandle) return;
-          window.clearInterval(this.messagePollHandle);
-          this.messagePollHandle = null;
-        },
-
-        startChatsAutoRefresh() {
-          if (this.threadListPollHandle) {
-            window.clearInterval(this.threadListPollHandle);
-            this.threadListPollHandle = null;
-          }
-          if (!this.client) return;
-          this.threadListPollHandle = window.setInterval(() => {
-            if (this.currentView !== 'chats') return;
-            if (this.isThreadListLoading) return;
-            this.loadRecentThreads();
-          }, 5000);
-        },
-
-        stopChatsAutoRefresh() {
-          if (!this.threadListPollHandle) return;
-          window.clearInterval(this.threadListPollHandle);
-          this.threadListPollHandle = null;
         },
 
         async init() {
-          this.setDebugAction('init');
-          this.currentView = 'chats';
-          this.loading = true;
-          this.setBootState('initializing');
-          this.errorMessage = '';
-          this.successMessage = '';
-          this.debugLastError = '';
-          if (this.searchDebounceHandle) {
-            window.clearTimeout(this.searchDebounceHandle);
-            this.searchDebounceHandle = null;
-          }
-          this.stopConversationAutoRefresh();
-          this.stopChatsAutoRefresh();
-          this.searchQuery = '';
-          this.clearSearchState();
-          this.recentThreads = [];
-          this.threadListError = '';
-          this.setThreadListState('idle');
-          if (typeof this.detachProfileUpdateListener === 'function') {
-            this.detachProfileUpdateListener();
-            this.detachProfileUpdateListener = null;
-          }
-          if (typeof this.detachDebugTraceListener === 'function') {
-            this.detachDebugTraceListener();
-            this.detachDebugTraceListener = null;
-          }
-          this.debugEnabled = this.isDebugEnabledFromQuery();
-          this.debugEvents = [];
+          this.chats = [];
+          this.activeChatId = null;
+          this.applyLanguage(this.language);
+          this.status = 'Initializing...';
+          this.error = '';
+          this.bindUiWatchers();
 
           try {
             await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'boo';
+            this.debugEnabled = urlParams.get('debug') === '1';
+            const forceMockMode = urlParams.get('mock') === '1';
+
+            // Dev-only escape hatch for local UI checks without backend.
+            if (forceMockMode) {
+              this.seedMockChats();
+              this.activeChatId = this.chats[0]?.id || null;
+              this.integrationMode = 'mock';
+              this.status = 'Mock mode';
+              return;
+            }
+
             if (typeof HayOSClient !== 'function') {
-              throw new Error('HayOSClient unavailable');
+              throw new Error('HayOSClient is unavailable');
             }
-
             this.client = new HayOSClient(this.appId);
-            this.setBootState('auth-check');
+            this.bindLifecycleHooks();
+            this.status = 'Checking auth...';
             const auth = await this.client.ensureAuthenticated();
-            this.user = auth?.user || null;
-            if (!this.user) {
-              throw new Error('Not authenticated');
+            if (auth && auth.user && typeof auth.user.uid === 'string' && auth.user.uid.trim()) {
+              this.currentUserId = auth.user.uid.trim();
             }
+            await this.loadLanguage();
+            this.subscribeLanguageChanges();
+            this.subscribeRealtimeContracts();
+            await this.loadOsTheme();
+            this.integrationMode = 'connected';
+            await this.loadChatsFromApi({ initialLoad: true });
+            await this.loadBlockedUsers();
+            this.startChatsPolling();
+            this.status = this.t('connectedReady');
+          } catch (error) {
+            this.stopChatsPolling();
+            this.stopActiveThreadPolling();
+            this.integrationMode = 'mock';
+            this.status = 'Mock mode';
+            this.error = error && error.message ? error.message : String(error);
+            this.captureFailure('init', error, { integrationMode: 'mock' });
+            console.warn('Boo app is running in mock mode:', error);
+          }
+        },
 
-            this.language = await this.client.getLanguage();
-            document.documentElement.lang = this.language;
-            this.client.onLanguageChanged((nextLanguage) => {
-              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
-              document.documentElement.lang = this.language;
-            });
-            this.detachProfileUpdateListener = this.client.onSocialProfileUpdated((payload) => {
-              this.handleProfileRealtimeUpdate(payload);
-            });
-            if (this.debugEnabled) {
-              this.detachDebugTraceListener = this.client.onDebugTrace((payload) => {
-                this.appendDebugEvent({
-                  source: payload?.hop || 'trace',
-                  stage: typeof payload?.stage === 'string' ? payload.stage : 'trace',
-                  action: typeof payload?.action === 'string' ? payload.action : '',
-                  message: typeof payload?.error === 'string' ? payload.error : '',
-                });
+        seedMockChats() {
+          // TODO(api): replace with `await this.loadChatsFromApi()`.
+          this.chats = [
+            {
+              id: 'chat_1',
+              participant: { id: 'u_aram', name: 'Aram', username: 'aram', displayName: 'Aram', initials: 'AR', status: 'online', photoUrl: null },
+              unreadCount: 2,
+              lastMessage: { text: 'We can start layout right now.', timestamp: '10:42' },
+              lastTime: '10:42',
+              messages: [
+                { id: 'm_1', senderId: 'u_aram', text: 'Barev 👋', timestamp: '10:40', createdAt: '' },
+                { id: 'm_2', senderId: 'u_me', text: 'Ready for 2/9 mobile structure.', timestamp: '10:41', status: 'Delivered', createdAt: '' },
+                { id: 'm_3', senderId: 'u_aram', text: 'We can start layout right now.', timestamp: '10:42', createdAt: '' },
+              ],
+              peerUid: 'u_aram',
+              updatedAt: '',
+            },
+            {
+              id: 'chat_2',
+              participant: { id: 'u_team', name: 'Design Team', username: 'designteam', displayName: 'Design Team', initials: 'DT', status: 'last seen 1h ago', photoUrl: null },
+              unreadCount: 0,
+              lastMessage: { text: 'Keep it close to iMessage.', timestamp: '09:18' },
+              lastTime: '09:18',
+              messages: [
+                { id: 'm_4', senderId: 'u_team', text: 'Let us keep the UI very clean.', timestamp: '09:15', createdAt: '' },
+                { id: 'm_5', senderId: 'u_me', text: 'Using daisyUI with minimal custom CSS.', timestamp: '09:17', status: 'Read', createdAt: '' },
+                { id: 'm_6', senderId: 'u_team', text: 'Keep it close to iMessage.', timestamp: '09:18', createdAt: '' },
+              ],
+              peerUid: 'u_team',
+              updatedAt: '',
+            },
+            {
+              id: 'chat_3',
+              participant: { id: 'u_new', name: 'New Contact', username: 'newcontact', displayName: 'New Contact', initials: 'NC', status: 'offline', photoUrl: null },
+              unreadCount: 0,
+              lastMessage: { text: 'Tap to start chatting', timestamp: 'yesterday' },
+              lastTime: 'yesterday',
+              messages: [],
+              peerUid: 'u_new',
+              updatedAt: '',
+            },
+          ];
+        },
+
+        normalizeUid(value) {
+          return typeof value === 'string' ? value.trim() : '';
+        },
+
+        isValidIso(value) {
+          if (typeof value !== 'string' || !value.trim()) return false;
+          const parsed = new Date(value);
+          return !Number.isNaN(parsed.getTime());
+        },
+
+        normalizeSearchText(value) {
+          if (typeof value !== 'string') return '';
+          return value
+            .normalize('NFKC')
+            .trim()
+            .toLocaleLowerCase();
+        },
+
+        fallbackUserLabel(uid) {
+          const normalized = this.normalizeUid(uid);
+          if (!normalized) return 'user';
+          return `user-${normalized.slice(0, 6)}`;
+        },
+
+        buildInitials(value) {
+          if (typeof value !== 'string' || !value.trim()) return '?';
+          const words = value.trim().split(/\s+/).filter(Boolean);
+          if (words.length === 0) return '?';
+          if (words.length === 1) {
+            return words[0].slice(0, 2).toUpperCase();
+          }
+          return `${words[0].slice(0, 1)}${words[1].slice(0, 1)}`.toUpperCase();
+        },
+
+        formatMessageTime(isoValue) {
+          if (!this.isValidIso(isoValue)) return '';
+          const date = new Date(isoValue);
+          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        },
+
+        formatListTime(isoValue) {
+          if (!this.isValidIso(isoValue)) return '';
+          const date = new Date(isoValue);
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+          const diffDays = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
+          if (diffDays <= 0) return this.formatMessageTime(isoValue);
+          if (diffDays === 1) return this.t('yesterday');
+          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        },
+
+        resolveMessageDateLabel(isoValue) {
+          if (!this.isValidIso(isoValue)) return this.t('today');
+          const date = new Date(isoValue);
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+          const diffDays = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
+          if (diffDays <= 0) return this.t('today');
+          if (diffDays === 1) return this.t('yesterday');
+          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        },
+
+        buildParticipant(peerUid, profile) {
+          const uid = this.normalizeUid(peerUid);
+          const username = typeof profile?.username === 'string' ? profile.username.trim() : '';
+          const displayName = typeof profile?.displayName === 'string' ? profile.displayName.trim() : '';
+          const primaryName = username || displayName || this.fallbackUserLabel(uid);
+          const subtitle = displayName && displayName !== primaryName ? displayName : this.t('offline');
+          const photoUrlRaw = typeof profile?.photoUrl === 'string'
+            ? profile.photoUrl
+            : (typeof profile?.avatarUrl === 'string' ? profile.avatarUrl : '');
+          const photoUrl = photoUrlRaw && photoUrlRaw.trim().length > 0 ? photoUrlRaw.trim() : null;
+          return {
+            id: uid,
+            name: primaryName,
+            username,
+            displayName,
+            initials: this.buildInitials(primaryName),
+            status: subtitle,
+            photoUrl,
+          };
+        },
+
+        normalizeDmMessages(rows) {
+          const list = Array.isArray(rows) ? rows : [];
+          const normalized = list
+            .map((row, index) => {
+              const source = row && typeof row === 'object' ? row : {};
+              const createdAt = typeof source.createdAt === 'string' ? source.createdAt : '';
+              const senderId = this.normalizeUid(source.senderUid);
+              const text = typeof source.text === 'string' ? source.text.trim() : '';
+              const clientMessageId = this.normalizeUid(source.clientMessageId);
+              const fallbackId = `msg_${Date.now()}_${index}`;
+              const id = typeof source.id === 'string' && source.id.trim() ? source.id.trim() : fallbackId;
+              return {
+                id,
+                clientMessageId,
+                senderId,
+                text,
+                timestamp: this.formatMessageTime(createdAt),
+                status: senderId === this.currentUserId ? this.t('sent') : '',
+                createdAt,
+              };
+            })
+            .filter((item) => item.text.length > 0)
+            .sort((left, right) => (left.createdAt || '').localeCompare(right.createdAt || ''));
+          return this.dedupeThreadMessages(normalized);
+        },
+
+        normalizeMessageForKey(message) {
+          const source = message && typeof message === 'object' ? message : {};
+          const id = this.normalizeUid(source.id);
+          const clientMessageId = this.normalizeUid(source.clientMessageId);
+          const senderId = this.normalizeUid(source.senderId);
+          const text = typeof source.text === 'string' ? source.text.trim() : '';
+          const createdAt = typeof source.createdAt === 'string' ? source.createdAt : '';
+          return {
+            id,
+            clientMessageId,
+            senderId,
+            text,
+            createdAt,
+            status: typeof source.status === 'string' ? source.status : '',
+            timestamp: typeof source.timestamp === 'string' ? source.timestamp : this.formatMessageTime(createdAt),
+          };
+        },
+
+        messageMergeKey(message) {
+          const normalized = this.normalizeMessageForKey(message);
+          if (normalized.clientMessageId) {
+            return `cm:${normalized.senderId}|${normalized.clientMessageId}`;
+          }
+          if (normalized.id) return `id:${normalized.id}`;
+          return `sig:${normalized.senderId}|${normalized.createdAt}|${normalized.text}`;
+        },
+
+        dedupeThreadMessages(messages) {
+          const source = Array.isArray(messages) ? messages : [];
+          const byKey = new Map();
+          source.forEach((message) => {
+            const normalized = this.normalizeMessageForKey(message);
+            if (!normalized.text) return;
+            const key = this.messageMergeKey(normalized);
+            const previous = byKey.get(key);
+            if (!previous) {
+              byKey.set(key, normalized);
+              return;
+            }
+            const previousIsPending = this.normalizeUid(previous.id).startsWith('pending_');
+            const nextIsPending = this.normalizeUid(normalized.id).startsWith('pending_');
+            if (previousIsPending && !nextIsPending) {
+              byKey.set(key, normalized);
+              return;
+            }
+            if ((normalized.createdAt || '').localeCompare(previous.createdAt || '') > 0) {
+              byKey.set(key, normalized);
+              return;
+            }
+            if (
+              normalized.createdAt === previous.createdAt
+              && normalized.id
+              && normalized.id.localeCompare(previous.id || '') > 0
+            ) {
+              byKey.set(key, normalized);
+            }
+          });
+          return Array.from(byKey.values())
+            .sort((left, right) => (left.createdAt || '').localeCompare(right.createdAt || ''));
+        },
+
+        mergeThreadMessages(existingMessages, serverMessages) {
+          const existing = Array.isArray(existingMessages) ? existingMessages : [];
+          const incoming = Array.isArray(serverMessages) ? serverMessages : [];
+          const serverDeduped = this.dedupeThreadMessages(incoming);
+          const serverKeys = new Set(serverDeduped.map((message) => this.messageMergeKey(message)));
+          const pendingFromExisting = existing.filter((message) => {
+            const normalizedId = this.normalizeUid(message?.id);
+            if (!normalizedId.startsWith('pending_')) return false;
+            const key = this.messageMergeKey(message);
+            return !serverKeys.has(key);
+          });
+          return this.dedupeThreadMessages([...serverDeduped, ...pendingFromExisting]);
+        },
+
+        resolveThreadPeerUid(threadRow) {
+          const source = threadRow && typeof threadRow === 'object' ? threadRow : {};
+          const members = Array.isArray(source.members)
+            ? source.members.map((value) => this.normalizeUid(value)).filter(Boolean)
+            : [];
+          if (members.length === 0 || !members.includes(this.currentUserId)) {
+            return '';
+          }
+          const peer = members.find((uid) => uid !== this.currentUserId);
+          return peer || '';
+        },
+
+        resolveLastSummary(messages, fallbackIso) {
+          if (messages.length > 0) {
+            const tail = messages[messages.length - 1];
+            const iso = this.isValidIso(tail.createdAt) ? tail.createdAt : fallbackIso;
+            const timestamp = this.formatListTime(iso);
+            return {
+              text: tail.text,
+              timestamp,
+              iso,
+            };
+          }
+          return {
+            text: this.t('noMessagesYet'),
+            timestamp: this.formatListTime(fallbackIso),
+            iso: fallbackIso,
+          };
+        },
+
+        resolveThreadSummary(threadRow) {
+          const source = threadRow && typeof threadRow === 'object' ? threadRow : {};
+          const updatedAt = typeof source.updatedAt === 'string' ? source.updatedAt : '';
+          const lastMessageAt = typeof source.lastMessageAt === 'string' ? source.lastMessageAt : '';
+          const iso = this.isValidIso(lastMessageAt)
+            ? lastMessageAt
+            : (this.isValidIso(updatedAt) ? updatedAt : '');
+          const textRaw = typeof source.lastMessageText === 'string' ? source.lastMessageText.trim() : '';
+          const text = textRaw || this.t('noMessagesYet');
+          return {
+            text,
+            timestamp: this.formatListTime(iso),
+            iso,
+          };
+        },
+
+        buildChatRecord(params) {
+          const threadId = this.normalizeUid(params?.threadId);
+          const peerUid = this.normalizeUid(params?.peerUid);
+          const messages = Array.isArray(params?.messages) ? params.messages : [];
+          const updatedAt = typeof params?.updatedAt === 'string' ? params.updatedAt : '';
+          const summaryCandidate = params?.summary && typeof params.summary === 'object' ? params.summary : null;
+          const summary = summaryCandidate
+            ? {
+              text: typeof summaryCandidate.text === 'string' && summaryCandidate.text.trim()
+                ? summaryCandidate.text.trim()
+                : this.t('noMessagesYet'),
+              timestamp: typeof summaryCandidate.timestamp === 'string'
+                ? summaryCandidate.timestamp
+                : this.formatListTime(typeof summaryCandidate.iso === 'string' ? summaryCandidate.iso : updatedAt),
+              iso: typeof summaryCandidate.iso === 'string' ? summaryCandidate.iso : updatedAt,
+            }
+            : this.resolveLastSummary(messages, updatedAt);
+          return {
+            id: threadId,
+            participant: this.buildParticipant(peerUid, params?.profile || null),
+            unreadCount: 0,
+            lastMessage: {
+              text: summary.text,
+              timestamp: summary.timestamp,
+            },
+            lastTime: summary.timestamp,
+            messages,
+            peerUid,
+            updatedAt: summary.iso || updatedAt,
+          };
+        },
+
+        messageIdentityKey(message) {
+          const source = message && typeof message === 'object' ? message : {};
+          const stableId = this.normalizeUid(source.id);
+          if (stableId) return `id:${stableId}`;
+          const senderId = this.normalizeUid(source.senderId);
+          const createdAt = typeof source.createdAt === 'string' ? source.createdAt : '';
+          const text = typeof source.text === 'string' ? source.text.trim() : '';
+          return `sig:${senderId}|${createdAt}|${text}`;
+        },
+
+        countIncomingMessagesDelta(previousMessages, nextMessages) {
+          const previous = Array.isArray(previousMessages) ? previousMessages : [];
+          const next = Array.isArray(nextMessages) ? nextMessages : [];
+          const knownKeys = new Set(previous.map((message) => this.messageIdentityKey(message)).filter(Boolean));
+          let delta = 0;
+          next.forEach((message) => {
+            const key = this.messageIdentityKey(message);
+            if (!key || knownKeys.has(key)) return;
+            knownKeys.add(key);
+            const senderId = this.normalizeUid(message?.senderId);
+            if (senderId && senderId !== this.currentUserId) {
+              delta += 1;
+            }
+          });
+          return delta;
+        },
+
+        mergeChatsSnapshot(nextChats, options = {}) {
+          const incoming = Array.isArray(nextChats) ? nextChats : [];
+          const current = Array.isArray(this.chats) ? this.chats : [];
+          const currentById = new Map(
+            current
+              .map((chat) => [this.normalizeUid(chat?.id), chat])
+              .filter(([id]) => Boolean(id)),
+          );
+          const initialLoad = Boolean(options.initialLoad);
+          const activeId = this.normalizeUid(this.activeChatId);
+
+          const merged = incoming
+            .map((nextChat) => {
+              const chatId = this.normalizeUid(nextChat?.id);
+              if (!chatId) return null;
+              const existing = currentById.get(chatId) || null;
+              const baseUnread = typeof existing?.unreadCount === 'number' ? existing.unreadCount : 0;
+
+              let unreadCount = baseUnread;
+              if (chatId === activeId) {
+                unreadCount = 0;
+              } else if (existing) {
+                unreadCount = baseUnread + this.countIncomingMessagesDelta(existing.messages, nextChat.messages);
+              } else if (initialLoad) {
+                unreadCount = 0;
+              } else {
+                unreadCount = this.countIncomingMessagesDelta([], nextChat.messages);
+              }
+
+              return {
+                ...nextChat,
+                participant: {
+                  ...(existing?.participant || {}),
+                  ...(nextChat?.participant || {}),
+                },
+                unreadCount: Math.max(0, unreadCount),
+              };
+            })
+            .filter(Boolean);
+
+          const deduped = this.dedupeChatsByPeer(merged);
+          deduped.sort((left, right) => (right.updatedAt || '').localeCompare(left.updatedAt || ''));
+          this.chats = deduped;
+
+          if (!this.activeChatId || !deduped.some((chat) => chat.id === this.activeChatId)) {
+            this.activeChatId = deduped[0]?.id || null;
+          }
+        },
+
+        dedupeChatsByPeer(chats) {
+          const source = Array.isArray(chats) ? chats : [];
+          const byPeer = new Map();
+          source.forEach((chat) => {
+            const peerUid = this.normalizeUid(chat?.peerUid || chat?.participant?.id);
+            const chatId = this.normalizeUid(chat?.id);
+            if (!peerUid || !chatId) return;
+            const previous = byPeer.get(peerUid);
+            if (!previous) {
+              byPeer.set(peerUid, chat);
+              return;
+            }
+            const prevUpdatedAt = typeof previous.updatedAt === 'string' ? previous.updatedAt : '';
+            const nextUpdatedAt = typeof chat.updatedAt === 'string' ? chat.updatedAt : '';
+            if (nextUpdatedAt.localeCompare(prevUpdatedAt) > 0) {
+              byPeer.set(peerUid, chat);
+              return;
+            }
+            if (nextUpdatedAt === prevUpdatedAt) {
+              const prevMessagesCount = Array.isArray(previous.messages) ? previous.messages.length : 0;
+              const nextMessagesCount = Array.isArray(chat.messages) ? chat.messages.length : 0;
+              if (nextMessagesCount > prevMessagesCount) {
+                byPeer.set(peerUid, chat);
+                return;
+              }
+              if (nextMessagesCount === prevMessagesCount && chatId.localeCompare(this.normalizeUid(previous.id)) > 0) {
+                byPeer.set(peerUid, chat);
+              }
+            }
+          });
+          return Array.from(byPeer.values());
+        },
+
+        getStableVisibleChats() {
+          const source = Array.isArray(this.chats) ? this.chats : [];
+          const deduped = this.dedupeChatsByPeer(source);
+          deduped.sort((left, right) => {
+            const rightTs = typeof right.updatedAt === 'string' ? right.updatedAt : '';
+            const leftTs = typeof left.updatedAt === 'string' ? left.updatedAt : '';
+            const tsCompare = rightTs.localeCompare(leftTs);
+            if (tsCompare !== 0) return tsCompare;
+            const rightId = this.normalizeUid(right?.id);
+            const leftId = this.normalizeUid(left?.id);
+            return rightId.localeCompare(leftId);
+          });
+          return deduped;
+        },
+
+        markChatAsRead(chatId) {
+          const targetId = this.normalizeUid(chatId);
+          if (!targetId) return;
+          this.chats = this.chats.map((chat) => (
+            chat.id === targetId
+              ? { ...chat, unreadCount: 0 }
+              : chat
+          ));
+        },
+
+        async resolveProfile(peerUid, options = {}) {
+          const uid = this.normalizeUid(peerUid);
+          if (!uid || !this.client || typeof this.client.socialProfileGet !== 'function') return null;
+          const force = Boolean(options.force);
+          const cacheOnly = Boolean(options.cacheOnly);
+          if (!force && this.profileCacheByUid[uid]) {
+            return this.profileCacheByUid[uid];
+          }
+          if (cacheOnly) return null;
+          try {
+            const profile = await this.client.socialProfileGet(uid);
+            this.profileCacheByUid = {
+              ...this.profileCacheByUid,
+              [uid]: profile,
+            };
+            return profile;
+          } catch (error) {
+            if (!force && this.profileCacheByUid[uid]) {
+              return this.profileCacheByUid[uid];
+            }
+            return null;
+          }
+        },
+
+        async buildChatFromThread(threadRow, existingChat = null) {
+          const source = threadRow && typeof threadRow === 'object' ? threadRow : {};
+          const threadId = this.normalizeUid(source.id);
+          if (!threadId) return null;
+          const peerUid = this.resolveThreadPeerUid(source);
+          if (!peerUid) return null;
+
+          const profile = await this.resolveProfile(peerUid, { cacheOnly: true });
+          const messages = Array.isArray(existingChat?.messages) ? existingChat.messages : [];
+          const updatedAt = typeof source.updatedAt === 'string' ? source.updatedAt : '';
+          const lastMessageAt = typeof source.lastMessageAt === 'string' ? source.lastMessageAt : updatedAt;
+          const threadSummary = this.resolveThreadSummary(source);
+          const messageSummary = this.resolveLastSummary(messages, lastMessageAt);
+          const hasThreadSummary = threadSummary.iso && threadSummary.iso.localeCompare(messageSummary.iso || '') >= 0;
+          const summary = hasThreadSummary ? threadSummary : messageSummary;
+          return this.buildChatRecord({
+            threadId,
+            peerUid,
+            profile,
+            messages,
+            summary,
+            updatedAt: lastMessageAt,
+          });
+        },
+
+        async hydrateListProfiles(chats, options = {}) {
+          if (!Array.isArray(chats) || chats.length === 0) return;
+          const limitRaw = typeof options.limit === 'number' && Number.isFinite(options.limit) ? options.limit : 12;
+          const limitCount = Math.max(1, Math.floor(limitRaw));
+          const candidateUids = chats
+            .map((chat) => this.normalizeUid(chat?.peerUid || chat?.participant?.id))
+            .filter(Boolean);
+          const dedupedUids = Array.from(new Set(candidateUids)).slice(0, limitCount);
+          if (dedupedUids.length === 0) return;
+
+          const profileRows = await Promise.all(dedupedUids.map(async (uid) => {
+            const profile = await this.resolveProfile(uid);
+            return profile ? [uid, profile] : null;
+          }));
+          const profileByUid = new Map(profileRows.filter(Boolean));
+          if (profileByUid.size === 0) return;
+
+          this.chats = this.chats.map((chat) => {
+            const uid = this.normalizeUid(chat?.participant?.id || chat?.peerUid);
+            const profile = profileByUid.get(uid);
+            if (!profile) return chat;
+            return {
+              ...chat,
+              participant: this.buildParticipant(uid, profile),
+            };
+          });
+        },
+
+        async loadChatsFromApi(options = {}) {
+          if (!this.client || typeof this.client.socialDmListThreads !== 'function') return;
+          const silent = Boolean(options.silent);
+          const initialLoad = Boolean(options.initialLoad);
+          const retriedAfterAuthRefresh = Boolean(options.retriedAfterAuthRefresh);
+          const retriedAfterSessionRecovery = Boolean(options.retriedAfterSessionRecovery);
+          const syncRequestId = Number.isFinite(options.syncRequestId)
+            ? Number(options.syncRequestId)
+            : (this.syncRequestCounter += 1);
+          if (syncRequestId > this.latestSyncRequestId) {
+            this.latestSyncRequestId = syncRequestId;
+          }
+          if (!silent) {
+            this.isLoadingChats = true;
+            this.status = this.t('syncingChats');
+            this.error = '';
+          }
+          this.appendDebugEvent({
+            kind: 'boo.sync.start',
+            payload: {
+              operation: 'social.dm.listThreads',
+              silent,
+              initialLoad,
+              syncRequestId,
+            },
+          });
+          try {
+            const threads = await this.client.socialDmListThreads();
+            const activeChatId = this.normalizeUid(this.activeChatId);
+            const existingByThreadId = new Map(
+              (Array.isArray(this.chats) ? this.chats : [])
+                .map((chat) => [this.normalizeUid(chat?.id), chat])
+                .filter(([id]) => Boolean(id)),
+            );
+            const mapped = await Promise.all((Array.isArray(threads) ? threads : []).map((row) => {
+              const threadId = this.normalizeUid(row?.id);
+              return this.buildChatFromThread(row, threadId ? existingByThreadId.get(threadId) : null);
+            }));
+            const nextChats = mapped
+              .filter(Boolean)
+              .sort((left, right) => (right.updatedAt || '').localeCompare(left.updatedAt || ''));
+            if (this.isStaleSyncRequest(syncRequestId)) {
+              this.appendDebugEvent({
+                kind: 'boo.sync.drop',
+                payload: {
+                  operation: 'social.dm.listThreads',
+                  reason: 'stale-success',
+                  syncRequestId,
+                  latestSyncRequestId: this.latestSyncRequestId,
+                },
+              });
+              return;
+            }
+            this.mergeChatsSnapshot(nextChats, { initialLoad });
+            const activeBefore = activeChatId
+              ? this.normalizeUid(existingByThreadId.get(activeChatId)?.updatedAt || '')
+              : '';
+            const activeAfter = activeChatId
+              ? this.normalizeUid((nextChats.find((chat) => this.normalizeUid(chat?.id) === activeChatId)?.updatedAt) || '')
+              : '';
+            if (
+              this.integrationMode === 'connected'
+              && this.view === 'thread'
+              && activeChatId
+              && activeAfter
+              && activeAfter !== activeBefore
+            ) {
+              this.refreshChatMessages(activeChatId, { markAsRead: true }).catch((error) => {
+                console.warn(`Failed to refresh active thread ${activeChatId} after list sync:`, error);
               });
             }
-
-            await this.loadProfileIdentity();
-            await this.loadRecentThreads();
-            this.startChatsAutoRefresh();
-            this.setBootState('ready');
+            this.hydrateListProfiles(nextChats, { limit: 12 }).catch((error) => {
+              console.warn('Failed to hydrate Boo chat profiles:', error);
+            });
+            this.lastSuccessfulSyncAt = new Date().toISOString();
+            this.error = '';
+            this.lastFailure = null;
+            this.appendDebugEvent({
+              kind: 'boo.sync.ok',
+              payload: {
+                operation: 'social.dm.listThreads',
+                threadCount: Array.isArray(threads) ? threads.length : 0,
+                chatCount: nextChats.length,
+                syncRequestId,
+              },
+            });
           } catch (error) {
-            this.errorMessage = this.mapError(error);
-            this.captureDebugError('init', error);
-            if (String(this.errorMessage).includes('Authentication failed')) {
-              this.setBootState('auth-failed');
-            } else {
-              this.setBootState('error');
+            if (this.isStaleSyncRequest(syncRequestId)) {
+              this.appendDebugEvent({
+                kind: 'boo.sync.drop',
+                payload: {
+                  operation: 'social.dm.listThreads',
+                  reason: 'stale-failure',
+                  syncRequestId,
+                  latestSyncRequestId: this.latestSyncRequestId,
+                },
+              });
+              return;
             }
+            if (
+              !retriedAfterAuthRefresh
+              && this.integrationMode === 'connected'
+              && this.isPermissionDeniedError(error)
+              && this.client
+              && typeof this.client.getIdToken === 'function'
+            ) {
+              try {
+                await this.client.getIdToken(true);
+                this.appendDebugEvent({
+                  kind: 'boo.auth.refresh',
+                  payload: { reason: 'permission-denied', operation: 'social.dm.listThreads', syncRequestId },
+                });
+                await this.loadChatsFromApi({
+                  ...options,
+                  syncRequestId,
+                  retriedAfterAuthRefresh: true,
+                });
+                return;
+              } catch (refreshError) {
+                console.warn('Boo auth refresh retry failed:', refreshError);
+              }
+            }
+            if (
+              !retriedAfterSessionRecovery
+              && this.integrationMode === 'connected'
+              && this.isPermissionDeniedError(error)
+            ) {
+              const recovered = await this.attemptSessionRecovery('social.dm.listThreads.permissionDenied');
+              if (recovered) {
+                await this.loadChatsFromApi({
+                  ...options,
+                  syncRequestId,
+                  retriedAfterSessionRecovery: true,
+                });
+                return;
+              }
+            }
+            this.captureFailure('social.dm.listThreads', error, {
+              silent,
+              retried: retriedAfterAuthRefresh,
+              recovered: retriedAfterSessionRecovery,
+              integrationMode: this.integrationMode,
+              appId: this.appId,
+              uid: this.currentUserId,
+              syncRequestId,
+            });
+            if (!silent) {
+              this.error = this.mapSocialError(error);
+              this.status = this.t('syncFailed');
+            }
+            console.warn('Failed to sync Boo chats:', error);
           } finally {
-            this.loading = false;
+            if (!silent && !this.isStaleSyncRequest(syncRequestId)) {
+              this.isLoadingChats = false;
+            }
           }
+        },
+
+        async refreshProfileForUid(uid) {
+          const profile = await this.resolveProfile(uid, { force: true });
+          if (!profile) return;
+          const normalizedUid = this.normalizeUid(uid);
+          if (!normalizedUid) return;
+          this.chats = this.chats.map((chat) => {
+            if (chat.participant.id !== normalizedUid) return chat;
+            return {
+              ...chat,
+              participant: this.buildParticipant(normalizedUid, profile),
+            };
+          });
+        },
+
+        async refreshChatMessages(chatId, options = {}) {
+          if (!this.client || typeof this.client.socialDmListMessages !== 'function') return;
+          const activeId = this.normalizeUid(chatId);
+          if (!activeId) return;
+          const refreshSeq = this.nextMessageRefreshSeq(activeId);
+          const markAsRead = Boolean(options.markAsRead);
+          try {
+            const rows = await this.client.socialDmListMessages(activeId, undefined, 80);
+            if (this.isStaleMessageRefresh(activeId, refreshSeq)) {
+              return;
+            }
+            const existing = this.chats.find((chat) => chat.id === activeId);
+            if (!existing) return;
+            const serverMessages = this.normalizeDmMessages(rows);
+            const messages = this.mergeThreadMessages(existing.messages, serverMessages);
+            const summary = this.resolveLastSummary(messages, existing.updatedAt || '');
+            const incomingDelta = this.countIncomingMessagesDelta(existing.messages, messages);
+            const shouldAutoScroll = this.shouldAutoScrollThread(activeId, {
+              incoming: incomingDelta > 0,
+            });
+            const unreadCount = markAsRead || activeId === this.activeChatId
+              ? 0
+              : Math.max(0, (typeof existing.unreadCount === 'number' ? existing.unreadCount : 0) + incomingDelta);
+            this.chats = this.chats.map((chat) => {
+              if (chat.id !== activeId) return chat;
+              return {
+                ...chat,
+                messages,
+                unreadCount,
+                lastMessage: {
+                  text: summary.text,
+                  timestamp: summary.timestamp,
+                },
+                lastTime: summary.timestamp,
+                updatedAt: summary.iso || chat.updatedAt,
+              };
+            });
+            if (shouldAutoScroll) {
+              this.clearPendingIncoming(activeId);
+              this.scheduleScrollThreadToBottom({ smooth: incomingDelta > 0 });
+            } else if (incomingDelta > 0) {
+              this.incrementPendingIncoming(activeId, incomingDelta);
+            }
+          } catch (error) {
+            if (this.isStaleMessageRefresh(activeId, refreshSeq)) {
+              return;
+            }
+            console.warn(`Failed to refresh messages for ${activeId}:`, error);
+          }
+        },
+
+        upsertChat(nextChat) {
+          if (!nextChat || !nextChat.id) return;
+          const nextId = this.normalizeUid(nextChat.id);
+          if (!nextId) return;
+          const nextPeerUid = this.normalizeUid(nextChat.peerUid || nextChat?.participant?.id);
+          const current = Array.isArray(this.chats) ? this.chats : [];
+          const indexById = current.findIndex((chat) => this.normalizeUid(chat.id) === nextId);
+          const indexByPeer = indexById >= 0
+            ? -1
+            : current.findIndex((chat) => this.normalizeUid(chat.peerUid || chat?.participant?.id) === nextPeerUid);
+          const targetIndex = indexById >= 0 ? indexById : indexByPeer;
+
+          let nextList = [];
+          if (targetIndex >= 0) {
+            const existing = current[targetIndex];
+            const merged = {
+              ...existing,
+              ...nextChat,
+              participant: {
+                ...(existing?.participant || {}),
+                ...(nextChat?.participant || {}),
+              },
+              unreadCount: typeof existing?.unreadCount === 'number' ? existing.unreadCount : 0,
+            };
+            nextList = current.map((chat, idx) => (idx === targetIndex ? merged : chat));
+          } else {
+            nextList = [nextChat, ...current];
+          }
+
+          const deduped = this.dedupeChatsByPeer(nextList);
+          deduped.sort((left, right) => (right.updatedAt || '').localeCompare(left.updatedAt || ''));
+          this.chats = deduped;
+        },
+
+        async openChatWithProfile(profileRow) {
+          if (this.isOpeningThread) return;
+          const peerUid = this.normalizeUid(profileRow?.uid);
+          if (!peerUid || peerUid === this.currentUserId) return;
+
+          const existing = this.chats.find((chat) => chat.peerUid === peerUid || chat.participant.id === peerUid);
+          if (existing) {
+            this.closeNewChatComposer();
+            await this.openChat(existing.id);
+            return;
+          }
+
+          if (
+            this.integrationMode !== 'connected'
+            || !this.client
+            || typeof this.client.socialDmOpenThread !== 'function'
+            || typeof this.client.socialDmListMessages !== 'function'
+          ) {
+            this.newChatError = this.t('newChatUnavailable');
+            return;
+          }
+
+          this.isOpeningThread = true;
+          this.newChatError = '';
+          try {
+            const openResult = await this.client.socialDmOpenThread(peerUid);
+            const threadId = this.normalizeUid(openResult?.threadId);
+            if (!threadId) {
+              throw new Error('Failed to open DM thread');
+            }
+
+            let rows = [];
+            try {
+              rows = await this.client.socialDmListMessages(threadId, undefined, 80);
+            } catch (error) {
+              console.warn(`Failed to list initial messages for ${threadId}:`, error);
+            }
+            const messages = this.normalizeDmMessages(rows);
+            const cached = await this.resolveProfile(peerUid, { force: true });
+            const fallbackProfile = {
+              uid: peerUid,
+              username: typeof profileRow?.username === 'string' ? profileRow.username : '',
+              displayName: typeof profileRow?.displayName === 'string' ? profileRow.displayName : '',
+              photoUrl: typeof profileRow?.photoUrl === 'string' ? profileRow.photoUrl : null,
+              avatarUrl: typeof profileRow?.avatarUrl === 'string' ? profileRow.avatarUrl : null,
+            };
+            const chat = this.buildChatRecord({
+              threadId,
+              peerUid,
+              profile: cached || fallbackProfile,
+              messages,
+              updatedAt: new Date().toISOString(),
+            });
+            this.upsertChat(chat);
+            this.closeNewChatComposer();
+            await this.openChat(threadId);
+          } catch (error) {
+            this.newChatError = this.mapSocialError(error);
+            console.warn('Failed to open chat from profile search:', error);
+          } finally {
+            this.isOpeningThread = false;
+          }
+        },
+
+        appendMessage(chatId, message) {
+          const targetId = this.normalizeUid(chatId);
+          if (!targetId) return;
+          const isOutgoing = this.normalizeUid(message?.senderId) === this.currentUserId;
+          const shouldAutoScroll = this.shouldAutoScrollThread(targetId, {
+            outgoing: isOutgoing,
+            incoming: !isOutgoing,
+          });
+          const previewTimestamp = this.formatListTime(message.createdAt || new Date().toISOString());
+          this.chats = this.chats.map((chat) => {
+            if (chat.id !== targetId) return chat;
+            const nextMessages = this.mergeThreadMessages(chat.messages, [message]);
+            return {
+              ...chat,
+              messages: nextMessages,
+              lastMessage: {
+                text: message.text,
+                timestamp: previewTimestamp,
+              },
+              lastTime: previewTimestamp,
+              updatedAt: message.createdAt || chat.updatedAt,
+            };
+          });
+          if (shouldAutoScroll) {
+            this.clearPendingIncoming(targetId);
+            this.scheduleScrollThreadToBottom({ smooth: true });
+          } else if (!isOutgoing) {
+            this.incrementPendingIncoming(targetId, 1);
+          }
+        },
+
+        patchMessage(chatId, messageId, patch) {
+          const targetId = this.normalizeUid(chatId);
+          const targetMessageId = this.normalizeUid(messageId);
+          if (!targetId || !targetMessageId) return;
+          const shouldAutoScroll = this.shouldAutoScrollThread(targetId);
+          this.chats = this.chats.map((chat) => {
+            if (chat.id !== targetId) return chat;
+            const patchClientMessageId = this.normalizeUid(patch?.clientMessageId);
+            const nextMessages = chat.messages.map((message) => {
+              const currentId = this.normalizeUid(message?.id);
+              const currentClientMessageId = this.normalizeUid(message?.clientMessageId);
+              const shouldPatchById = currentId === targetMessageId;
+              const shouldPatchByClientMessageId = Boolean(
+                patchClientMessageId
+                && currentClientMessageId
+                && patchClientMessageId === currentClientMessageId,
+              );
+              if (!shouldPatchById && !shouldPatchByClientMessageId) {
+                return message;
+              }
+              return { ...message, ...patch };
+            });
+            const dedupedMessages = this.dedupeThreadMessages(nextMessages);
+            return {
+              ...chat,
+              messages: dedupedMessages,
+            };
+          });
+          if (shouldAutoScroll) {
+            this.scheduleScrollThreadToBottom({ smooth: false });
+          }
+        },
+
+        async loadLanguage() {
+          if (!this.client || typeof this.client.getLanguage !== 'function') return;
+          try {
+            const language = await this.client.getLanguage();
+            this.applyLanguage(language);
+          } catch (error) {
+            console.warn('Failed to resolve language:', error);
+          }
+        },
+
+        subscribeLanguageChanges() {
+          if (!this.client || typeof this.client.onLanguageChanged !== 'function') return;
+          this.client.onLanguageChanged((language) => {
+            this.applyLanguage(language);
+          });
+        },
+
+        subscribeRealtimeContracts() {
+          this.subscribeSocialProfileUpdates();
+          this.subscribeDebugTrace();
+        },
+
+        subscribeSocialProfileUpdates() {
+          if (!this.client || typeof this.client.onSocialProfileUpdated !== 'function') return;
+          this.client.onSocialProfileUpdated((payload) => {
+            this.appendDebugEvent({ kind: 'social.profile.updated', payload });
+            if (payload && typeof payload.uid === 'string' && payload.uid.trim()) {
+              void this.refreshProfileForUid(payload.uid);
+            }
+          });
+        },
+
+        subscribeDebugTrace() {
+          if (!this.client || typeof this.client.onDebugTrace !== 'function') return;
+          this.client.onDebugTrace((payload) => {
+            this.appendDebugEvent({ kind: 'debug.trace', payload });
+          });
+        },
+
+        appendDebugEvent(payload) {
+          if (!this.debugEnabled) return;
+          const next = [
+            {
+              at: new Date().toISOString(),
+              payload,
+            },
+            ...this.debugEvents,
+          ];
+          this.debugEvents = next.slice(0, 80);
+        },
+
+        applyLanguage(language) {
+          const normalized = language === 'hy' ? 'hy' : 'en';
+          this.language = normalized;
+          document.documentElement.lang = normalized;
+        },
+
+        async loadOsTheme() {
+          if (!this.client || typeof this.client.getModuleValue !== 'function') return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'black';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            this.osTheme = 'black';
+            this.applyOsTheme(this.osTheme);
+            console.warn('Failed to resolve OS theme:', error);
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            document.documentElement.setAttribute('data-theme', 'black');
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        filteredChats() {
+          const q = this.normalizeSearchText(this.searchQuery);
+          let visible = this.getStableVisibleChats();
+          if (this.activeTab === 'unread') {
+            visible = visible.filter((chat) => chat.unreadCount > 0);
+          }
+          if (!q) return visible;
+          return visible.filter((chat) =>
+            this.normalizeSearchText(chat?.participant?.name || '').includes(q)
+            || this.normalizeSearchText(chat?.participant?.username || '').includes(q)
+            || this.normalizeSearchText(chat?.participant?.displayName || '').includes(q)
+            || this.normalizeSearchText(chat?.lastMessage?.text || '').includes(q),
+          );
+        },
+
+        activeChat() {
+          return this.chats.find((chat) => chat.id === this.activeChatId) || null;
+        },
+
+        activeChatRawMessages() {
+          return this.activeChat()?.messages || [];
+        },
+
+        activeChatMessages() {
+          const raw = this.activeChatRawMessages();
+          let previousLabel = '';
+          return raw.flatMap((message, index) => {
+            const label = this.resolveMessageDateLabel(message?.createdAt);
+            if (!label || label === previousLabel) {
+              return [message];
+            }
+            previousLabel = label;
+            return [{
+              id: `sep_${index}_${encodeURIComponent(label)}`,
+              type: 'separator',
+              label,
+            }, message];
+          });
+        },
+
+        isMessagesListNearBottom() {
+          const el = this.$refs?.messagesList;
+          if (!el) return true;
+          const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+          return distance <= this.messageListBottomThresholdPx;
+        },
+
+        updateMessagesPinnedState() {
+          this.messagesPinnedToBottom = this.isMessagesListNearBottom();
+          if (this.messagesPinnedToBottom) {
+            this.clearPendingIncomingForActiveChat();
+          }
+        },
+
+        incrementPendingIncoming(chatId, delta = 1) {
+          const targetId = this.normalizeUid(chatId);
+          if (!targetId) return;
+          const safeDelta = Number.isFinite(delta) ? Math.max(0, Math.floor(delta)) : 0;
+          if (!safeDelta) return;
+          const current = Number(this.pendingIncomingCountByChat[targetId] || 0);
+          this.pendingIncomingCountByChat = {
+            ...this.pendingIncomingCountByChat,
+            [targetId]: current + safeDelta,
+          };
+        },
+
+        clearPendingIncoming(chatId) {
+          const targetId = this.normalizeUid(chatId);
+          if (!targetId || !this.pendingIncomingCountByChat[targetId]) return;
+          const next = { ...this.pendingIncomingCountByChat };
+          delete next[targetId];
+          this.pendingIncomingCountByChat = next;
+        },
+
+        clearPendingIncomingForActiveChat() {
+          this.clearPendingIncoming(this.activeChatId);
+        },
+
+        pendingIncomingCountForActiveChat() {
+          const activeId = this.normalizeUid(this.activeChatId);
+          if (!activeId) return 0;
+          const value = Number(this.pendingIncomingCountByChat[activeId] || 0);
+          return Number.isFinite(value) && value > 0 ? value : 0;
+        },
+
+        showJumpToLatestButton() {
+          return !this.messagesPinnedToBottom && this.pendingIncomingCountForActiveChat() > 0;
+        },
+
+        bindMessagesListObserver() {
+          if (this.messageListObserver) return;
+          const el = this.$refs?.messagesList;
+          if (!el || typeof MutationObserver !== 'function') return;
+          this.messageListObserver = new MutationObserver(() => {
+            if (this.view !== 'thread') return;
+            if (!this.messagesPinnedToBottom) return;
+            this.scheduleScrollThreadToBottom({ smooth: false });
+          });
+          this.messageListObserver.observe(el, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        },
+
+        unbindMessagesListObserver() {
+          if (!this.messageListObserver) return;
+          this.messageListObserver.disconnect();
+          this.messageListObserver = null;
+        },
+
+        cancelScheduledThreadScroll() {
+          if (this.threadScrollRafId) {
+            cancelAnimationFrame(this.threadScrollRafId);
+            this.threadScrollRafId = null;
+          }
+          if (this.threadScrollRafNestedId) {
+            cancelAnimationFrame(this.threadScrollRafNestedId);
+            this.threadScrollRafNestedId = null;
+          }
+        },
+
+        shouldAutoScrollThread(chatId, options = {}) {
+          const targetId = this.normalizeUid(chatId);
+          const activeId = this.normalizeUid(this.activeChatId);
+          if (!targetId || !activeId || targetId !== activeId) return false;
+          if (options.force) return true;
+          if (options.outgoing) return true;
+          if (options.incoming && !this.messagesPinnedToBottom && !this.isMessagesListNearBottom()) {
+            return false;
+          }
+          return this.messagesPinnedToBottom || this.isMessagesListNearBottom();
+        },
+
+        scrollThreadToBottom(options = {}) {
+          const el = this.$refs?.messagesList;
+          if (!el) return;
+          const smooth = Boolean(options.smooth);
+          if (smooth && typeof el.scrollTo === 'function') {
+            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          } else {
+            el.scrollTop = el.scrollHeight;
+          }
+          this.messagesPinnedToBottom = true;
+        },
+
+        scheduleScrollThreadToBottom(options = {}) {
+          this.cancelScheduledThreadScroll();
+          this.$nextTick(() => {
+            this.threadScrollRafId = requestAnimationFrame(() => {
+              this.threadScrollRafId = null;
+              this.threadScrollRafNestedId = requestAnimationFrame(() => {
+                this.threadScrollRafNestedId = null;
+                this.scrollThreadToBottom(options);
+              });
+            });
+          });
+        },
+
+        jumpToLatestMessages() {
+          this.scheduleScrollThreadToBottom({ smooth: true });
+          this.clearPendingIncomingForActiveChat();
+        },
+
+        messageDirection(message) {
+          return message.senderId === this.currentUserId ? 'outgoing' : 'incoming';
+        },
+
+        isMessageDeleting(messageId) {
+          const normalized = this.normalizeUid(messageId);
+          return Boolean(normalized && this.deletingMessageIds[normalized]);
+        },
+
+        canDeleteMessage(message) {
+          if (!message || message.type === 'separator') return false;
+          if (this.messageDirection(message) !== 'outgoing') return false;
+          const messageId = this.normalizeUid(message.id);
+          if (!messageId || messageId.startsWith('pending_')) return false;
+          return true;
+        },
+
+        removeMessageFromChat(chatId, messageId) {
+          const targetChatId = this.normalizeUid(chatId);
+          const targetMessageId = this.normalizeUid(messageId);
+          if (!targetChatId || !targetMessageId) return;
+          const shouldAutoScroll = this.shouldAutoScrollThread(targetChatId);
+          this.chats = this.chats.map((chat) => {
+            if (chat.id !== targetChatId) return chat;
+            const nextMessages = Array.isArray(chat.messages)
+              ? chat.messages.filter((item) => this.normalizeUid(item.id) !== targetMessageId)
+              : [];
+            const summary = this.resolveLastSummary(nextMessages, chat.updatedAt || '');
+            return {
+              ...chat,
+              messages: nextMessages,
+              lastMessage: {
+                text: summary.text,
+                timestamp: summary.timestamp,
+              },
+              lastTime: summary.timestamp,
+              updatedAt: summary.iso || chat.updatedAt,
+            };
+          });
+          if (shouldAutoScroll) {
+            this.scheduleScrollThreadToBottom({ smooth: false });
+          }
+        },
+
+        async deleteMessage(message) {
+          if (!this.canDeleteMessage(message)) return;
+          const chat = this.activeChat();
+          if (!chat) return;
+          const chatId = this.normalizeUid(chat.id);
+          const messageId = this.normalizeUid(message.id);
+          if (!chatId || !messageId || this.isMessageDeleting(messageId)) return;
+
+          if (
+            this.integrationMode !== 'connected'
+            || !this.client
+            || typeof this.client.socialDmDeleteMessage !== 'function'
+          ) {
+            this.removeMessageFromChat(chatId, messageId);
+            this.status = this.t('messageDeletedStatus');
+            return;
+          }
+
+          this.deletingMessageIds = {
+            ...this.deletingMessageIds,
+            [messageId]: true,
+          };
+          this.error = '';
+          try {
+            await this.client.socialDmDeleteMessage(chatId, messageId);
+            this.removeMessageFromChat(chatId, messageId);
+            this.status = this.t('messageDeletedStatus');
+            await this.refreshChatMessages(chatId, { markAsRead: true });
+          } catch (error) {
+            const mappedError = this.mapSocialError(error);
+            this.error = mappedError === this.t('syncFailed')
+              ? this.t('deleteMessageFailed')
+              : mappedError;
+            this.status = this.t('syncFailed');
+            console.warn('Failed to delete DM message:', error);
+          } finally {
+            const next = { ...this.deletingMessageIds };
+            delete next[messageId];
+            this.deletingMessageIds = next;
+          }
+        },
+
+        unreadChatsCount() {
+          return this.getStableVisibleChats().filter((chat) => chat.unreadCount > 0).length;
+        },
+
+        isTypingActive() {
+          return this.integrationMode === 'mock' && this.typingChatId === this.activeChatId;
+        },
+
+        canSendMessage() {
+          if (this.composerText.trim().length === 0) return false;
+          if (this.activeChatIsBlocked()) return false;
+          if (this.isActiveChatRateLimited()) return false;
+          const activeId = this.normalizeUid(this.activeChatId);
+          if (activeId && this.sendingMessageByThreadId[activeId]) return false;
+          if (this.integrationMode === 'connected' && this.isSendingMessage) return false;
+          return true;
+        },
+
+        autoGrowComposer() {
+          if (!this.$refs.composer) return;
+          const el = this.$refs.composer;
+          el.style.height = 'auto';
+          el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+        },
+
+        async sendMessage() {
+          const text = this.composerText.trim();
+          if (!text) return;
+          const chat = this.activeChat();
+          if (!chat) return;
+          const chatId = this.normalizeUid(chat.id);
+          if (!chatId) return;
+          if (this.sendingMessageByThreadId[chatId]) return;
+          if (this.activeChatIsBlocked()) {
+            this.error = this.t('blockedHint');
+            return;
+          }
+          this.sendingMessageByThreadId = {
+            ...this.sendingMessageByThreadId,
+            [chatId]: true,
+          };
+          if (this.integrationMode !== 'connected' || !this.client || typeof this.client.socialDmSendMessage !== 'function') {
+            this.appendMessage(chat.id, {
+              id: `m_${Date.now()}`,
+              senderId: this.currentUserId,
+              text,
+              timestamp: this.timeNow(),
+              status: 'Delivered',
+              createdAt: '',
+            });
+            this.composerText = '';
+            if (this.$refs.composer) {
+              this.$refs.composer.style.height = 'auto';
+            }
+            this.startTypingAndAutoReply(chat.id);
+            const next = { ...this.sendingMessageByThreadId };
+            delete next[chatId];
+            this.sendingMessageByThreadId = next;
+            return;
+          }
+
+          const createdAt = new Date().toISOString();
+          const clientMessageId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : `cm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          const pendingId = `pending_${clientMessageId}`;
+          this.appendMessage(chat.id, {
+            id: pendingId,
+            clientMessageId,
+            senderId: this.currentUserId,
+            text,
+            timestamp: this.formatMessageTime(createdAt),
+            status: this.t('pending'),
+            createdAt,
+          });
+          this.composerText = '';
+          if (this.$refs.composer) {
+            this.$refs.composer.style.height = 'auto';
+          }
+
+          this.isSendingMessage = true;
+          this.error = '';
+          try {
+            const result = await this.client.socialDmSendMessage(chat.id, text, clientMessageId);
+            const persistedId = typeof result?.id === 'string' && result.id.trim().length > 0 ? result.id.trim() : pendingId;
+            const persistedCreatedAt = this.isValidIso(result?.createdAt) ? result.createdAt : createdAt;
+            const persistedClientMessageId = this.normalizeUid(result?.clientMessageId) || clientMessageId;
+            this.patchMessage(chat.id, pendingId, {
+              id: persistedId,
+              clientMessageId: persistedClientMessageId,
+              createdAt: persistedCreatedAt,
+              timestamp: this.formatMessageTime(persistedCreatedAt),
+              status: this.t('sent'),
+            });
+            await this.refreshChatMessages(chat.id, { markAsRead: true });
+          } catch (error) {
+            this.patchMessage(chat.id, pendingId, {
+              status: this.t('failed'),
+            });
+            const rateLimitSeconds = this.extractRateLimitSeconds(error);
+            if (rateLimitSeconds !== null) {
+              this.startSendCooldown(chat.id, rateLimitSeconds);
+              const remaining = this.getSendCooldownSeconds(chat.id) || rateLimitSeconds;
+              this.error = this.formatRateLimitedMessage(remaining);
+              this.status = this.error;
+              return;
+            }
+            this.error = this.mapSocialError(error);
+            if (this.error === this.t('blockedRelationError')) {
+              await this.loadBlockedUsers();
+            }
+            this.status = this.t('syncFailed');
+            console.warn('Failed to send DM message:', error);
+          } finally {
+            this.isSendingMessage = false;
+            const next = { ...this.sendingMessageByThreadId };
+            delete next[chatId];
+            this.sendingMessageByThreadId = next;
+          }
+        },
+
+        timeNow() {
+          const d = new Date();
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        },
+
+        startTypingAndAutoReply(chatId) {
+          // UI-only mock typing. Remove after realtime events are wired.
+          if (this.typingTimerId) {
+            clearTimeout(this.typingTimerId);
+            this.typingTimerId = null;
+          }
+          this.typingChatId = chatId;
+          this.typingTimerId = setTimeout(() => {
+            const chat = this.chats.find((item) => item.id === chatId);
+            if (!chat) return;
+            const replyText = 'Looks good. UI-only flow works.';
+            const timestamp = this.timeNow();
+            this.appendMessage(chat.id, {
+              id: `m_${Date.now()}_reply`,
+              senderId: chat.participant.id,
+              text: replyText,
+              timestamp,
+              createdAt: '',
+            });
+            this.typingChatId = null;
+            this.typingTimerId = null;
+          }, 1200);
+        },
+
+        async openChat(chatId) {
+          this.activeChatId = chatId;
+          this.clearPendingIncoming(chatId);
+          this.markChatAsRead(chatId);
+          this.view = 'thread';
+          this.$nextTick(() => {
+            this.bindMessagesListObserver();
+          });
+          if (this.integrationMode === 'connected') {
+            this.startActiveThreadPolling();
+          }
+          if (this.integrationMode === 'connected') {
+            await this.refreshChatMessages(chatId, { markAsRead: true });
+          }
+          this.scheduleScrollThreadToBottom({ smooth: false });
+        },
+
+        goBack() {
+          this.stopActiveThreadPolling();
+          this.unbindMessagesListObserver();
+          this.view = 'chats';
+        },
+
+        // Integration contracts for next phase.
+        chatContract() {
+          return {
+            id: 'string',
+            participant: {
+              id: 'string',
+              name: 'string',
+              username: 'string',
+              displayName: 'string',
+              initials: 'string',
+              status: 'string',
+              photoUrl: 'string?'
+            },
+            unreadCount: 'number',
+            lastMessage: { text: 'string', timestamp: 'string' },
+            lastTime: 'string',
+            messages: [{ id: 'string', senderId: 'string', text: 'string', timestamp: 'string', status: 'string?', createdAt: 'string?' }],
+          };
+        },
+
+        integrationTodos() {
+          return [
+            'TODO(api): add unread/read-receipt persistence',
+            'TODO(realtime): replace startTypingAndAutoReply() with socket events',
+          ];
         },
       };
     }

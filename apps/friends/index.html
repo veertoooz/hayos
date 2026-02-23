@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full overflow-hidden" data-theme="black">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Friends</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost'
+        || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      overscroll-behavior: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      inset: 0;
+    }
+
+    .friends-scroll {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .friends-shell {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .friends-content {
+      padding: 0.75rem;
+    }
+
+    .friends-chip-row {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .friends-chip-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .friends-list-scroll {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .friends-break {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .friends-actions-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .friends-actions-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .friends-tap {
+      touch-action: manipulation;
+      transition: transform 180ms ease, filter 180ms ease;
+    }
+
+    .friends-tap:active {
+      transform: scale(0.98);
+      filter: brightness(0.98);
+    }
+
+    .friends-focus:focus-visible {
+      outline: 2px solid hsl(var(--p));
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="h-full overflow-hidden bg-base-100" x-data="friendsApp()" x-init="init()">
+  <div class="friends-shell mx-auto h-full w-full max-w-md overflow-hidden" x-cloak>
+    <main class="relative h-full overflow-hidden">
+      <section
+        class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
+        :class="view === 'list' ? 'translate-x-0 pointer-events-auto' : '-translate-x-1/4 pointer-events-none'"
+      >
+        <div class="flex min-h-full flex-col gap-3">
+          <header class="px-1 pt-1">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h1 class="truncate text-2xl font-semibold tracking-tight" x-text="t('title')"></h1>
+                <p class="mt-1 text-sm opacity-70" x-text="t('subtitle')"></p>
+              </div>
+              <button type="button" class="btn btn-sm btn-circle btn-ghost friends-focus friends-tap">
+                <span class="sr-only" x-text="t('moreActions')"></span>
+                <span aria-hidden="true">⋯</span>
+              </button>
+            </div>
+          </header>
+
+          <section class="card bg-base-200/90 shadow-sm">
+            <div class="card-body gap-3 p-3">
+              <label class="input input-bordered friends-focus flex items-center gap-2">
+                <span class="opacity-60" aria-hidden="true">⌕</span>
+                <input
+                  type="search"
+                  class="friends-focus grow"
+                  x-model.trim="query"
+                  :placeholder="t('searchPlaceholder')"
+                />
+              </label>
+
+              <div class="friends-chip-row -mx-1 px-1">
+                <div class="join">
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'all' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'all'"
+                    x-text="t('filterAll')"
+                  ></button>
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'requests' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'requests'"
+                    x-text="t('filterRequests')"
+                  ></button>
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'online' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'online'"
+                    x-text="t('filterOnline')"
+                  ></button>
+                </div>
+              </div>
+
+              <div class="friends-actions-scroll -mx-1 px-1">
+                <div class="flex min-w-max items-center gap-2">
+                  <button type="button" class="btn btn-primary btn-sm friends-focus friends-tap whitespace-nowrap" x-text="t('addFriend')"></button>
+                  <button type="button" class="btn btn-outline btn-sm friends-focus friends-tap whitespace-nowrap" x-text="t('invites')"></button>
+                  <button type="button" class="btn btn-ghost btn-sm friends-focus friends-tap whitespace-nowrap" x-text="t('sharePortal')"></button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body p-3 pb-2">
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="text-sm font-medium opacity-80" x-text="t('recentFriends')"></h2>
+                <span class="badge badge-outline badge-sm" x-text="`${filteredFriends.length}`"></span>
+              </div>
+            </div>
+            <div class="friends-list-scroll max-h-[46vh] px-3 pb-3">
+              <div class="space-y-2">
+                <template x-for="friend in filteredFriends" :key="friend.id">
+                  <button
+                    type="button"
+                    class="card friends-focus friends-tap w-full border border-base-300 bg-base-100 text-left shadow-sm"
+                    @click="openEditor(friend.id)"
+                  >
+                    <div class="card-body gap-2 p-3">
+                      <div class="flex min-w-0 items-center justify-between gap-3">
+                        <div class="min-w-0">
+                          <h3 class="friends-break text-sm font-semibold" x-text="friend.name"></h3>
+                          <p class="friends-break text-xs opacity-70" x-text="friend.handle"></p>
+                        </div>
+                        <span
+                          class="badge badge-sm whitespace-nowrap"
+                          :class="friend.status === 'online' ? 'badge-success' : 'badge-ghost'"
+                          x-text="friend.status === 'online' ? t('statusOnline') : t('statusOffline')"
+                        ></span>
+                      </div>
+                      <div class="flex items-center justify-between gap-3 text-xs opacity-75">
+                        <p class="friends-break min-w-0" x-text="friend.planet"></p>
+                        <span class="whitespace-nowrap" x-text="friend.lastSeen"></span>
+                      </div>
+                    </div>
+                  </button>
+                </template>
+              </div>
+              <div class="py-6 text-center text-sm opacity-70" x-show="filteredFriends.length === 0" x-text="t('emptyFiltered')"></div>
+            </div>
+          </section>
+          <div class="flex-1"></div>
+        </div>
+      </section>
+
+      <section
+        class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
+        :class="view === 'editor' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'"
+      >
+        <div class="flex min-h-full flex-col gap-3">
+          <header class="sticky top-0 z-10 -mx-3 px-3 py-1 backdrop-blur">
+            <div class="flex items-center justify-between gap-2 rounded-box bg-base-200/90 px-2 py-2">
+              <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="backToList()" x-text="t('back')"></button>
+              <h2 class="min-w-0 truncate text-sm font-semibold" x-text="selectedFriend ? selectedFriend.name : t('friendDetails')"></h2>
+              <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
+            </div>
+          </header>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="friends-break text-base font-semibold" x-text="selectedFriend ? selectedFriend.name : '-'"></h3>
+                  <p class="friends-break text-sm opacity-70" x-text="selectedFriend ? selectedFriend.handle : ''"></p>
+                </div>
+                <span
+                  class="badge badge-sm whitespace-nowrap"
+                  :class="draft.status === 'online' ? 'badge-success' : 'badge-ghost'"
+                  x-text="draft.status === 'online' ? t('statusOnline') : t('statusOffline')"
+                ></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body gap-3 p-4">
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelNickname')"></span>
+                </div>
+                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.nickname" />
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelPlanet')"></span>
+                </div>
+                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.planet" />
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelStatus')"></span>
+                </div>
+                <select class="select select-bordered select-sm friends-focus" x-model="draft.status">
+                  <option value="online" x-text="t('statusOnline')"></option>
+                  <option value="offline" x-text="t('statusOffline')"></option>
+                </select>
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelNote')"></span>
+                </div>
+                <textarea class="textarea textarea-bordered friends-focus h-24" maxlength="280" x-model.trim="draft.note"></textarea>
+              </label>
+
+              <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="resetDraft()" x-text="t('reset')"></button>
+                <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function friendsApp() {
+      return {
+        appId: 'friends',
+        client: null,
+        view: 'list',
+        selectedFriendId: null,
+        draft: {
+          nickname: '',
+          planet: '',
+          status: 'offline',
+          note: '',
+        },
+        query: '',
+        activeFilter: 'all',
+        friends: [
+          { id: 'u1', name: 'Ani Sargsyan', handle: '@ani.s', status: 'online', planet: 'Ani Prime', lastSeen: 'now', note: 'Portal priority: close friends.' },
+          { id: 'u2', name: 'Aram Hakobyan', handle: '@aram.codes', status: 'offline', planet: 'Atlas-9', lastSeen: '12m', note: 'Prefers async messages.' },
+          { id: 'u3', name: 'Meri Davtyan', handle: '@meri.d', status: 'online', planet: 'Meri World', lastSeen: 'now', note: 'Shared reading list.' },
+          { id: 'u4', name: 'Lilit Petrosyan', handle: '@lilit.p', status: 'offline', planet: 'Petra', lastSeen: '2h', note: '' },
+          { id: 'u5', name: 'Gor Vardanyan', handle: '@gor.v', status: 'offline', planet: 'Nova G', lastSeen: '1d', note: '' },
+        ],
+        language: (document.documentElement.lang || 'en').toLowerCase() === 'hy' ? 'hy' : 'en',
+        i18n: {
+          en: {
+            title: 'Friends',
+            subtitle: 'People and portals in your universe',
+            moreActions: 'More actions',
+            searchPlaceholder: 'Search friends',
+            filterAll: 'All',
+            filterRequests: 'Requests',
+            filterOnline: 'Online',
+            addFriend: 'Add Friend',
+            invites: 'Invites',
+            sharePortal: 'Share Portal',
+            recentFriends: 'Recent',
+            emptyFiltered: 'No friends found for the current filter.',
+            statusOnline: 'Online',
+            statusOffline: 'Offline',
+            back: 'Back',
+            save: 'Save',
+            friendDetails: 'Friend',
+            labelNickname: 'Nickname',
+            labelPlanet: 'Planet',
+            labelStatus: 'Presence',
+            labelNote: 'Private note',
+            reset: 'Reset',
+          },
+          hy: {
+            title: 'Ընկերներ',
+            subtitle: 'Մարդիկ և պորտալներ քո տիեզերքում',
+            moreActions: 'Լրացուցիչ գործողություններ',
+            searchPlaceholder: 'Փնտրիր ընկերներ',
+            filterAll: 'Բոլորը',
+            filterRequests: 'Հարցումներ',
+            filterOnline: 'Առցանց',
+            addFriend: 'Ավելացնել',
+            invites: 'Հրավերներ',
+            sharePortal: 'Կիսվել պորտալով',
+            recentFriends: 'Վերջինները',
+            emptyFiltered: 'Այս զտիչով ընկերներ չկան։',
+            statusOnline: 'Առցանց',
+            statusOffline: 'Անցանց',
+            back: 'Հետ',
+            save: 'Պահել',
+            friendDetails: 'Ընկեր',
+            labelNickname: 'Մականուն',
+            labelPlanet: 'Մոլորակ',
+            labelStatus: 'Կարգավիճակ',
+            labelNote: 'Մասնավոր նշում',
+            reset: 'Զրոյացնել',
+          },
+        },
+        get selectedFriend() {
+          if (!this.selectedFriendId) return null;
+          return this.friends.find((friend) => friend.id === this.selectedFriendId) || null;
+        },
+        get filteredFriends() {
+          const q = (this.query || '').trim().toLowerCase();
+          return this.friends.filter((friend) => {
+            if (this.activeFilter === 'online' && friend.status !== 'online') return false;
+            if (this.activeFilter === 'requests') return false;
+            if (!q) return true;
+            const hay = `${friend.name} ${friend.handle} ${friend.planet}`.toLowerCase();
+            return hay.includes(q);
+          });
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+        openEditor(friendId) {
+          this.selectedFriendId = friendId;
+          this.hydrateDraft();
+          this.view = 'editor';
+        },
+        backToList() {
+          this.view = 'list';
+        },
+        hydrateDraft() {
+          const friend = this.selectedFriend;
+          if (!friend) return;
+          this.draft = {
+            nickname: friend.name || '',
+            planet: friend.planet || '',
+            status: friend.status === 'online' ? 'online' : 'offline',
+            note: friend.note || '',
+          };
+        },
+        resetDraft() {
+          this.hydrateDraft();
+        },
+        saveDraft() {
+          const friend = this.selectedFriend;
+          if (!friend) return;
+          friend.name = (this.draft.nickname || '').trim() || friend.name;
+          friend.planet = (this.draft.planet || '').trim() || friend.planet;
+          friend.status = this.draft.status === 'online' ? 'online' : 'offline';
+          friend.note = (this.draft.note || '').trim();
+          this.backToList();
+        },
+        async init() {
+          try {
+            await loadHayOSClient();
+            const params = new URLSearchParams(window.location.search);
+            this.appId = params.get('appId') || 'friends';
+            this.client = new HayOSClient(this.appId);
+            await this.client.ensureAuthenticated();
+
+            const language = await this.client.getLanguage();
+            this.language = language === 'hy' ? 'hy' : 'en';
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((nextLanguage) => {
+              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            const theme = await this.client.getTheme();
+            if (theme && typeof theme === 'string') {
+              document.documentElement.setAttribute('data-theme', theme);
+            }
+            this.client.onThemeChanged((nextTheme) => {
+              if (nextTheme && typeof nextTheme === 'string') {
+                document.documentElement.setAttribute('data-theme', nextTheme);
+              }
+            });
+          } catch {
+            // Continue in standalone mode when host bridge is unavailable.
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

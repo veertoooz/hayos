@@ -2,8 +2,35 @@
 <html lang="en" data-theme="black" class="h-full bg-transparent">
 
 <head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
   <meta charset="utf-8" />
-  <title>Ereboonee</title>
+  <title>TeezerQ</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
@@ -74,14 +101,14 @@
   <div id="error"
     class="fixed left-1/2 top-1/2 z-40 hidden -translate-x-1/2 -translate-y-1/2 card border border-error/40 bg-base-100/92 shadow-xl backdrop-blur-md">
     <div class="card-body gap-3 p-5 text-error">
-      <div id="error-text">Failed to load Ereboonee.</div>
+      <div id="error-text">Failed to load TeezerQ.</div>
       <button id="error-reload" class="btn btn-primary btn-sm" type="button">Reload</button>
     </div>
   </div>
   <div id="hud"
     class="fixed left-2 right-2 top-2 z-20 hidden card border border-base-300 bg-base-100/80 text-base-content shadow-lg backdrop-blur-md sm:left-3 sm:right-auto sm:top-3 sm:w-[90vw] sm:max-w-[22.5rem]">
     <div class="card-body gap-1 p-3 text-xs">
-      <b class="mb-1 block text-[0.7rem] font-semibold uppercase tracking-[0.08em] opacity-80">Ereboonee</b>
+      <b class="mb-1 block text-[0.7rem] font-semibold uppercase tracking-[0.08em] opacity-80">TeezerQ</b>
       <div id="hud-language">Language: en</div>
       <div id="hud-status" class="opacity-80">Status: booting</div>
       <div id="hud-target" class="opacity-80">Target: -</div>
@@ -151,7 +178,7 @@
     import { MeshSurfaceSampler } from 'https://unpkg.com/three@0.165.0/examples/jsm/math/MeshSurfaceSampler.js?module';
 
     const params = new URLSearchParams(window.location.search);
-    const APP_ID = params.get('appId') || 'koryoon';
+    const APP_ID = params.get('appId') || 'teeezerq';
     const IS_WALLPAPER_MODE = true;
     const INITIAL_TRAVEL_MODE = params.get('travel') !== '0';
     const DEVICE_MEMORY_GB = (
@@ -419,6 +446,7 @@
         field: 'field',
         homePlanet: 'Home',
         planet: 'Planet',
+        blackHole: 'Black Hole',
       }),
       hy: Object.freeze({
         hudLanguage: 'Լեզու',
@@ -438,6 +466,7 @@
         field: 'դաշտ',
         homePlanet: 'Տուն',
         planet: 'Մոլորակ',
+        blackHole: 'Սև խոռոչ',
       }),
     });
     let runtimeLanguage = 'en';
@@ -474,18 +503,18 @@
       if (text === 'ready') return 'պատրաստ';
       if (text === 'error') return 'սխալ';
       if (text === 'navigating') return 'նավարկում';
-      if (text === 'global spaces unavailable') return 'global space-երը անհասանելի են';
-      if (text === 'no global spaces found') return 'global space չի գտնվել';
-      if (text === 'loading global spaces') return 'բեռնվում են global space-երը';
+      if (text === 'planet scope unavailable') return 'planet scope-ը անհասանելի է';
+      if (text === 'no planets found') return 'մոլորակ չի գտնվել';
+      if (text === 'loading planets') return 'բեռնվում են մոլորակները';
       if (text === 'record load failed') return 'գրառումների բեռնումը ձախողվեց';
 
-      const loadedSpacesMatch = text.match(/^loaded (\d+) spaces$/);
-      if (loadedSpacesMatch) {
-        return `բեռնվել է ${loadedSpacesMatch[1]} space`;
+      const loadedPlanetsMatch = text.match(/^loaded (\d+) planets$/);
+      if (loadedPlanetsMatch) {
+        return `բեռնվել է ${loadedPlanetsMatch[1]} մոլորակ`;
       }
-      const syncedSpacesMatch = text.match(/^space planets synced \((\d+)\)$/);
-      if (syncedSpacesMatch) {
-        return `space planet-ները թարմացվել են (${syncedSpacesMatch[1]})`;
+      const syncedPlanetsMatch = text.match(/^planet sync complete \((\d+)\)$/);
+      if (syncedPlanetsMatch) {
+        return `մոլորակները թարմացվել են (${syncedPlanetsMatch[1]})`;
       }
       const loadingRecordsMatch = text.match(/^loading records for (.+)$/);
       if (loadingRecordsMatch) {
@@ -867,6 +896,11 @@
       [0xa44a3f, 0xffa69e],
       [0x7a9e9f, 0xb8d8d8],
     ];
+    const BLACK_HOLE_COLOR_PAIRS = [
+      [0x0a0a12, 0x60d7ff],
+      [0x140b1b, 0xb18cff],
+      [0x0f1424, 0x8ce3ff],
+    ];
 
     function hashString(input) {
       const text = typeof input === 'string' ? input : String(input || '');
@@ -1021,11 +1055,11 @@
       );
     }
 
-    function mapGlobalSpacesToPlanetData(spaceEntries, isWallpaperMode) {
-      if (!Array.isArray(spaceEntries) || spaceEntries.length === 0) return [];
+    function mapPlanetScopeToPlanetData(planetEntries, isWallpaperMode) {
+      if (!Array.isArray(planetEntries) || planetEntries.length === 0) return [];
 
       const byName = (a, b) => normalizeSpaceName(a).localeCompare(normalizeSpaceName(b), undefined, { sensitivity: 'base' });
-      const sorted = [...spaceEntries].sort((a, b) => {
+      const sorted = [...planetEntries].sort((a, b) => {
         const ar = Number.isFinite(a && a.recordCount) ? a.recordCount : 0;
         const br = Number.isFinite(b && b.recordCount) ? b.recordCount : 0;
         if (br !== ar) return br - ar;
@@ -1035,17 +1069,20 @@
       const baseDistance = isWallpaperMode ? 340 : 390;
       const distanceStep = isWallpaperMode ? 92 : 106;
 
-      return sorted.map((space, index) => {
-        const safeSpaceId = typeof space.id === 'string' && space.id.trim().length > 0
-          ? space.id.trim()
-          : `space-${index + 1}`;
-        const recordCount = Math.max(0, Number.isFinite(space.recordCount) ? space.recordCount : 0);
-        const records = Array.isArray(space.records) ? space.records : [];
-        const hash = hashString(safeSpaceId);
-        const colorPair = SPACE_COLOR_PAIRS[hash % SPACE_COLOR_PAIRS.length];
+      return sorted.map((planetEntry, index) => {
+        const safePlanetId = typeof planetEntry.id === 'string' && planetEntry.id.trim().length > 0
+          ? planetEntry.id.trim()
+          : `planet-${index + 1}`;
+        const portalKind = planetEntry && planetEntry.portalKind === 'black_hole' ? 'black_hole' : 'planet';
+        const recordCount = Math.max(0, Number.isFinite(planetEntry.recordCount) ? planetEntry.recordCount : 0);
+        const records = Array.isArray(planetEntry.records) ? planetEntry.records : [];
+        const hash = hashString(safePlanetId);
+        const colorPalette = portalKind === 'black_hole' ? BLACK_HOLE_COLOR_PAIRS : SPACE_COLOR_PAIRS;
+        const colorPair = colorPalette[hash % colorPalette.length];
         const recordRadius = isWallpaperMode ? RECORD_NODE_BASE_RADIUS * 0.9 : RECORD_NODE_BASE_RADIUS;
         const effectiveCount = Math.max(1, recordCount);
-        const radius = 10 * recordRadius * effectiveCount;
+        const radiusMultiplier = portalKind === 'black_hole' ? 0.86 : 1;
+        const radius = 10 * recordRadius * effectiveCount * radiusMultiplier;
         const distanceJitter = (hash % 37) - 18;
         const distance = baseDistance + index * distanceStep + distanceJitter;
         const verticalNorm = (((hash >> 4) & 1023) / 1023) - 0.5;
@@ -1053,9 +1090,13 @@
         const angleOffset = (((hash >> 15) & 1023) / 1023) * Math.PI * 2;
 
         return {
-          spaceId: safeSpaceId,
-          spaceName: normalizeSpaceName(space),
-          spaceDescription: typeof space.description === 'string' ? space.description : '',
+          planetId: safePlanetId,
+          // Backward-compatible aliases until the runtime field names are fully migrated.
+          spaceId: safePlanetId,
+          spaceName: normalizeSpaceName(planetEntry),
+          spaceDescription: typeof planetEntry.description === 'string' ? planetEntry.description : '',
+          portalKind,
+          friendUid: typeof planetEntry.friendUid === 'string' ? planetEntry.friendUid : '',
           recordCount,
           records,
           radius,
@@ -1072,48 +1113,67 @@
       });
     }
 
-    async function sendGlobalSpaceRequest(client, action) {
+    async function sendPlanetRequest(client, action) {
       if (!client || typeof client._sendRequest !== 'function') {
-        throw new Error('HayOS global-space bridge is unavailable.');
+        throw new Error('HayOS planet bridge is unavailable.');
       }
       const response = await client._sendRequest(action);
       if (!response || !response.ok) {
-        throw new Error((response && response.error) || 'Global space request failed.');
+        throw new Error((response && response.error) || 'Planet request failed.');
       }
       return response.data;
     }
 
-    async function fetchGlobalSpacePlanetData(client, isWallpaperMode) {
+    async function fetchPlanetScopeData(client, isWallpaperMode) {
       if (!client || typeof client._sendRequest !== 'function') return [];
 
-      let spaces = [];
+      let planets = [];
+      let blackHoles = [];
       try {
-        const listed = await sendGlobalSpaceRequest(client, { kind: 'globalSpace.list' });
-        spaces = Array.isArray(listed) ? listed : [];
+        const listed = await sendPlanetRequest(client, { kind: 'planet.list' });
+        planets = Array.isArray(listed) ? listed : [];
       } catch (error) {
-        console.warn('Failed to list global spaces for Ereboonee:', error);
+        console.warn('Failed to list planets for TeeezerQ:', error);
         return [];
+      }
+      try {
+        const listedBlackHoles = await sendPlanetRequest(client, { kind: 'teeezerq.blackHole.list' });
+        blackHoles = Array.isArray(listedBlackHoles) ? listedBlackHoles : [];
+      } catch (error) {
+        // Keep runtime backward-compatible when older bridge does not support black-hole action.
+        blackHoles = [];
       }
 
-      if (spaces.length === 0) {
+      if (planets.length === 0) {
         return [];
       }
-      const normalized = spaces
-        .map((space) => {
-          const spaceId = space && typeof space.id === 'string' ? space.id.trim() : '';
-          if (!spaceId) return null;
-          const rawCount = Number(space && space.recordCount);
+      const blackHoleByPlanetId = new Map();
+      blackHoles.forEach((entry) => {
+        const planetId = entry && typeof entry.planetId === 'string' ? entry.planetId.trim() : '';
+        if (!planetId) return;
+        blackHoleByPlanetId.set(planetId, {
+          friendUid: typeof entry.friendUid === 'string' ? entry.friendUid : '',
+        });
+      });
+      const normalized = planets
+        .map((planetEntry) => {
+          const planetId = planetEntry && typeof planetEntry.id === 'string' ? planetEntry.id.trim() : '';
+          if (!planetId) return null;
+          const rawCount = Number(planetEntry && planetEntry.recordCount);
           const recordCount = Number.isFinite(rawCount) && rawCount >= 0 ? Math.floor(rawCount) : 0;
+          const blackHoleMeta = blackHoleByPlanetId.get(planetId);
           return {
-            ...space,
-            id: spaceId,
+            ...planetEntry,
+            id: planetId,
             recordCount,
             records: [],
+            portalKind: blackHoleMeta ? 'black_hole' : 'planet',
+            friendUid: blackHoleMeta && typeof blackHoleMeta.friendUid === 'string' ? blackHoleMeta.friendUid : '',
           };
         })
         .filter(Boolean);
 
-      return mapGlobalSpacesToPlanetData(normalized, isWallpaperMode);
+      return mapPlanetScopeToPlanetData(normalized, isWallpaperMode);
     }
 
     class SphericalWorldApp {
@@ -1203,7 +1263,7 @@
 
         this.setupNearestPlanetLine();
         this.applyTheme(this.options.initialTheme);
-        this.setupGlobalSpacesListener();
+        this.setupPlanetScopeListener();
         setSidebarCurrentPlanet(t('homePlanet'));
         setSidebarNearestPlanet('-');
         setSidebarRecord(null, '-');
@@ -1346,11 +1406,11 @@
         }
       }
 
-      setupGlobalSpacesListener() {
+      setupPlanetScopeListener() {
         if (!this.client) return;
         this.globalSpacesListener = (event) => {
           const payload = event && event.data ? event.data : null;
-          if (!payload || payload.type !== 'hayos:globalSpacesChanged') return;
+          if (!payload || (payload.type !== 'hayos:planetsChanged' && payload.type !== 'hayos:globalSpacesChanged')) return;
           this.globalSpacesRefreshPending = true;
         };
         window.addEventListener('message', this.globalSpacesListener);
@@ -1405,7 +1465,7 @@
         this.car.syncMeshTransform();
       }
 
-      async refreshGlobalSpacesPlanets() {
+      async refreshPlanetScopePlanets() {
         if (!this.client || this.globalSpacesRefreshInFlight) return;
         if (this.navigation.active) {
           this.globalSpacesRefreshPending = true;
@@ -1417,17 +1477,17 @@
           this.spaceRecordsInFlight.clear();
           this.spaceRecordsCache.clear();
           this.syncRecordNodeVisibilityByActivePlanet(this.getActivePlanetObject());
-          const nextSpacePlanets = await fetchGlobalSpacePlanetData(this.client, this.options.isWallpaperMode);
+          const nextSpacePlanets = await fetchPlanetScopeData(this.client, this.options.isWallpaperMode);
           this.seededSpacePlanets = nextSpacePlanets;
           this.replaceOtherPlanets(nextSpacePlanets);
           if (nextSpacePlanets.length > 0) {
-            setStatus(`space planets synced (${nextSpacePlanets.length})`);
+            setStatus(`planet sync complete (${nextSpacePlanets.length})`);
           } else {
-            setStatus('no global spaces found');
+            setStatus('no planets found');
           }
         } catch (error) {
-          console.warn('Failed to refresh global-space planets:', error);
-          setStatus('global spaces unavailable');
+          console.warn('Failed to refresh planet scope:', error);
+          setStatus('planet scope unavailable');
         } finally {
           this.globalSpacesRefreshInFlight = false;
         }
@@ -1618,13 +1678,14 @@
         if (planet === this.planet.mesh) return t('homePlanet');
         if (!planet || !planet.userData) return t('planet');
         if (planet.userData.navId === 'main') return t('homePlanet');
+        const prefix = planet.userData.portalKind === 'black_hole' ? `${t('blackHole')} • ` : '';
         if (typeof planet.userData.spaceName === 'string' && planet.userData.spaceName.trim().length > 0) {
-          return planet.userData.spaceName.trim();
+          return `${prefix}${planet.userData.spaceName.trim()}`;
         }
         if (typeof planet.userData.spaceId === 'string' && planet.userData.spaceId.trim().length > 0) {
-          return planet.userData.spaceId.trim();
+          return `${prefix}${planet.userData.spaceId.trim()}`;
         }
-        return 'Planet';
+        return prefix ? `${prefix}${t('planet')}` : 'Planet';
       }
 
       getPlanetSpaceName(planet) {
@@ -1674,7 +1735,7 @@
 
       async loadRecordsForSpace(spaceId) {
         if (!spaceId || !this.client) return [];
-        const records = await sendGlobalSpaceRequest(this.client, { kind: 'globalSpace.listRecords', spaceId });
+        const records = await sendPlanetRequest(this.client, { kind: 'planet.listRecords', planetId: spaceId });
         const safeRecords = Array.isArray(records) ? records : [];
         return safeRecords.map((record, index) => normalizeRecordEntry(record, index, spaceId));
       }
@@ -2172,7 +2233,7 @@
         this.handleNavigationTrigger(keys);
         if (this.globalSpacesRefreshPending && !this.globalSpacesRefreshInFlight && !this.navigation.active) {
           this.globalSpacesRefreshPending = false;
-          void this.refreshGlobalSpacesPlanets();
+          void this.refreshPlanetScopePlanets();
         }
 
         if (this.navigation.active) {
@@ -4109,7 +4170,7 @@
             this.requestParentMotionProxy();
           }
           console.warn('Motion sensors produced no samples. Check iframe allow/sandbox policy.', debug);
-          window.__erebooneeMotionDebug = () => this.getDebugInfo();
+          window.__teeezerqMotionDebug = () => this.getDebugInfo();
         }, 1800);
       }
 
@@ -5036,16 +5097,16 @@
 
         if (hayosClient) {
           try {
-            setStatus('loading global spaces');
-            spacePlanets = await fetchGlobalSpacePlanetData(hayosClient, IS_WALLPAPER_MODE);
+            setStatus('loading planets');
+            spacePlanets = await fetchPlanetScopeData(hayosClient, IS_WALLPAPER_MODE);
             if (spacePlanets.length > 0) {
-              setStatus(`loaded ${spacePlanets.length} spaces`);
+              setStatus(`loaded ${spacePlanets.length} planets`);
             } else {
-              setStatus('no global spaces found');
+              setStatus('no planets found');
             }
           } catch (error) {
-            console.warn('Failed to bootstrap space planets:', error);
-            setStatus('global spaces unavailable');
+            console.warn('Failed to bootstrap planet scope:', error);
+            setStatus('planet scope unavailable');
           }
         }
 
@@ -5074,7 +5135,7 @@
         }
         setStatus('running');
       } catch (error) {
-        showError('Failed to initialize Ereboonee.', error);
+        showError('Failed to initialize TeezerQ.', error);
       }
     }
 

@@ -2,6 +2,33 @@
 <html lang="hy" class="h-full bg-transparent" data-theme="black" x-data="templateApp()" x-init="init()">
 
 <head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title x-text="t('pageTitle')">Hop App</title>
@@ -248,7 +275,7 @@
             themeLabel: 'OS Theme',
             languageLabel: 'Language',
             userLabel: 'User',
-            permissionNote: 'Note: resolving ui.theme requires app permission firestore.read.',
+            permissionNote: 'Note: resolving ui.theme requires app permission settings.theme.read.',
             musicTitle: 'Music Player Page',
             musicDescription: 'Use this page as a base for your player controls and playlist UI.',
             musicPlaceholder: 'Add player controls, queue, and current track metadata here.',
@@ -290,7 +317,7 @@
             themeLabel: 'OS թեմա',
             languageLabel: 'Լեզու',
             userLabel: 'Օգտատեր',
-            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է firestore.read permission։',
+            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է settings.theme.read permission։',
             musicTitle: 'Երաժշտական նվագարկչի էջ',
             musicDescription: 'Օգտագործեք այս էջը նվագարկիչի կառավարիչների և playlist-ի UI-ի համար։',
             musicPlaceholder: 'Այստեղ ավելացրեք player controls, queue և current track տվյալները։',

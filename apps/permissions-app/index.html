@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="permissionsApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Թույլատրվություններ</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    .safe-pb {
+      padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+    }
+
+    .safe-pt {
+      padding-top: calc(env(safe-area-inset-top) + 0.25rem);
+    }
+
+    .ios-group {
+      border: 1px solid hsl(var(--b3));
+      border-radius: 1rem;
+      overflow: hidden;
+      background: hsl(var(--b1));
+    }
+
+    .ios-row {
+      min-height: 3.1rem;
+      padding: 0.72rem 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      width: 100%;
+      text-align: left;
+    }
+
+    .ios-row + .ios-row {
+      border-top: 1px solid hsl(var(--b3));
+    }
+
+    .ios-meta {
+      min-width: 0;
+      display: grid;
+      gap: 0.16rem;
+    }
+
+    .ios-subtitle {
+      font-size: 0.72rem;
+      opacity: 0.62;
+    }
+
+    .ios-chevron {
+      font-size: 0.72rem;
+      opacity: 0.5;
+    }
+  </style>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full bg-base-200/60">
+  <main class="min-h-full p-3 sm:p-4 safe-pb safe-pt" x-cloak>
+    <div class="mx-auto w-full max-w-md space-y-3">
+      <header class="navbar bg-base-100/95 rounded-2xl border border-base-300 px-3 min-h-0 shadow-sm backdrop-blur">
+        <div class="flex-1">
+          <h1 class="text-[15px] font-semibold tracking-tight" x-text="t('headerTitle')"></h1>
+        </div>
+        <div class="flex-none">
+          <span class="badge badge-outline badge-sm" x-text="language === 'hy' ? 'Հայ' : 'EN'"></span>
+        </div>
+      </header>
+
+      <section class="px-1">
+        <div class="p-2">
+          <template x-if="activeView === 'list'">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.13em] opacity-55 px-1" x-text="t('appsListTitle')"></p>
+              <p class="text-xs opacity-70 mt-1 px-1" x-text="t('appsListDescription')"></p>
+
+              <label class="input input-bordered input-sm h-10 rounded-xl flex items-center gap-2 mt-3 bg-base-100">
+                <i class="fa-solid fa-magnifying-glass text-xs opacity-45"></i>
+                <input
+                  type="search"
+                  class="grow"
+                  :placeholder="t('searchPlaceholder')"
+                  x-model.trim="query"
+                  @input="applySearch()"
+                />
+              </label>
+
+              <div class="mt-3">
+                <template x-if="loadingApps">
+                  <div class="ios-group px-3 py-4 space-y-2">
+                    <div class="skeleton h-4 w-2/3"></div>
+                    <div class="skeleton h-4 w-1/2"></div>
+                    <div class="skeleton h-4 w-3/5"></div>
+                  </div>
+                </template>
+                <template x-if="filteredApps.length === 0">
+                  <div class="ios-group px-3 py-6 text-center text-sm opacity-70" x-show="!loadingApps" x-text="t('emptyApps')"></div>
+                </template>
+                <ul class="ios-group p-0" x-show="!loadingApps && filteredApps.length > 0">
+                  <template x-for="app in filteredApps" :key="app.id">
+                    <li class="list-none">
+                      <button class="ios-row" @click="openAppDetails(app.id)">
+                        <span class="ios-meta">
+                          <span class="text-sm font-medium truncate" x-text="app.name"></span>
+                          <span class="ios-subtitle" x-text="`${sourceLabel(app.source)} · ${app.id}`"></span>
+                        </span>
+                        <span class="inline-flex items-center gap-2 shrink-0">
+                          <span class="badge badge-outline badge-sm rounded-full" x-text="app.permissions.length"></span>
+                          <i class="fa-solid fa-chevron-right ios-chevron"></i>
+                        </span>
+                      </button>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+
+              <div class="mt-4 px-1">
+                <p class="text-[11px] uppercase tracking-[0.13em] opacity-55" x-text="t('qaTitle')"></p>
+                <div class="ios-group mt-2">
+                  <div class="ios-row">
+                    <span class="ios-meta">
+                      <span class="text-sm font-medium" x-text="t('qaItemSafeArea')"></span>
+                      <span class="ios-subtitle" x-text="t('qaItemSafeAreaDesc')"></span>
+                    </span>
+                  </div>
+                  <div class="ios-row">
+                    <span class="ios-meta">
+                      <span class="text-sm font-medium" x-text="t('qaItemOffline')"></span>
+                      <span class="ios-subtitle" x-text="t('qaItemOfflineDesc')"></span>
+                    </span>
+                  </div>
+                  <div class="ios-row">
+                    <span class="ios-meta">
+                      <span class="text-sm font-medium" x-text="t('qaItemRotate')"></span>
+                      <span class="ios-subtitle" x-text="t('qaItemRotateDesc')"></span>
+                    </span>
+                  </div>
+                  <div class="ios-row">
+                    <span class="ios-meta">
+                      <span class="text-sm font-medium" x-text="t('qaItemPermission')"></span>
+                      <span class="ios-subtitle" x-text="t('qaItemPermissionDesc')"></span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="activeView === 'details'">
+            <div>
+              <button class="btn btn-ghost btn-sm -ml-2 rounded-full" @click="goBackToList()">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
+                <span x-text="t('backLabel')"></span>
+              </button>
+
+              <div class="mt-2 px-1">
+                <p class="text-[11px] uppercase tracking-[0.13em] opacity-55" x-text="t('detailsTitle')"></p>
+                <p class="text-sm font-semibold mt-1" x-text="selectedApp ? selectedApp.name : '-'"></p>
+                <p class="text-xs opacity-70 mt-1" x-text="t('detailsDescription')"></p>
+              </div>
+
+              <div class="mt-3" x-show="selectedApp">
+                <template x-if="selectedPermissionRows().length === 0">
+                  <div class="ios-group px-3 py-4 text-sm opacity-70" x-text="t('noPermissions')"></div>
+                </template>
+                <div class="ios-group" x-show="selectedPermissionRows().length > 0">
+                  <template x-for="perm in selectedPermissionRows()" :key="perm.key">
+                    <div class="ios-row">
+                      <span class="ios-meta">
+                        <span class="text-sm font-medium" x-text="perm.title"></span>
+                        <span
+                          class="ios-subtitle"
+                          x-text="perm.lockReason ? `${perm.description} · ${perm.lockReason}` : perm.description"></span>
+                      </span>
+                      <span class="inline-flex items-center gap-2 shrink-0">
+                        <span class="loading loading-spinner loading-xs" x-show="perm.busy"></span>
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-success"
+                          :checked="perm.enabled"
+                          :disabled="saving || perm.busy || perm.locked"
+                          @change="handlePermissionToggle(perm.key, $event.target.checked)"
+                        />
+                      </span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="alert alert-error mt-3 rounded-xl" x-show="error" x-cloak>
+            <div class="flex w-full items-center justify-between gap-3">
+              <span class="text-sm" x-text="error"></span>
+              <button class="btn btn-xs btn-outline" @click="retryLoadApps()" x-text="t('retryLabel')"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    function permissionsApp() {
+      return {
+        status: 'Initializing...',
+        error: '',
+        appId: 'permissions-app',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        apps: [],
+        filteredApps: [],
+        loadingApps: false,
+        saving: false,
+        savingPermissionKeys: {},
+        observedScopedPermissionKeys: [],
+        query: '',
+        activeView: 'list',
+        selectedAppId: '',
+        permissionCatalog: [
+          {
+            key: 'settings.theme.read',
+            titleHy: 'Թեմայի ընթերցում',
+            titleEn: 'Read Theme',
+            descriptionHy: 'Կարդալ համակարգի թեման',
+            descriptionEn: 'Read system theme',
+            category: 'system',
+            lockable: false,
+          },
+          {
+            key: 'settings.theme.write',
+            titleHy: 'Թեմայի փոփոխում',
+            titleEn: 'Write Theme',
+            descriptionHy: 'Փոխել համակարգի թեման',
+            descriptionEn: 'Change system theme',
+            category: 'system',
+            lockable: false,
+          },
+          {
+            key: 'system.language.write',
+            titleHy: 'Լեզվի փոփոխում',
+            titleEn: 'Write Language',
+            descriptionHy: 'Փոխել համակարգի լեզուն',
+            descriptionEn: 'Change system language',
+            category: 'system',
+            lockable: false,
+          },
+          {
+            key: 'auth.token.read',
+            titleHy: 'Token-ի ընթերցում',
+            titleEn: 'Read Auth Token',
+            descriptionHy: 'Կարդալ ընթացիկ auth token-ը',
+            descriptionEn: 'Read current auth token',
+            category: 'auth',
+            lockable: false,
+          },
+          {
+            key: 'auth.user.read',
+            titleHy: 'Օգտատիրոջ ընթերցում',
+            titleEn: 'Read User',
+            descriptionHy: 'Կարդալ ընթացիկ օգտատիրոջ տվյալները',
+            descriptionEn: 'Read current user profile',
+            category: 'auth',
+            lockable: false,
+          },
+          {
+            key: 'auth.user.write',
+            titleHy: 'Օգտատիրոջ փոփոխում',
+            titleEn: 'Write User',
+            descriptionHy: 'Փոփոխել օգտատիրոջ տվյալները',
+            descriptionEn: 'Update user profile data',
+            category: 'auth',
+            lockable: false,
+          },
+          {
+            key: 'social.profile.username.read',
+            titleHy: 'Սոցիալական username-ի ընթերցում',
+            titleEn: 'Read Social Username',
+            descriptionHy: 'Կարդալ social profile username-ը',
+            descriptionEn: 'Read social profile username',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'social.profile.photo.read',
+            titleHy: 'Սոցիալական նկարի ընթերցում',
+            titleEn: 'Read Social Photo',
+            descriptionHy: 'Կարդալ social profile նկարը',
+            descriptionEn: 'Read social profile photo',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'social.profile.displayName.read',
+            titleHy: 'Սոցիալական display name-ի ընթերցում',
+            titleEn: 'Read Social Display Name',
+            descriptionHy: 'Կարդալ social profile display name-ը',
+            descriptionEn: 'Read social profile display name',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'social.profile.write',
+            titleHy: 'Սոցիալական պրոֆիլի փոփոխում',
+            titleEn: 'Write Social Profile',
+            descriptionHy: 'Փոփոխել social profile տվյալները',
+            descriptionEn: 'Update social profile data',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'social.dm.read',
+            titleHy: 'DM ընթերցում',
+            titleEn: 'Read DM',
+            descriptionHy: 'Կարդալ DM thread-ներ և հաղորդագրություններ',
+            descriptionEn: 'Read DM threads and messages',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'social.dm.write',
+            titleHy: 'DM փոփոխում',
+            titleEn: 'Write DM',
+            descriptionHy: 'Բացել DM, ուղարկել կամ ջնջել հաղորդագրություն',
+            descriptionEn: 'Open DM, send, or delete messages',
+            category: 'social',
+            lockable: false,
+          },
+          {
+            key: 'global.space.read',
+            titleHy: 'Տարածքների ընթերցում',
+            titleEn: 'Read Spaces',
+            descriptionHy: 'Կարդալ global space տվյալները',
+            descriptionEn: 'Read global spaces',
+            category: 'space',
+            lockable: false,
+          },
+          {
+            key: 'global.space.write',
+            titleHy: 'Տարածքների փոփոխում',
+            titleEn: 'Write Spaces',
+            descriptionHy: 'Փոփոխել global space տվյալները',
+            descriptionEn: 'Update global spaces',
+            category: 'space',
+            lockable: false,
+          },
+          {
+            key: 'firestore.get',
+            titleHy: 'Firestore get',
+            titleEn: 'Firestore Get',
+            descriptionHy: 'Կարդալ մեկ document',
+            descriptionEn: 'Read a single document',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.query',
+            titleHy: 'Firestore query',
+            titleEn: 'Firestore Query',
+            descriptionHy: 'Կատարել collection query',
+            descriptionEn: 'Run collection query',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.add',
+            titleHy: 'Firestore add',
+            titleEn: 'Firestore Add',
+            descriptionHy: 'Ավելացնել նոր document',
+            descriptionEn: 'Add new document',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.update',
+            titleHy: 'Firestore update',
+            titleEn: 'Firestore Update',
+            descriptionHy: 'Թարմացնել document',
+            descriptionEn: 'Update document',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.delete',
+            titleHy: 'Firestore delete',
+            titleEn: 'Firestore Delete',
+            descriptionHy: 'Ջնջել document',
+            descriptionEn: 'Delete document',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.read',
+            titleHy: 'Firestore read',
+            titleEn: 'Firestore Read',
+            descriptionHy: 'Կարդալ տվյալներ Firestore-ից',
+            descriptionEn: 'Read data from Firestore',
+            category: 'firestore',
+            lockable: false,
+          },
+          {
+            key: 'firestore.write',
+            titleHy: 'Firestore write',
+            titleEn: 'Firestore Write',
+            descriptionHy: 'Գրել տվյալներ Firestore-ում',
+            descriptionEn: 'Write data to Firestore',
+            category: 'firestore',
+            lockable: false,
+          },
+        ],
+        i18n: {
+          en: {
+            pageTitle: 'Permissions',
+            headerTitle: 'Permissions',
+            appsListTitle: 'Apps',
+            appsListDescription: 'Select an app to view permissions.',
+            searchPlaceholder: 'Search apps',
+            emptyApps: 'No apps found.',
+            backLabel: 'Back',
+            detailsTitle: 'App Permissions',
+            detailsDescription: 'Granted permissions for this app.',
+            noPermissions: 'This app has no granted permissions.',
+            enabledLabel: 'Enabled',
+            disabledLabel: 'Disabled',
+            statusSaving: 'Saving permissions...',
+            statusSaved: 'Permissions updated',
+            statusSaveFailed: 'Failed to update permissions',
+            permissionLocked: 'Locked',
+            permissionLockedSelf: 'Protected for this system app',
+            permissionLockedBuiltin: 'Core builtin requirement',
+            permissionLockedOwnerBound: 'Reserved for owner app',
+            permissionLockedStoreLegacy: 'Store apps require scoped firestore.collection permissions',
+            permissionLockedSocialLegacy: 'Use granular social.profile.*.read permissions',
+            permissionLockedSocialRequiresAuth: 'Social permissions require auth.token.read or auth.user.read',
+            permissionLockedSocialWriteRequiresRead: 'social.profile.write requires at least one social.profile.*.read permission',
+            permissionLockedSocialWriteRestricted: 'social.profile.write is restricted to trusted profile provider apps',
+            permissionLockedSocialDmWriteRequiresRead: 'social.dm.write requires social.dm.read',
+            permissionInvalid: 'Invalid permission key',
+            permissionEmptyDenied: 'Builtin apps must keep at least one permission',
+            sourceSystem: 'System',
+            sourceStore: 'Store',
+            sourceUnknown: 'Unknown',
+            unknownPermissionTitle: 'Unknown Permission',
+            unknownPermissionDescription: 'This key exists in app manifest but is not in catalog',
+            retryLabel: 'Retry',
+            errorPermissionDenied: 'Permission denied for this action',
+            errorNetwork: 'Network error. Please try again',
+            errorLoadApps: 'Failed to load apps list',
+            qaTitle: 'Pre-Ship QA',
+            qaItemSafeArea: 'Safe Area',
+            qaItemSafeAreaDesc: 'Check top/bottom insets on iPhone notch screens',
+            qaItemOffline: 'Offline Recovery',
+            qaItemOfflineDesc: 'Toggle offline/online and verify retry flow',
+            qaItemRotate: 'Rotation',
+            qaItemRotateDesc: 'Verify list and detail layout in portrait/landscape',
+            qaItemPermission: 'Permission Denial',
+            qaItemPermissionDesc: 'Confirm blocked toggles show lock state and no write',
+            statusLoadFailed: 'Failed to load apps',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+            statusLoadingApps: 'Loading apps...',
+            statusAppsLoaded: 'Apps loaded',
+          },
+          hy: {
+            pageTitle: 'Թույլատրվություններ',
+            headerTitle: 'Թույլատրվություններ',
+            appsListTitle: 'Ծրագրեր',
+            appsListDescription: 'Ընտրիր ծրագիրը՝ թույլատրվությունները դիտելու համար։',
+            searchPlaceholder: 'Փնտրել ծրագրեր',
+            emptyApps: 'Ծրագրեր չկան։',
+            backLabel: 'Հետ',
+            detailsTitle: 'Ծրագրի Permission-ներ',
+            detailsDescription: 'Այս ծրագրին տրված թույլատրվությունները։',
+            noPermissions: 'Այս ծրագիրը թույլատրված permission չունի։',
+            enabledLabel: 'Միացված',
+            disabledLabel: 'Անջատված',
+            statusSaving: 'Պահպանվում է...',
+            statusSaved: 'Permission-ները թարմացվել են',
+            statusSaveFailed: 'Չհաջողվեց թարմացնել permission-ները',
+            permissionLocked: 'Փակված է',
+            permissionLockedSelf: 'Պաշտպանված է այս system app-ի համար',
+            permissionLockedBuiltin: 'Հիմնական system պահանջ',
+            permissionLockedOwnerBound: 'Վերապահված է owner app-ի համար',
+            permissionLockedStoreLegacy: 'Store app-երի համար պետք են scoped firestore.collection permission-ներ',
+            permissionLockedSocialLegacy: 'Օգտագործիր granular social.profile.*.read permission-ներ',
+            permissionLockedSocialRequiresAuth: 'Social permission-ները պահանջում են auth.token.read կամ auth.user.read',
+            permissionLockedSocialWriteRequiresRead: 'social.profile.write-ը պահանջում է գոնե մեկ social.profile.*.read permission',
+            permissionLockedSocialWriteRestricted: 'social.profile.write-ը սահմանափակված է միայն վստահելի profile provider app-երով',
+            permissionLockedSocialDmWriteRequiresRead: 'social.dm.write-ը պահանջում է social.dm.read',
+            permissionInvalid: 'Անվավեր permission key',
+            permissionEmptyDenied: 'Builtin ծրագրերը պետք է ունենան գոնե մեկ permission',
+            sourceSystem: 'Համակարգային',
+            sourceStore: 'Խանութ',
+            sourceUnknown: 'Անհայտ',
+            unknownPermissionTitle: 'Անհայտ Permission',
+            unknownPermissionDescription: 'Այս key-ը կա manifest-ում, բայց catalog-ում չկա',
+            retryLabel: 'Կրկնել',
+            errorPermissionDenied: 'Գործողության համար permission չկա',
+            errorNetwork: 'Ցանցային սխալ է, փորձիր կրկին',
+            errorLoadApps: 'Չհաջողվեց բեռնել ծրագրերի ցուցակը',
+            qaTitle: 'Pre-Ship QA',
+            qaItemSafeArea: 'Safe Area',
+            qaItemSafeAreaDesc: 'Ստուգիր վերև/ներքև ինսեթները notch-ով iPhone-ներում',
+            qaItemOffline: 'Offline Recovery',
+            qaItemOfflineDesc: 'Անցիր offline/online և ստուգիր retry flow-ը',
+            qaItemRotate: 'Rotation',
+            qaItemRotateDesc: 'Ստուգիր list/details layout-ը portrait/landscape-ում',
+            qaItemPermission: 'Permission Denial',
+            qaItemPermissionDesc: 'Ստուգիր locked toggle-ները write չանեն',
+            statusLoadFailed: 'Չհաջողվեց բեռնել ծրագրերը',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+            statusLoadingApps: 'Բեռնվում են ծրագրերը...',
+            statusAppsLoaded: 'Ծրագրերը բեռնված են',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        get selectedApp() {
+          return this.apps.find((app) => app.id === this.selectedAppId) || null;
+        },
+
+        get selectedPermissionsSet() {
+          const raw = this.selectedApp && Array.isArray(this.selectedApp.permissions)
+            ? this.selectedApp.permissions
+            : [];
+          return new Set(raw.filter((permission) => typeof permission === 'string' && permission.trim().length > 0));
+        },
+
+        normalizeErrorMessage(rawError) {
+          const message = rawError && rawError.message ? String(rawError.message) : String(rawError || '');
+          const normalized = message.toLowerCase();
+          if (normalized.includes('permission denied')) return this.t('errorPermissionDenied');
+          if (normalized.includes('network') || normalized.includes('failed to fetch')) return this.t('errorNetwork');
+          return message || this.t('errorLoadApps');
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'permissions-app';
+
+            this.client = new HayOSClient(this.appId);
+            this.status = this.t('statusAuthCheck');
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+
+            this.language = await this.client.getLanguage();
+            this.language = this.language === 'hy' ? 'hy' : 'en';
+            document.documentElement.lang = this.language;
+            this.resolveViewFromHash();
+            window.addEventListener('hashchange', () => this.resolveViewFromHash());
+
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+              this.applySearch();
+              if (!this.loadingApps && !this.saving) {
+                this.status = this.t('statusAppsLoaded');
+              }
+            });
+
+            this.status = this.t('statusAuthenticated');
+            await this.loadOsTheme();
+            this.status = this.t('statusLoadingApps');
+            await this.loadAppsCatalog();
+            this.resolveViewFromHash();
+            this.status = this.t('statusAppsLoaded');
+          } catch (error) {
+            this.error = this.normalizeErrorMessage(error);
+            this.status = this.t('statusAuthFailed');
+          }
+        },
+
+        normalizeApp(row, source) {
+          const raw = row && typeof row === 'object' ? row : {};
+          const appId = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+          if (!appId) return null;
+          const rawPermissions = Array.isArray(raw.permissions) ? raw.permissions : [];
+          const permissions = Array.from(
+            new Set(rawPermissions.filter((item) => typeof item === 'string' && item.trim().length > 0)),
+          );
+          return {
+            id: appId,
+            name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : appId,
+            icon: typeof raw.icon === 'string' ? raw.icon : '',
+            permissions,
+            source,
+            builtin: Boolean(raw.builtin),
+            group: typeof raw.group === 'string' ? raw.group : '',
+            type: typeof raw.type === 'string' ? raw.type : '',
+          };
+        },
+
+        async loadAppsCatalog() {
+          if (!this.client) return;
+          this.loadingApps = true;
+          try {
+            const [systemRowsRaw, storeRowsRaw] = await Promise.all([
+              this.client.firestoreQuery('systemApps', {}),
+              this.client.firestoreQuery('systemStore', {}),
+            ]);
+
+            const systemRows = Array.isArray(systemRowsRaw) ? systemRowsRaw : [];
+            const storeRows = Array.isArray(storeRowsRaw) ? storeRowsRaw : [];
+
+            const merged = [
+              ...systemRows.map((row) => this.normalizeApp(row, 'system')),
+              ...storeRows.map((row) => this.normalizeApp(row, 'store')),
+            ]
+              .filter(Boolean)
+              .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), this.language === 'hy' ? 'hy' : 'en'));
+
+            this.apps = merged;
+            this.mergeObservedScopedPermissions(merged);
+            this.applySearch();
+            this.status = this.t('statusAppsLoaded');
+            this.error = '';
+          } catch (error) {
+            this.error = this.normalizeErrorMessage(error);
+            this.status = this.t('statusLoadFailed');
+            this.apps = [];
+            this.filteredApps = [];
+          } finally {
+            this.loadingApps = false;
+          }
+        },
+
+        async retryLoadApps() {
+          if (this.loadingApps) return;
+          this.error = '';
+          this.status = this.t('statusLoadingApps');
+          await this.loadAppsCatalog();
+        },
+
+        applySearch() {
+          const term = String(this.query || '').trim().toLocaleLowerCase(this.language === 'hy' ? 'hy-AM' : 'en-US');
+          if (!term) {
+            this.filteredApps = this.apps.slice();
+            return;
+          }
+          this.filteredApps = this.apps.filter((app) => {
+            const haystack = `${app.name} ${app.id}`.toLocaleLowerCase(this.language === 'hy' ? 'hy-AM' : 'en-US');
+            return haystack.includes(term);
+          });
+        },
+
+        openAppDetails(appId) {
+          this.selectedAppId = appId;
+          this.activeView = 'details';
+          window.location.hash = `app=${encodeURIComponent(appId)}`;
+        },
+
+        goBackToList() {
+          this.activeView = 'list';
+          this.selectedAppId = '';
+          window.location.hash = '';
+        },
+
+        resolveViewFromHash() {
+          const rawHash = window.location.hash.replace(/^#/, '').trim();
+          if (!rawHash.startsWith('app=')) {
+            this.activeView = 'list';
+            this.selectedAppId = '';
+            return;
+          }
+          const appId = decodeURIComponent(rawHash.slice(4));
+          if (!appId) {
+            this.activeView = 'list';
+            this.selectedAppId = '';
+            return;
+          }
+          const exists = this.apps.some((app) => app.id === appId);
+          if (!exists) {
+            this.activeView = 'list';
+            this.selectedAppId = '';
+            return;
+          }
+          this.selectedAppId = appId;
+          this.activeView = 'details';
+        },
+
+        scopedPermissionMetaByKey(key) {
+          const scopedMatch = /^firestore\.collection\.([A-Za-z0-9_-]{1,64})\.(read|write)$/.exec(key);
+          if (!scopedMatch) return null;
+          const [, collectionName, mode] = scopedMatch;
+          const modeLabelHy = mode === 'read' ? 'ընթերցում' : 'փոփոխում';
+          const modeLabelEn = mode === 'read' ? 'Read' : 'Write';
+          return {
+            key,
+            titleHy: `${collectionName} (${modeLabelHy})`,
+            titleEn: `${collectionName} (${modeLabelEn})`,
+            descriptionHy: `Scoped Firestore permission ${collectionName} collection-ի համար`,
+            descriptionEn: `Scoped Firestore permission for ${collectionName} collection`,
+            category: 'firestore',
+            lockable: false,
+          };
+        },
+
+        mergeObservedScopedPermissions(apps) {
+          const observed = new Set(
+            Array.isArray(this.observedScopedPermissionKeys)
+              ? this.observedScopedPermissionKeys
+              : [],
+          );
+          const rows = Array.isArray(apps) ? apps : [];
+          rows.forEach((app) => {
+            const keys = Array.isArray(app?.permissions) ? app.permissions : [];
+            keys.forEach((key) => {
+              if (this.scopedPermissionMetaByKey(key)) {
+                observed.add(key);
+              }
+            });
+          });
+          this.observedScopedPermissionKeys = Array.from(observed).sort((a, b) => a.localeCompare(b));
+        },
+
+        allPermissionCatalog() {
+          const base = Array.isArray(this.permissionCatalog) ? this.permissionCatalog.slice() : [];
+          const seen = new Set(base.map((item) => item.key));
+          const observedKeys = Array.isArray(this.observedScopedPermissionKeys)
+            ? this.observedScopedPermissionKeys
+            : [];
+          observedKeys.forEach((key) => {
+            if (seen.has(key)) return;
+            const meta = this.scopedPermissionMetaByKey(key);
+            if (!meta) return;
+            base.push(meta);
+            seen.add(key);
+          });
+          return base;
+        },
+
+        permissionMetaByKey(key) {
+          const fromCatalog = this.allPermissionCatalog().find((item) => item.key === key);
+          if (fromCatalog) return fromCatalog;
+          return this.scopedPermissionMetaByKey(key);
+        },
+
+        sourceLabel(source) {
+          if (source === 'system') return this.t('sourceSystem');
+          if (source === 'store') return this.t('sourceStore');
+          return this.t('sourceUnknown');
+        },
+
+        isKnownPermissionKey(permissionKey) {
+          return Boolean(this.permissionMetaByKey(permissionKey));
+        },
+
+        isPermissionEnabled(permissionKey) {
+          return this.selectedPermissionsSet.has(permissionKey);
+        },
+
+        isPermissionBusy(permissionKey) {
+          return Boolean(this.savingPermissionKeys[permissionKey]);
+        },
+
+        setPermissionBusy(permissionKey, busy) {
+          this.savingPermissionKeys = {
+            ...this.savingPermissionKeys,
+            [permissionKey]: Boolean(busy),
+          };
+        },
+
+        getSelfProtectedPermissionKeys() {
+          return new Set([
+            'auth.token.read',
+            'auth.user.read',
+            'settings.theme.read',
+            'firestore.collection.systemApps.read',
+            'firestore.collection.systemApps.write',
+            'firestore.collection.systemStore.read',
+            'firestore.collection.systemStore.write',
+          ]);
+        },
+
+        getBuiltinRequiredPermissionKeys() {
+          return new Set(['auth.token.read']);
+        },
+
+        ownerBoundScopedPermissionOwnerAppId(permissionKey) {
+          const scopedMatch = /^firestore\.collection\.([A-Za-z0-9_-]{1,64})\.(read|write)$/.exec(permissionKey);
+          if (!scopedMatch) return '';
+          const collectionName = scopedMatch[1];
+          if (collectionName === 'installedApps') return 'app-store';
+          if (collectionName === 'bindings') return 'app-store';
+          return '';
+        },
+
+        isLegacyFirestorePermissionKey(permissionKey) {
+          return [
+            'firestore.get',
+            'firestore.query',
+            'firestore.add',
+            'firestore.update',
+            'firestore.delete',
+            'firestore.read',
+            'firestore.write',
+          ].includes(permissionKey);
+        },
+
+        getSocialProfileWriteEnableAllowlist() {
+          return new Set([
+            'profile',
+            'sard',
+          ]);
+        },
+
+        canEnableSocialProfileWriteForSelectedApp() {
+          if (!this.selectedApp) return false;
+          return this.getSocialProfileWriteEnableAllowlist().has(this.selectedApp.id);
+        },
+
+        hasAnyAuthReadPermission(permissions) {
+          return permissions.includes('auth.token.read') || permissions.includes('auth.user.read');
+        },
+
+        hasAnySocialProfilePermission(permissions) {
+          return permissions.some((permission) => [
+            'social.profile.write',
+            'social.profile.username.read',
+            'social.profile.photo.read',
+            'social.profile.displayName.read',
+          ].includes(permission));
+        },
+
+        hasAnySocialDmPermission(permissions) {
+          return permissions.includes('social.dm.read')
+            || permissions.includes('social.dm.write');
+        },
+
+        hasAnySocialPermission(permissions) {
+          return this.hasAnySocialProfilePermission(permissions) || this.hasAnySocialDmPermission(permissions);
+        },
+
+        hasAnySocialProfileReadPermission(permissions) {
+          return permissions.includes('social.profile.username.read')
+            || permissions.includes('social.profile.photo.read')
+            || permissions.includes('social.profile.displayName.read');
+        },
+
+        socialDependencyViolationForPermissions(permissions, appId) {
+          if (!this.hasAnySocialPermission(permissions)) return '';
+          if (!this.hasAnyAuthReadPermission(permissions)) return 'missing_auth';
+          if (this.hasAnySocialProfilePermission(permissions)) {
+            if (permissions.includes('social.profile.write')) {
+              const writeAllowlist = this.getSocialProfileWriteEnableAllowlist();
+              if (!writeAllowlist.has(appId)) return 'write_restricted';
+            }
+            if (permissions.includes('social.profile.write') && !this.hasAnySocialProfileReadPermission(permissions)) {
+              return 'write_requires_read';
+            }
+          }
+          if (permissions.includes('social.dm.write') && !permissions.includes('social.dm.read')) {
+            return 'dm_write_requires_read';
+          }
+          return '';
+        },
+
+        permissionLockReason(permissionKey) {
+          if (!this.selectedApp) return '';
+          const ownerAppId = this.ownerBoundScopedPermissionOwnerAppId(permissionKey);
+          if (ownerAppId && this.selectedApp.id !== ownerAppId && !this.isPermissionEnabled(permissionKey)) {
+            return this.t('permissionLockedOwnerBound');
+          }
+          if (
+            this.selectedApp.source === 'store'
+            && this.isLegacyFirestorePermissionKey(permissionKey)
+            && !this.isPermissionEnabled(permissionKey)
+          ) {
+            return this.t('permissionLockedStoreLegacy');
+          }
+          if (this.selectedApp.id === 'permissions-app' && this.getSelfProtectedPermissionKeys().has(permissionKey)) {
+            return this.t('permissionLockedSelf');
+          }
+          if (this.selectedApp.builtin && this.getBuiltinRequiredPermissionKeys().has(permissionKey)) {
+            return this.t('permissionLockedBuiltin');
+          }
+          const isEnabled = this.isPermissionEnabled(permissionKey);
+          const simulatedPermissions = this.buildUpdatedPermissions(permissionKey, !isEnabled);
+          const dependencyViolation = this.socialDependencyViolationForPermissions(simulatedPermissions, this.selectedApp.id);
+          if (dependencyViolation === 'missing_auth') {
+            return this.t('permissionLockedSocialRequiresAuth');
+          }
+          if (dependencyViolation === 'write_requires_read') {
+            return this.t('permissionLockedSocialWriteRequiresRead');
+          }
+          if (dependencyViolation === 'write_restricted') {
+            return this.t('permissionLockedSocialWriteRestricted');
+          }
+          if (dependencyViolation === 'dm_write_requires_read') {
+            return this.t('permissionLockedSocialDmWriteRequiresRead');
+          }
+          return '';
+        },
+
+        isPermissionLocked(permissionKey) {
+          return this.permissionLockReason(permissionKey).length > 0;
+        },
+
+        buildUpdatedPermissions(permissionKey, enabled) {
+          const current = Array.from(this.selectedPermissionsSet);
+          const next = new Set(current);
+          if (enabled) next.add(permissionKey);
+          else next.delete(permissionKey);
+          return Array.from(next).sort((a, b) => a.localeCompare(b));
+        },
+
+        applySelectedAppPermissions(permissions) {
+          if (!this.selectedApp) return;
+          const updatedApp = {
+            ...this.selectedApp,
+            permissions: Array.isArray(permissions) ? permissions : [],
+          };
+          this.syncSelectedApp(updatedApp);
+        },
+
+        async persistPermissionToggle(permissionKey, enabled) {
+          if (!this.client) throw new Error('Client not initialized');
+          if (!this.selectedApp) throw new Error('No selected app');
+
+          const collectionName = this.selectedApp.source === 'system' ? 'systemApps' : 'systemStore';
+          const nextPermissions = this.buildUpdatedPermissions(permissionKey, enabled);
+          await this.client.firestoreUpdate(collectionName, this.selectedApp.id, {
+            permissions: nextPermissions,
+          });
+          return true;
+        },
+
+        async handlePermissionToggle(permissionKey, enabled) {
+          if (!this.selectedApp) return;
+          if (this.saving || this.isPermissionBusy(permissionKey)) return;
+          if (!this.isKnownPermissionKey(permissionKey)) {
+            this.status = this.t('permissionInvalid');
+            return;
+          }
+          if (this.isPermissionLocked(permissionKey)) {
+            this.status = this.t('permissionLocked');
+            return;
+          }
+
+          const previousPermissions = Array.from(this.selectedPermissionsSet);
+          const nextPermissions = this.buildUpdatedPermissions(permissionKey, enabled);
+          if (this.selectedApp.builtin && nextPermissions.length === 0) {
+            this.status = this.t('permissionEmptyDenied');
+            return;
+          }
+
+          this.error = '';
+          this.saving = true;
+          this.setPermissionBusy(permissionKey, true);
+          this.status = this.t('statusSaving');
+
+          this.applySelectedAppPermissions(nextPermissions);
+
+          try {
+            await this.persistPermissionToggle(permissionKey, enabled);
+            this.status = this.t('statusSaved');
+          } catch (error) {
+            this.applySelectedAppPermissions(previousPermissions);
+            this.error = this.normalizeErrorMessage(error);
+            this.status = this.t('statusSaveFailed');
+          } finally {
+            this.saving = false;
+            this.setPermissionBusy(permissionKey, false);
+          }
+        },
+
+        syncSelectedApp(updatedApp) {
+          if (!updatedApp || !updatedApp.id) return;
+          this.apps = this.apps.map((app) => (app.id === updatedApp.id ? updatedApp : app));
+          this.filteredApps = this.filteredApps.map((app) => (app.id === updatedApp.id ? updatedApp : app));
+          this.mergeObservedScopedPermissions(this.apps);
+        },
+
+        selectedPermissionRows() {
+          if (!this.selectedApp) return [];
+          const fromCatalog = this.allPermissionCatalog().map((meta) => ({
+            key: meta.key,
+            title: this.language === 'hy' ? meta.titleHy : meta.titleEn,
+            description: this.language === 'hy' ? meta.descriptionHy : meta.descriptionEn,
+            enabled: this.isPermissionEnabled(meta.key),
+            lockable: Boolean(meta.lockable),
+            locked: this.isPermissionLocked(meta.key),
+            lockReason: this.permissionLockReason(meta.key),
+            busy: this.isPermissionBusy(meta.key),
+          }));
+          const unknownGranted = Array.from(this.selectedPermissionsSet)
+            .filter((key) => !this.permissionMetaByKey(key))
+            .map((key) => ({
+              key,
+              title: `${this.t('unknownPermissionTitle')} (${key})`,
+              description: this.t('unknownPermissionDescription'),
+              enabled: true,
+              lockable: false,
+              locked: this.isPermissionLocked(key),
+              lockReason: this.permissionLockReason(key),
+              busy: this.isPermissionBusy(key),
+            }));
+          return [...fromCatalog, ...unknownGranted];
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') return;
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

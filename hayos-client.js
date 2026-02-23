@@ -1,6 +1,59 @@
 // HayOSClient.js - Standalone client for iframe apps
 (function() {
     'use strict';
+
+    const SYSTEM_SETTINGS_LOCAL_STORAGE_KEY = 'hayos.settings';
+    const SYSTEM_SETTINGS_BOOTSTRAP_LOCAL_STORAGE_KEY = 'hayos.features.systemSettingsBootstrap';
+    const SYSTEM_SETTINGS_BOOTSTRAP_URL_PARAM = 'settingsBootstrap';
+    const DEFAULT_SYSTEM_SETTINGS = {
+      version: 1,
+      language: 'en',
+      theme: 'black',
+      updatedAt: new Date(0).toISOString(),
+    };
+    const ALLOWED_DAISY_THEMES = new Set([
+      'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 'synthwave', 'retro',
+      'cyberpunk', 'valentine', 'halloween', 'garden', 'forest', 'aqua', 'lofi', 'pastel',
+      'fantasy', 'wireframe', 'black', 'luxury', 'dracula', 'cmyk', 'autumn', 'business',
+      'acid', 'lemonade', 'night', 'coffee', 'winter', 'dim', 'nord', 'sunset', 'caramellatte',
+      'abyss', 'silk',
+    ]);
+    const LEGACY_LANGUAGE_KEYS = ['hayos.language', 'ui.language', 'language'];
+    const LEGACY_THEME_KEYS = ['hayos.theme', 'ui.theme', 'selectedTheme', 'theme'];
+
+    function parseFlag(value) {
+      if (typeof value === 'boolean') return value;
+      if (typeof value !== 'string') return null;
+      const normalized = value.trim().toLowerCase();
+      if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') {
+        return true;
+      }
+      if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') {
+        return false;
+      }
+      return null;
+    }
+
+    function isSystemSettingsBootstrapEnabled() {
+      try {
+        const url = new URL(window.location.href);
+        const queryOverride = parseFlag(url.searchParams.get(SYSTEM_SETTINGS_BOOTSTRAP_URL_PARAM));
+        if (queryOverride !== null) {
+          return queryOverride;
+        }
+      } catch {
+        // ignore URL parsing failure
+      }
+      try {
+        const stored = parseFlag(window.localStorage.getItem(SYSTEM_SETTINGS_BOOTSTRAP_LOCAL_STORAGE_KEY));
+        if (stored !== null) {
+          return stored;
+        }
+      } catch {
+        // ignore localStorage read failure
+      }
+      return true;
+    }
   
     if (window.HayOSClient) {
       console.warn('HayOSClient is already loaded');
@@ -26,12 +79,126 @@
         this.socialProfileListeners = [];
         this.debugTraceListeners = [];
         this.hostContextListeners = [];
+        this.systemSettingsBootstrapEnabled = isSystemSettingsBootstrapEnabled();
         this._messageHandler = this._handleMessage.bind(this);
         
         // Start listening for messages from parent (HayOS shell)
         window.addEventListener('message', this._messageHandler);
         
         console.log(`HayOSClient initialized for app: ${appId}`);
+      }
+      _normalizeLanguage(language, fallback = DEFAULT_SYSTEM_SETTINGS.language) {
+        const normalized = typeof language === 'string' ? language.trim().toLowerCase() : '';
+        return normalized === 'hy' || normalized === 'en' ? normalized : fallback;
+      }
+      _normalizeTheme(theme, fallback = DEFAULT_SYSTEM_SETTINGS.theme) {
+        const normalized = typeof theme === 'string' ? theme.trim() : '';
+        if (!normalized) return fallback;
+        return ALLOWED_DAISY_THEMES.has(normalized) ? normalized : fallback;
+      }
+      _readFirstStorageValue(keys) {
+        for (const key of keys) {
+          try {
+            const value = window.localStorage.getItem(key);
+            if (typeof value === 'string' && value.trim().length > 0) {
+              return value;
+            }
+          } catch {
+            // ignore localStorage read failures
+          }
+        }
+        return null;
+      }
+      _readLegacySystemSettings() {
+        const rawLanguage = this._readFirstStorageValue(LEGACY_LANGUAGE_KEYS);
+        const rawTheme = this._readFirstStorageValue(LEGACY_THEME_KEYS);
+        return {
+          version: 1,
+          language: this._normalizeLanguage(rawLanguage, DEFAULT_SYSTEM_SETTINGS.language),
+          theme: this._normalizeTheme(rawTheme, DEFAULT_SYSTEM_SETTINGS.theme),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      _readCachedSystemSettings() {
+        try {
+          const raw = window.localStorage.getItem(SYSTEM_SETTINGS_LOCAL_STORAGE_KEY);
+          if (!raw) {
+            const migrated = this._readLegacySystemSettings();
+            try {
+              window.localStorage.setItem(SYSTEM_SETTINGS_LOCAL_STORAGE_KEY, JSON.stringify(migrated));
+            } catch {
+              // ignore storage write failures
+            }
+            return migrated;
+          }
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') {
+            const migrated = this._readLegacySystemSettings();
+            try {
+              window.localStorage.setItem(SYSTEM_SETTINGS_LOCAL_STORAGE_KEY, JSON.stringify(migrated));
+            } catch {
+              // ignore storage write failures
+            }
+            return migrated;
+          }
+          const hasCurrentVersion = parsed.version === 1;
+          const legacyFallback = this._readLegacySystemSettings();
+          const normalized = {
+            version: 1,
+            language: this._normalizeLanguage(parsed.language, legacyFallback.language),
+            theme: this._normalizeTheme(parsed.theme, legacyFallback.theme),
+            updatedAt: typeof parsed.updatedAt === 'string' && parsed.updatedAt.trim().length > 0
+              ? parsed.updatedAt
+              : legacyFallback.updatedAt,
+          };
+          if (!hasCurrentVersion) {
+            try {
+              window.localStorage.setItem(SYSTEM_SETTINGS_LOCAL_STORAGE_KEY, JSON.stringify(normalized));
+            } catch {
+              // ignore storage write failures
+            }
+          }
+          return normalized;
+        } catch {
+          return this._readLegacySystemSettings();
+        }
+      }
+      _patchSystemSettingsInStorage(patch) {
+        const existing = this._readCachedSystemSettings();
+        const next = {
+          version: 1,
+          language: Object.prototype.hasOwnProperty.call(patch || {}, 'language')
+            ? this._normalizeLanguage(patch.language, existing.language)
+            : existing.language,
+          theme: Object.prototype.hasOwnProperty.call(patch || {}, 'theme')
+            ? this._normalizeTheme(patch.theme, existing.theme)
+            : existing.theme,
+          updatedAt: patch && typeof patch.updatedAt === 'string' && patch.updatedAt.trim().length > 0
+            ? patch.updatedAt
+            : new Date().toISOString(),
+        };
+        try {
+          window.localStorage.setItem(SYSTEM_SETTINGS_LOCAL_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore storage write failures
+        }
+        return next;
+      }
+      _syncSystemModuleValueInBackground(key) {
+        this._sendRequest({ kind: 'module.getValue', key })
+          .then((response) => {
+            if (!response.ok || response.action !== 'module.getValue') return;
+            if (key === 'ui.language') {
+              this._patchSystemSettingsInStorage({ language: response.value });
+              return;
+            }
+            if (key === 'ui.theme') {
+              this._patchSystemSettingsInStorage({ theme: response.value });
+            }
+          })
+          .catch(() => {
+            // ignore background sync failures
+          });
       }
       _emitDebug(detail) {
         try {
@@ -180,12 +347,36 @@ async firestoreGet(collection, documentId) {
           data.payload &&
           (data.payload.language === 'hy' || data.payload.language === 'en')
         ) {
+          this._patchSystemSettingsInStorage({ language: data.payload.language });
           this.languageListeners.forEach((callback) => {
             try {
               callback(data.payload.language);
             } catch (error) {
               console.error('Error in language listener:', error);
             }
+          });
+          return;
+        }
+
+        if (
+          data.type === 'hayos:systemEvent' &&
+          data.event === 'themeChanged' &&
+          data.payload &&
+          typeof data.payload.theme === 'string'
+        ) {
+          this._patchSystemSettingsInStorage({ theme: data.payload.theme });
+          return;
+        }
+
+        if (
+          data.type === 'hayos:systemEvent' &&
+          data.event === 'settings.bootstrap' &&
+          data.payload &&
+          typeof data.payload === 'object'
+        ) {
+          this._patchSystemSettingsInStorage({
+            language: data.payload.language,
+            theme: data.payload.theme,
           });
           return;
         }
@@ -366,6 +557,16 @@ async firestoreGet(collection, documentId) {
        * @returns {Promise<any|null>}
        */
       async getModuleValue(key) {
+        if (this.systemSettingsBootstrapEnabled && key === 'ui.language') {
+          const cached = this._readCachedSystemSettings().language;
+          this._syncSystemModuleValueInBackground('ui.language');
+          return cached;
+        }
+        if (this.systemSettingsBootstrapEnabled && key === 'ui.theme') {
+          const cached = this._readCachedSystemSettings().theme;
+          this._syncSystemModuleValueInBackground('ui.theme');
+          return cached;
+        }
         const response = await this._sendRequest({
           kind: 'module.getValue',
           key,
@@ -470,6 +671,7 @@ async firestoreGet(collection, documentId) {
         if (!response.ok || response.action !== 'system.language.set') {
           throw new Error(response.error || 'Failed to set language');
         }
+        this._patchSystemSettingsInStorage({ language: response.language });
         return response.language;
       }
 
@@ -736,6 +938,150 @@ async firestoreGet(collection, documentId) {
         return Array.isArray(response.data) ? response.data : [];
       }
 
+      async socialFriendList(uid) {
+        const response = await this._sendRequest({ kind: 'social.friend.list', uid });
+        if (!response.ok || response.action !== 'social.friend.list') {
+          throw new Error(response.error || 'Failed to list friends');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async teeezerqBlackHoleList() {
+        const response = await this._sendRequest({ kind: 'teeezerq.blackHole.list' });
+        if (!response.ok || response.action !== 'teeezerq.blackHole.list') {
+          throw new Error(response.error || 'Failed to list black-hole portals');
+        }
+        const rows = Array.isArray(response.data) ? response.data : [];
+        return rows.map((row) => {
+          const item = row && typeof row === 'object' ? row : {};
+          const visibility = item.visibility === 'public' || item.visibility === 'friends' || item.visibility === 'private'
+            ? item.visibility
+            : null;
+          return {
+            id: typeof item.id === 'string' ? item.id : '',
+            kind: 'black_hole',
+            friendUid: typeof item.friendUid === 'string' ? item.friendUid : '',
+            planetId: typeof item.planetId === 'string' ? item.planetId : '',
+            planetName: typeof item.planetName === 'string' ? item.planetName : '',
+            description: typeof item.description === 'string' ? item.description : '',
+            visibility,
+          };
+        });
+      }
+
+      async planetCreate(payload) {
+        const response = await this._sendRequest({ kind: 'planet.create', data: payload || {} });
+        if (!response.ok || response.action !== 'planet.create') {
+          throw new Error(response.error || 'Failed to create planet');
+        }
+        return response.data;
+      }
+
+      async planetConnect(planetId) {
+        const response = await this._sendRequest({ kind: 'planet.connect', planetId });
+        if (!response.ok || response.action !== 'planet.connect') {
+          throw new Error(response.error || 'Failed to connect planet');
+        }
+        return response.data;
+      }
+
+      async planetContextGet() {
+        const response = await this._sendRequest({ kind: 'planet.context.get' });
+        if (!response.ok || response.action !== 'planet.context.get') {
+          throw new Error(response.error || 'Failed to get planet context');
+        }
+        const data = response.data && typeof response.data === 'object' ? response.data : {};
+        const planetRaw = data.planet && typeof data.planet === 'object' ? data.planet : null;
+        const planet = planetRaw
+          ? {
+            id: typeof planetRaw.id === 'string' ? planetRaw.id : '',
+            name: typeof planetRaw.name === 'string' ? planetRaw.name : '',
+            description: typeof planetRaw.description === 'string' ? planetRaw.description : '',
+            visibility: planetRaw.visibility === 'public' || planetRaw.visibility === 'friends' || planetRaw.visibility === 'private'
+              ? planetRaw.visibility
+              : null,
+            ownerUserId: typeof planetRaw.ownerUserId === 'string' ? planetRaw.ownerUserId : '',
+            legacySpaceId: typeof planetRaw.legacySpaceId === 'string' ? planetRaw.legacySpaceId : null,
+          }
+          : null;
+        return {
+          connectedPlanetId: typeof data.connectedPlanetId === 'string' && data.connectedPlanetId.trim().length > 0
+            ? data.connectedPlanetId.trim()
+            : null,
+          planet,
+        };
+      }
+
+      async planetList() {
+        const response = await this._sendRequest({ kind: 'planet.list' });
+        if (!response.ok || response.action !== 'planet.list') {
+          throw new Error(response.error || 'Failed to list planets');
+        }
+        const rows = Array.isArray(response.data) ? response.data : [];
+        return rows.map((row) => {
+          const item = row && typeof row === 'object' ? row : {};
+          return {
+            id: typeof item.id === 'string' ? item.id : '',
+            name: typeof item.name === 'string' ? item.name : '',
+            description: typeof item.description === 'string' ? item.description : '',
+            visibility: item.visibility === 'public' || item.visibility === 'friends' || item.visibility === 'private'
+              ? item.visibility
+              : null,
+            ownerUserId: typeof item.ownerUserId === 'string' ? item.ownerUserId : '',
+            legacySpaceId: typeof item.legacySpaceId === 'string' ? item.legacySpaceId : null,
+          };
+        });
+      }
+
+      async planetListRecords(planetId) {
+        const response = await this._sendRequest({ kind: 'planet.listRecords', planetId });
+        if (!response.ok || response.action !== 'planet.listRecords') {
+          throw new Error(response.error || 'Failed to list planet records');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async globalSpaceListRecords(spaceId) {
+        const response = await this._sendRequest({ kind: 'globalSpace.listRecords', spaceId });
+        if (!response.ok || response.action !== 'globalSpace.listRecords') {
+          throw new Error(response.error || 'Failed to list global-space records');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async globalSpaceGetSchema(spaceId) {
+        const response = await this._sendRequest({ kind: 'globalSpace.getSchema', spaceId });
+        if (!response.ok || response.action !== 'globalSpace.getSchema') {
+          throw new Error(response.error || 'Failed to read global-space schema');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async planetAppStateGet(params) {
+        const response = await this._sendRequest({
+          kind: 'planet.appState.get',
+          planetId: params && typeof params.planetId === 'string' ? params.planetId : undefined,
+          targetAppId: params && typeof params.targetAppId === 'string' ? params.targetAppId : undefined,
+        });
+        if (!response.ok || response.action !== 'planet.appState.get') {
+          throw new Error(response.error || 'Failed to read planet app state');
+        }
+        return response.data || null;
+      }
+
+      async planetAppStateSet(data, params) {
+        const response = await this._sendRequest({
+          kind: 'planet.appState.set',
+          planetId: params && typeof params.planetId === 'string' ? params.planetId : undefined,
+          targetAppId: params && typeof params.targetAppId === 'string' ? params.targetAppId : undefined,
+          data: data && typeof data === 'object' ? data : {},
+        });
+        if (!response.ok || response.action !== 'planet.appState.set') {
+          throw new Error(response.error || 'Failed to update planet app state');
+        }
+        return response.data;
+      }
+
       async socialFeedList(params) {
         const response = await this._sendRequest({
           kind: 'social.feed.list',
@@ -788,8 +1134,8 @@ async firestoreGet(collection, documentId) {
         return Array.isArray(response.data) ? response.data : [];
       }
 
-      async socialDmSendMessage(threadId, text) {
-        const response = await this._sendRequest({ kind: 'social.dm.sendMessage', threadId, text });
+      async socialDmSendMessage(threadId, text, clientMessageId) {
+        const response = await this._sendRequest({ kind: 'social.dm.sendMessage', threadId, text, clientMessageId });
         if (!response.ok || response.action !== 'social.dm.sendMessage') {
           throw new Error(response.error || 'Failed to send message');
         }

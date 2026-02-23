@@ -21,6 +21,25 @@ interface HayOSSocialProfileSearchResult {
     avatarUrl: string | null;
 }
 
+interface HayOSPlanetSummary {
+    id: string;
+    name: string;
+    description?: string;
+    visibility?: 'private' | 'friends' | 'public' | null;
+    ownerUserId?: string;
+    legacySpaceId?: string | null;
+}
+
+interface HayOSTeezerQBlackHolePortal {
+    id: string;
+    kind: 'black_hole';
+    friendUid: string;
+    planetId: string;
+    planetName: string;
+    description?: string;
+    visibility?: 'private' | 'friends' | 'public' | null;
+}
+
 declare class HayOSClient {
     constructor(appId: string);
 
@@ -160,13 +179,30 @@ declare class HayOSClient {
     socialFollowDelete(targetUid: string): Promise<any>;
     socialFollowListFollowers(uid?: string): Promise<any[]>;
     socialFollowListFollowing(uid?: string): Promise<any[]>;
+    socialFriendList(uid?: string): Promise<any[]>;
+    teeezerqBlackHoleList(): Promise<HayOSTeezerQBlackHolePortal[]>;
+    planetCreate(payload: {
+        name: string;
+        slug?: string;
+        description?: string;
+        visibility?: 'private' | 'friends' | 'public';
+        legacySpaceId?: string;
+    }): Promise<any>;
+    planetConnect(planetId: string): Promise<any>;
+    planetContextGet(): Promise<{ connectedPlanetId: string | null; planet: HayOSPlanetSummary | null }>;
+    planetList(): Promise<HayOSPlanetSummary[]>;
+    planetListRecords(planetId: string): Promise<any[]>;
+    globalSpaceListRecords(spaceId: string): Promise<any[]>;
+    globalSpaceGetSchema(spaceId: string): Promise<any[]>;
+    planetAppStateGet(params?: { planetId?: string; targetAppId?: string }): Promise<any | null>;
+    planetAppStateSet(data: Record<string, unknown>, params?: { planetId?: string; targetAppId?: string }): Promise<any>;
     socialFeedList(params?: { ownerUid?: string; limit?: number }): Promise<any[]>;
     socialFeedCreatePost(payload: Record<string, unknown>): Promise<any>;
     socialFeedDeletePost(postId: string): Promise<any>;
     socialDmOpenThread(peerUid: string): Promise<any>;
     socialDmListMessages(threadId: string, cursor?: string, limit?: number): Promise<any[]>;
     socialDmListThreads(): Promise<any[]>;
-    socialDmSendMessage(threadId: string, text: string): Promise<any>;
+    socialDmSendMessage(threadId: string, text: string, clientMessageId?: string): Promise<any>;
     socialDmDeleteMessage(threadId: string, messageId: string): Promise<any>;
     socialBlockCreate(targetUid: string): Promise<any>;
     socialBlockDelete(targetUid: string): Promise<any>;

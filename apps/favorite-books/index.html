@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" data-theme="black" x-data="favoriteBooksApp()" x-init="init()">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Favorite Books</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Failed to load HayOSClient'));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+<body class="h-full bg-base-100">
+  <div class="max-w-7xl mx-auto px-4 py-5 h-full flex flex-col gap-4" x-cloak>
+    <section class="card bg-base-200 shadow-sm p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold" x-text="t('title')"></h1>
+          <p class="text-sm opacity-70" x-text="t('subtitle')"></p>
+        </div>
+        <div class="text-sm">
+          <span class="font-semibold" x-text="`${t('status')}:`"></span>
+          <span x-text="status"></span>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
+        <input class="input input-sm input-bordered" :placeholder="t('search')" x-model="query" @input="applyFilter()" />
+        <select class="select select-sm select-bordered" x-model="selectedPlanetId">
+          <option value="" x-text="t('selectPlanet')"></option>
+          <template x-for="p in planets" :key="p.id">
+            <option :value="p.id" x-text="p.name || p.id"></option>
+          </template>
+        </select>
+        <button class="btn btn-sm btn-outline" @click="connectPlanet()" x-text="t('connect')"></button>
+        <button class="btn btn-sm btn-outline" @click="refresh()" x-text="t('refresh')"></button>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <input class="input input-sm input-bordered" :placeholder="t('newPlanet')" x-model="newPlanetName" />
+        <button class="btn btn-sm" @click="createPlanet()" x-text="t('createPlanet')"></button>
+        <span class="text-xs opacity-70" x-text="connectedPlanet ? `${t('connected')}: ${connectedPlanet.name || connectedPlanet.id}` : t('notConnected')"></span>
+      </div>
+      <p class="mt-2 text-error text-sm" x-show="error" x-text="error"></p>
+    </section>
+
+    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 overflow-auto" x-show="!loading">
+      <template x-for="book in filtered" :key="book.id">
+        <article class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 gap-1">
+            <div class="flex items-start justify-between gap-2">
+              <h2 class="font-semibold text-base leading-tight" x-text="book.title || t('unknown')"></h2>
+              <button class="btn btn-ghost btn-xs text-lg" @click="toggleFavorite(book.id)">
+                <span x-text="isFavorite(book.id) ? '❤️' : '🤍'"></span>
+              </button>
+            </div>
+            <p class="text-sm opacity-75" x-text="book.author || '-' "></p>
+            <p class="text-xs opacity-70" x-text="book.year ? `Year: ${book.year}` : ''"></p>
+            <p class="text-sm mt-2" x-text="book.description || ''"></p>
+          </div>
+        </article>
+      </template>
+    </section>
+
+    <section class="card bg-base-200 p-4 text-sm opacity-70" x-show="!loading && filtered.length === 0">
+      <span x-text="records.length === 0 ? t('emptyAll') : t('emptyFiltered')"></span>
+    </section>
+  </div>
+
+  <script>
+    function favoriteBooksApp() {
+      return {
+        appId: 'favorite-books',
+        client: null,
+        language: 'en',
+        loading: true,
+        status: 'Initializing',
+        error: '',
+        records: [],
+        filtered: [],
+        query: '',
+        favorites: [],
+        planets: [],
+        connectedPlanet: null,
+        selectedPlanetId: '',
+        newPlanetName: '',
+        i18n: {
+          en: {
+            title: 'My Favorite Books',
+            subtitle: 'Choose favorites inside your connected planet.',
+            status: 'Status',
+            search: 'Search books...',
+            refresh: 'Refresh',
+            selectPlanet: 'Select planet',
+            connect: 'Connect',
+            newPlanet: 'New planet name',
+            createPlanet: 'Create planet',
+            connected: 'Connected planet',
+            notConnected: 'No connected planet',
+            emptyAll: 'No books in catalog.',
+            emptyFiltered: 'No books match your search.',
+            unknown: 'Unknown book',
+          },
+          hy: {
+            title: 'Իմ սիրելի գրքեր',
+            subtitle: 'Սրտիկները պահվում են կապակցված մոլորակի մեջ։',
+            status: 'Կարգավիճակ',
+            search: 'Փնտրիր գրքեր...',
+            refresh: 'Թարմացնել',
+            selectPlanet: 'Ընտրիր մոլորակ',
+            connect: 'Կապել',
+            newPlanet: 'Նոր մոլորակի անուն',
+            createPlanet: 'Ստեղծել մոլորակ',
+            connected: 'Կապված մոլորակ',
+            notConnected: 'Կապված մոլորակ չկա',
+            emptyAll: 'Կատալոգում գիրք չկա։',
+            emptyFiltered: 'Այս փնտրմամբ գիրք չգտնվեց։',
+            unknown: 'Անհայտ գիրք',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+        isFavorite(recordId) {
+          return this.favorites.includes(recordId);
+        },
+        applyFilter() {
+          const q = (this.query || '').trim().toLowerCase();
+          if (!q) {
+            this.filtered = [...this.records];
+            return;
+          }
+          this.filtered = this.records.filter((row) => {
+            const title = typeof row.title === 'string' ? row.title.toLowerCase() : '';
+            const author = typeof row.author === 'string' ? row.author.toLowerCase() : '';
+            return title.includes(q) || author.includes(q);
+          });
+        },
+        mapBooks(rows) {
+          return rows.map((row) => {
+            const item = row && typeof row === 'object' ? row : {};
+            return {
+              id: typeof item.id === 'string' ? item.id : String(Math.random()),
+              title: typeof item.title === 'string' ? item.title : '',
+              author: typeof item.author === 'string' ? item.author : '',
+              year: typeof item.year === 'number' ? item.year : null,
+              description: typeof item.description === 'string'
+                ? item.description
+                : (typeof item.summary === 'string' ? item.summary : ''),
+            };
+          });
+        },
+        async loadPlanetState() {
+          if (!this.connectedPlanet || !this.connectedPlanet.id) {
+            this.favorites = [];
+            return;
+          }
+          const state = await this.client.planetAppStateGet({
+            planetId: this.connectedPlanet.id,
+            targetAppId: this.appId,
+          });
+          const ids = state && Array.isArray(state.favoriteRecordIds) ? state.favoriteRecordIds : [];
+          this.favorites = ids.filter((id) => typeof id === 'string');
+        },
+        async persistPlanetState() {
+          if (!this.connectedPlanet || !this.connectedPlanet.id) {
+            throw new Error('No connected planet');
+          }
+          const ids = Array.from(new Set(this.favorites.filter((id) => typeof id === 'string')));
+          await this.client.planetAppStateSet({
+            favoriteRecordIds: ids,
+            appId: this.appId,
+          }, {
+            planetId: this.connectedPlanet.id,
+            targetAppId: this.appId,
+          });
+        },
+        async toggleFavorite(recordId) {
+          if (!this.connectedPlanet || !this.connectedPlanet.id) {
+            this.error = this.t('notConnected');
+            return;
+          }
+          this.error = '';
+          if (this.isFavorite(recordId)) {
+            this.favorites = this.favorites.filter((id) => id !== recordId);
+          } else {
+            this.favorites = [...this.favorites, recordId];
+          }
+          try {
+            await this.persistPlanetState();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+        async connectPlanet() {
+          if (!this.selectedPlanetId) return;
+          this.error = '';
+          await this.client.planetConnect(this.selectedPlanetId);
+          await this.loadContext();
+          await this.loadPlanetState();
+        },
+        async createPlanet() {
+          const name = (this.newPlanetName || '').trim();
+          if (!name) return;
+          this.error = '';
+          const created = await this.client.planetCreate({ name, visibility: 'private' });
+          this.newPlanetName = '';
+          await this.refreshPlanets();
+          this.selectedPlanetId = created && typeof created.id === 'string' ? created.id : '';
+          await this.connectPlanet();
+        },
+        async loadContext() {
+          const ctx = await this.client.planetContextGet();
+          this.connectedPlanet = ctx && ctx.planet ? ctx.planet : null;
+          this.selectedPlanetId = this.connectedPlanet && this.connectedPlanet.id ? this.connectedPlanet.id : '';
+        },
+        async refreshPlanets() {
+          const rows = await this.client.planetList();
+          this.planets = Array.isArray(rows) ? rows : [];
+        },
+        async refresh() {
+          this.error = '';
+          this.status = this.language === 'hy' ? 'Թարմացվում է...' : 'Refreshing...';
+          try {
+            await Promise.all([this.refreshPlanets(), this.loadContext()]);
+            const rows = await this.client.globalSpaceListRecords('books');
+            this.records = this.mapBooks(Array.isArray(rows) ? rows : []);
+            await this.loadPlanetState();
+            this.applyFilter();
+            this.status = this.language === 'hy' ? 'Պատրաստ է' : 'Ready';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.language === 'hy' ? 'Սխալ' : 'Error';
+          }
+        },
+        async init() {
+          try {
+            await loadHayOSClient();
+            const params = new URLSearchParams(window.location.search);
+            this.appId = params.get('appId') || 'favorite-books';
+            this.client = new HayOSClient(this.appId);
+            await this.client.ensureAuthenticated();
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((lang) => {
+              this.language = lang === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            const theme = await this.client.getTheme();
+            if (theme && typeof theme.themeName === 'string' && theme.themeName.trim()) {
+              document.documentElement.setAttribute('data-theme', theme.themeName.trim());
+            }
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.language === 'hy' ? 'Սխալ' : 'Error';
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
