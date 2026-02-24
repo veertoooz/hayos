@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full overflow-hidden" data-theme="black">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Friends</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost'
+        || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      overscroll-behavior: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      inset: 0;
+    }
+
+    .friends-scroll {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .friends-shell {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .friends-content {
+      padding: 0.75rem;
+    }
+
+    .friends-chip-row {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .friends-chip-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .friends-list-scroll {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .friends-break {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .friends-actions-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .friends-actions-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .friends-tap {
+      touch-action: manipulation;
+      transition: transform 180ms ease, filter 180ms ease;
+    }
+
+    .friends-tap:active {
+      transform: scale(0.98);
+      filter: brightness(0.98);
+    }
+
+    .friends-focus:focus-visible {
+      outline: 2px solid hsl(var(--p));
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="h-full overflow-hidden bg-base-100" x-data="friendsApp()" x-init="init()">
+  <div class="friends-shell mx-auto h-full w-full max-w-md overflow-hidden" x-cloak>
+    <main class="relative h-full overflow-hidden">
+      <section
+        class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
+        :class="view === 'list' ? 'translate-x-0 pointer-events-auto' : '-translate-x-1/4 pointer-events-none'"
+      >
+        <div class="flex min-h-full flex-col gap-3">
+          <header class="px-1 pt-1">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h1 class="truncate text-2xl font-semibold tracking-tight" x-text="t('title')"></h1>
+                <p class="mt-1 text-sm opacity-70" x-text="t('subtitle')"></p>
+              </div>
+              <button type="button" class="btn btn-sm btn-circle btn-ghost friends-focus friends-tap">
+                <span class="sr-only" x-text="t('moreActions')"></span>
+                <span aria-hidden="true">⋯</span>
+              </button>
+            </div>
+            <p class="mt-2 text-xs opacity-70" x-show="loading" role="status">Loading...</p>
+            <p class="mt-2 text-xs text-error" x-show="error" x-text="error"></p>
+            <p class="mt-2 text-xs text-success" x-show="notice && notice.type === 'success'" x-text="notice ? notice.text : ''"></p>
+          </header>
+
+          <section class="card bg-base-200/90 shadow-sm">
+            <div class="card-body gap-3 p-3">
+              <label class="input input-bordered friends-focus flex items-center gap-2">
+                <span class="opacity-60" aria-hidden="true">⌕</span>
+                <input
+                  type="search"
+                  class="friends-focus grow"
+                  x-model.trim="query"
+                  @input="onQueryInput()"
+                  :placeholder="t('searchPlaceholder')"
+                />
+              </label>
+              <p class="px-1 text-[11px] opacity-65" x-show="searchLoading && isSearchQueryActive()" role="status" x-text="t('searchingUsers')"></p>
+              <p class="px-1 text-[11px] text-error" x-show="searchError" x-text="searchError"></p>
+
+              <div class="friends-chip-row -mx-1 px-1">
+                <div class="join">
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'all' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'all'"
+                    x-text="t('filterAll')"
+                  ></button>
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'requests' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'requests'"
+                    x-text="t('filterRequests')"
+                  ></button>
+                  <button
+                    type="button"
+                    class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
+                    :class="activeFilter === 'online' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeFilter = 'online'"
+                    x-text="t('filterOnline')"
+                  ></button>
+                </div>
+              </div>
+
+              <div class="friends-actions-scroll -mx-1 px-1">
+                <div class="flex min-w-max items-center gap-2">
+                  <button type="button" class="btn btn-primary btn-sm friends-focus friends-tap whitespace-nowrap" :disabled="actionBusy" @click="promptAddFriend()" x-text="t('addFriend')"></button>
+                  <button type="button" class="btn btn-outline btn-sm friends-focus friends-tap whitespace-nowrap" @click="activeFilter = 'requests'" x-text="t('invites')"></button>
+                  <button type="button" class="btn btn-ghost btn-sm friends-focus friends-tap whitespace-nowrap" x-text="t('sharePortal')"></button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body p-3 pb-2">
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="text-sm font-medium opacity-80" x-text="isSearchQueryActive() ? t('searchResultsTitle') : t('recentFriends')"></h2>
+                <span class="badge badge-outline badge-sm" x-text="`${filteredItems.length}`"></span>
+              </div>
+            </div>
+            <div class="friends-list-scroll max-h-[46vh] px-3 pb-3">
+              <div class="space-y-2">
+                <template x-for="item in filteredItems" :key="item.listKey">
+                  <div class="card w-full border border-base-300 bg-base-100 text-left shadow-sm">
+                    <div class="card-body gap-2 p-3">
+                      <button
+                        type="button"
+                        class="w-full text-left"
+                        :class="item.kind === 'friend' ? 'friends-focus friends-tap' : ''"
+                        @click="item.kind === 'friend' ? openEditor(item.id) : null"
+                      >
+                        <div class="flex min-w-0 items-center justify-between gap-3">
+                          <div class="min-w-0 flex items-center gap-2.5">
+                            <div class="avatar">
+                              <div class="size-9 rounded-xl bg-base-200 ring-1 ring-base-300/60 overflow-hidden">
+                                <img
+                                  x-show="item.photoUrl"
+                                  :src="item.photoUrl"
+                                  :alt="item.name"
+                                  class="h-full w-full object-cover" />
+                                <span
+                                  x-show="!item.photoUrl"
+                                  class="flex h-full w-full items-center justify-center text-[11px] font-semibold"
+                                  x-text="toInitials(item.name)"></span>
+                              </div>
+                            </div>
+                            <div class="min-w-0">
+                              <h3 class="friends-break text-sm font-semibold" x-text="item.name"></h3>
+                              <p class="friends-break text-xs opacity-70" x-text="item.handle"></p>
+                            </div>
+                          </div>
+                          <span
+                            class="badge badge-sm whitespace-nowrap"
+                            :class="item.badgeClass"
+                            x-text="item.badgeText"
+                          ></span>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between gap-3 text-xs opacity-75">
+                          <p class="friends-break min-w-0" x-text="item.kind === 'search' ? searchSecondaryHint(item.peerUid) : item.planet"></p>
+                          <span class="whitespace-nowrap" x-text="item.lastSeen"></span>
+                        </div>
+                      </button>
+
+                      <div class="friends-actions-scroll -mx-1 px-1" x-show="item.kind === 'request'">
+                        <div class="flex min-w-max items-center gap-2">
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-primary friends-focus friends-tap whitespace-nowrap"
+                            :disabled="isBusyPeer(item.peerUid)"
+                            x-show="item.direction === 'inbound'"
+                            @click="acceptRequest(item.peerUid)"
+                            x-text="t('accept')"
+                          ></button>
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-ghost friends-focus friends-tap whitespace-nowrap"
+                            :disabled="isBusyPeer(item.peerUid)"
+                            x-show="item.direction === 'inbound'"
+                            @click="rejectRequest(item.peerUid)"
+                            x-text="t('reject')"
+                          ></button>
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-outline friends-focus friends-tap whitespace-nowrap"
+                            :disabled="isBusyPeer(item.peerUid)"
+                            x-show="item.direction === 'outbound'"
+                            @click="cancelRequest(item.peerUid)"
+                            x-text="t('cancel')"
+                          ></button>
+                        </div>
+                      </div>
+
+                      <div class="friends-actions-scroll -mx-1 px-1" x-show="item.kind === 'search'">
+                        <div class="flex min-w-max items-center gap-2">
+                          <button
+                            type="button"
+                            class="btn btn-xs friends-focus friends-tap whitespace-nowrap"
+                            :class="searchPrimaryActionClass(item.peerUid)"
+                            :disabled="isBusyPeer(item.peerUid) || isSearchPrimaryDisabled(item.peerUid)"
+                            :aria-label="searchPrimaryActionLabel(item.peerUid)"
+                            @click="handleSearchPrimaryAction(item)"
+                            x-text="searchPrimaryActionLabel(item.peerUid)"
+                          ></button>
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-ghost friends-focus friends-tap whitespace-nowrap"
+                            :disabled="isBusyPeer(item.peerUid)"
+                            x-show="searchRelationState(item.peerUid) === 'pending_inbound'"
+                            @click="rejectRequest(item.peerUid)"
+                            x-text="t('reject')"
+                          ></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div class="py-6 text-center text-sm opacity-70" x-show="filteredItems.length === 0" x-text="isSearchQueryActive() ? t('emptySearch') : t('emptyFiltered')"></div>
+            </div>
+          </section>
+          <div class="flex-1"></div>
+        </div>
+      </section>
+
+      <section
+        class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
+        :class="view === 'editor' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'"
+      >
+        <div class="flex min-h-full flex-col gap-3">
+          <header class="sticky top-0 z-10 -mx-3 px-3 py-1 backdrop-blur">
+            <div class="flex items-center justify-between gap-2 rounded-box bg-base-200/90 px-2 py-2">
+              <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="backToList()" x-text="t('back')"></button>
+              <h2 class="min-w-0 truncate text-sm font-semibold" x-text="selectedFriend ? selectedFriend.name : t('friendDetails')"></h2>
+              <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
+            </div>
+          </header>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="friends-break text-base font-semibold" x-text="selectedFriend ? selectedFriend.name : '-'"></h3>
+                  <p class="friends-break text-sm opacity-70" x-text="selectedFriend ? selectedFriend.handle : ''"></p>
+                </div>
+                <span
+                  class="badge badge-sm whitespace-nowrap"
+                  :class="draft.status === 'online' ? 'badge-success' : 'badge-ghost'"
+                  x-text="draft.status === 'online' ? t('statusOnline') : t('statusOffline')"
+                ></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card bg-base-200 shadow-sm">
+            <div class="card-body gap-3 p-4">
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelNickname')"></span>
+                </div>
+                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.nickname" />
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelPlanet')"></span>
+                </div>
+                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.planet" />
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelStatus')"></span>
+                </div>
+                <select class="select select-bordered select-sm friends-focus" x-model="draft.status">
+                  <option value="online" x-text="t('statusOnline')"></option>
+                  <option value="offline" x-text="t('statusOffline')"></option>
+                </select>
+              </label>
+
+              <label class="form-control w-full">
+                <div class="label py-1">
+                  <span class="label-text text-xs opacity-80" x-text="t('labelNote')"></span>
+                </div>
+                <textarea class="textarea textarea-bordered friends-focus h-24" maxlength="280" x-model.trim="draft.note"></textarea>
+              </label>
+
+              <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" class="btn btn-sm btn-error btn-outline friends-focus friends-tap" :disabled="actionBusy || !selectedFriend" @click="removeSelectedFriend()" x-text="t('removeFriend')"></button>
+                <button type="button" class="btn btn-sm btn-warning btn-outline friends-focus friends-tap" :disabled="actionBusy || !selectedFriend" @click="blockSelectedFriend()" x-text="t('blockUser')"></button>
+                <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="resetDraft()" x-text="t('reset')"></button>
+                <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function friendsApp() {
+      return {
+        appId: 'friends',
+        client: null,
+        user: null,
+        loading: false,
+        actionBusy: false,
+        busyPeers: {},
+        error: '',
+        notice: { type: '', text: '' },
+        view: 'list',
+        selectedFriendId: null,
+        selectedFriend: null,
+        draft: {
+          nickname: '',
+          planet: '',
+          status: 'offline',
+          note: '',
+        },
+        query: '',
+        searchResults: [],
+        searchLoading: false,
+        searchError: '',
+        searchRemoteDisabled: false,
+        searchRequestToken: 0,
+        searchTimerId: null,
+        activeFilter: 'all',
+        friends: [],
+        requests: [],
+        blocks: [],
+        friendUidSet: new Set(),
+        inboundRequestUidSet: new Set(),
+        outboundRequestUidSet: new Set(),
+        blockedUidSet: new Set(),
+        profilesByUid: {},
+        debugMode: false,
+        smokeMode: false,
+        debugLogs: [],
+        firstDeniedAction: '',
+        smokeReport: null,
+        latestFriendsDenyTrace: null,
+        _authSyncInFlight: false,
+        _lastAuthSyncAt: 0,
+        _authListenersBound: false,
+        _bridgeTraceBound: false,
+        language: (document.documentElement.lang || 'en').toLowerCase() === 'hy' ? 'hy' : 'en',
+        i18n: {
+          en: {
+            title: 'Friends',
+            subtitle: 'People and portals in your universe',
+            moreActions: 'More actions',
+            searchPlaceholder: 'Search friends',
+            searchingUsers: 'Searching users...',
+            searchFallbackLocal: 'Search access is limited. Showing local results only.',
+            filterAll: 'All',
+            filterRequests: 'Requests',
+            filterOnline: 'Online',
+            addFriend: 'Add Friend',
+            invites: 'Invites',
+            sharePortal: 'Share Portal',
+            recentFriends: 'Recent',
+            searchResultsTitle: 'Search Results',
+            emptyFiltered: 'No friends found for the current filter.',
+            emptySearch: 'No users found for this search.',
+            searchResultHint: 'User search result',
+            statusOnline: 'Online',
+            statusOffline: 'Offline',
+            statusRequestIn: 'Request',
+            statusRequestOut: 'Pending',
+            back: 'Back',
+            save: 'Save',
+            friendDetails: 'Friend',
+            labelNickname: 'Nickname',
+            labelPlanet: 'Planet',
+            labelStatus: 'Presence',
+            labelNote: 'Private note',
+            reset: 'Reset',
+            accept: 'Accept',
+            reject: 'Reject',
+            cancel: 'Cancel',
+            removeFriend: 'Remove Friend',
+            blockUser: 'Block',
+            loadError: 'Could not load friends data.',
+            reqSent: 'Friend request sent.',
+            reqAccepted: 'Friend request accepted.',
+            reqRejected: 'Friend request rejected.',
+            reqCanceled: 'Friend request canceled.',
+            friendRemoved: 'Friend removed.',
+            userBlocked: 'User blocked.',
+            friendsState: 'Friends',
+            blockedState: 'Blocked',
+            errBlocked: 'Action blocked by relationship policy.',
+            errConflict: 'Action is already applied.',
+            errValidation: 'Invalid data for this action.',
+            errNotFound: 'Requested record was not found.',
+            errAuthContext: 'Session context is missing. Reopen the app or sign in again.',
+            errRulesDenied: 'Friend request is blocked by Firestore Rules. Deploy updated rules to the active project.',
+          },
+          hy: {
+            title: 'Ընկերներ',
+            subtitle: 'Մարդիկ և պորտալներ քո տիեզերքում',
+            moreActions: 'Լրացուցիչ գործողություններ',
+            searchPlaceholder: 'Փնտրիր ընկերներ',
+            searchingUsers: 'Օգտատերերը որոնվում են...',
+            searchFallbackLocal: 'Որոնման հասանելիությունը սահմանափակ է։ Ցուցադրվում են միայն տեղային արդյունքները։',
+            filterAll: 'Բոլորը',
+            filterRequests: 'Հարցումներ',
+            filterOnline: 'Առցանց',
+            addFriend: 'Ավելացնել',
+            invites: 'Հրավերներ',
+            sharePortal: 'Կիսվել պորտալով',
+            recentFriends: 'Վերջինները',
+            searchResultsTitle: 'Որոնման արդյունքներ',
+            emptyFiltered: 'Այս զտիչով ընկերներ չկան։',
+            emptySearch: 'Այս որոնմամբ օգտատեր չգտնվեց։',
+            searchResultHint: 'Օգտատիրոջ որոնման արդյունք',
+            statusOnline: 'Առցանց',
+            statusOffline: 'Անցանց',
+            statusRequestIn: 'Հարցում',
+            statusRequestOut: 'Սպասման մեջ',
+            back: 'Հետ',
+            save: 'Պահել',
+            friendDetails: 'Ընկեր',
+            labelNickname: 'Մականուն',
+            labelPlanet: 'Մոլորակ',
+            labelStatus: 'Կարգավիճակ',
+            labelNote: 'Մասնավոր նշում',
+            reset: 'Զրոյացնել',
+            accept: 'Ընդունել',
+            reject: 'Մերժել',
+            cancel: 'Չեղարկել',
+            removeFriend: 'Հեռացնել ընկերից',
+            blockUser: 'Բլոքել',
+            loadError: 'Չհաջողվեց բեռնել ընկերների տվյալները։',
+            reqSent: 'Ընկերության հարցումը ուղարկված է։',
+            reqAccepted: 'Ընկերության հարցումը ընդունված է։',
+            reqRejected: 'Ընկերության հարցումը մերժված է։',
+            reqCanceled: 'Ընկերության հարցումը չեղարկված է։',
+            friendRemoved: 'Ընկերը հեռացվեց։',
+            userBlocked: 'Օգտատերը բլոքվեց։',
+            friendsState: 'Ընկերներ',
+            blockedState: 'Բլոքված',
+            errBlocked: 'Գործողությունը արգելված է block կապի պատճառով։',
+            errConflict: 'Գործողությունը արդեն կիրառված է։',
+            errValidation: 'Տվյալները անվավեր են այս գործողության համար։',
+            errNotFound: 'Տվյալը չգտնվեց։',
+            errAuthContext: 'Սեսիայի կոնտեքստը բացակայում է։ Վերաբացիր app-ը կամ նորից մուտք գործիր։',
+            errRulesDenied: 'Ընկերության հարցումը մերժվում է Firestore Rules-ի կողմից։ Թարմացված rules-ը deploy արա ակտիվ project-ում։',
+          },
+        },
+        get filteredItems() {
+          if (this.isSearchQueryActive() && !this.searchRemoteDisabled) {
+            return this.searchResults.map((row) => {
+              const identity = this.resolveIdentity(row.uid, row || {});
+              return {
+                kind: 'search',
+                listKey: `s:${row.uid}`,
+                id: row.uid,
+                peerUid: row.uid,
+                name: identity.name,
+                handle: identity.handle,
+                photoUrl: identity.photoUrl,
+                status: 'offline',
+                planet: identity.planet,
+                lastSeen: '',
+                badgeClass: 'badge-ghost',
+                badgeText: this.t('addFriend'),
+              };
+            });
+          }
+          const q = (this.query || '').trim().toLowerCase();
+          const source = this.activeFilter === 'requests'
+            ? this.requests
+            : this.friends.filter((friend) => (this.activeFilter === 'online' ? friend.status === 'online' : true));
+          return source.filter((item) => {
+            if (!q) return true;
+            const hay = `${item.name} ${item.handle} ${item.planet}`.toLowerCase();
+            return hay.includes(q);
+          });
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+        normalizeSearchText(value) {
+          return typeof value === 'string' ? value.trim().replace(/^@+/, '').toLowerCase() : '';
+        },
+        normalizedSearchQuery() {
+          return this.normalizeSearchText(this.query || '');
+        },
+        isSearchQueryActive() {
+          return this.normalizedSearchQuery().length >= 2;
+        },
+        clearSearchTimer() {
+          if (this.searchTimerId !== null) {
+            window.clearTimeout(this.searchTimerId);
+            this.searchTimerId = null;
+          }
+        },
+        normalizeProfileSearchRows(rows) {
+          const currentUid = this.getUserUid();
+          const seen = new Set();
+          const output = [];
+          const sourceRows = Array.isArray(rows) ? rows : [];
+          sourceRows.forEach((row) => {
+            const uid = row && typeof row.uid === 'string' ? row.uid.trim() : '';
+            if (!uid || uid === currentUid || seen.has(uid)) return;
+            seen.add(uid);
+            const username = row && typeof row.username === 'string' ? row.username.trim() : '';
+            const displayNameRaw = row && typeof row.displayName === 'string' ? row.displayName.trim() : '';
+            const photoUrlRaw = row && typeof row.photoUrl === 'string'
+              ? row.photoUrl
+              : (row && typeof row.avatarUrl === 'string' ? row.avatarUrl : '');
+            output.push({
+              uid,
+              username,
+              displayName: displayNameRaw || username || uid,
+              photoUrl: photoUrlRaw && photoUrlRaw.trim() ? photoUrlRaw.trim() : null,
+            });
+          });
+          return output;
+        },
+        rebuildRelationIndexes(friendRows, requestRows, blockRows, actorUid) {
+          const friendUids = new Set();
+          const inboundUids = new Set();
+          const outboundUids = new Set();
+          const blockedUids = new Set();
+
+          const safeActorUid = typeof actorUid === 'string' ? actorUid.trim() : '';
+
+          (Array.isArray(friendRows) ? friendRows : []).forEach((row) => {
+            const peerUid = row && typeof row.peerUid === 'string' ? row.peerUid.trim() : '';
+            if (peerUid) friendUids.add(peerUid);
+          });
+          (Array.isArray(requestRows) ? requestRows : []).forEach((row) => {
+            const requesterUid = row && typeof row.requesterUid === 'string' ? row.requesterUid.trim() : '';
+            const targetUid = row && typeof row.targetUid === 'string' ? row.targetUid.trim() : '';
+            if (!requesterUid || !targetUid) return;
+            if (targetUid === safeActorUid && requesterUid !== safeActorUid) {
+              inboundUids.add(requesterUid);
+              return;
+            }
+            if (requesterUid === safeActorUid && targetUid !== safeActorUid) {
+              outboundUids.add(targetUid);
+            }
+          });
+          (Array.isArray(blockRows) ? blockRows : []).forEach((row) => {
+            const blockedUid = row && typeof row.blockedUid === 'string' ? row.blockedUid.trim() : '';
+            if (blockedUid) blockedUids.add(blockedUid);
+          });
+
+          this.friendUidSet = friendUids;
+          this.inboundRequestUidSet = inboundUids;
+          this.outboundRequestUidSet = outboundUids;
+          this.blockedUidSet = blockedUids;
+        },
+        async searchProfilesByQuery() {
+          const query = this.normalizedSearchQuery();
+          const requestToken = this.searchRequestToken + 1;
+          this.searchRequestToken = requestToken;
+          if (query.length < 2) {
+            this.searchLoading = false;
+            this.searchError = '';
+            this.searchResults = [];
+            return;
+          }
+          if (this.searchRemoteDisabled) {
+            this.searchLoading = false;
+            this.searchResults = [];
+            this.searchError = this.t('searchFallbackLocal');
+            return;
+          }
+          if (!this.client || typeof this.client.socialProfileSearch !== 'function') {
+            this.searchLoading = false;
+            this.searchResults = [];
+            this.searchRemoteDisabled = true;
+            this.searchError = this.t('searchFallbackLocal');
+            return;
+          }
+          this.searchLoading = true;
+          this.searchError = '';
+          try {
+            const rows = await this.client.socialProfileSearch(query, 12);
+            if (requestToken !== this.searchRequestToken) return;
+            this.searchResults = this.normalizeProfileSearchRows(rows);
+            this.debugLog('search:profiles:ok', { count: this.searchResults.length, query });
+          } catch (error) {
+            if (requestToken !== this.searchRequestToken) return;
+            this.searchResults = [];
+            const message = this.normalizeActionError(error);
+            if (message.includes('PERMISSION_DENIED') || message.includes('AUTH_CONTEXT_MISSING')) {
+              this.searchRemoteDisabled = true;
+              this.searchError = this.t('searchFallbackLocal');
+            } else {
+              this.searchError = message;
+            }
+            this.debugLog('search:profiles:error', { query, message: this.searchError });
+          } finally {
+            if (requestToken === this.searchRequestToken) {
+              this.searchLoading = false;
+            }
+          }
+        },
+        onQueryInput() {
+          this.searchError = '';
+          this.clearSearchTimer();
+          if (!this.isSearchQueryActive()) {
+            this.searchResults = [];
+            this.searchLoading = false;
+            this.searchRemoteDisabled = false;
+            return;
+          }
+          if (this.searchRemoteDisabled) {
+            this.searchError = this.t('searchFallbackLocal');
+            return;
+          }
+          this.searchTimerId = window.setTimeout(() => {
+            this.searchTimerId = null;
+            void this.searchProfilesByQuery();
+          }, 220);
+        },
+        debugLog(stage, payload) {
+          if (!this.debugMode) return;
+          const entry = {
+            ts: new Date().toISOString(),
+            stage,
+            payload,
+          };
+          this.debugLogs = [entry, ...this.debugLogs].slice(0, 80);
+          try {
+            console.log('[friends-debug]', entry);
+          } catch {
+            // noop
+          }
+        },
+        async traceApiCall(label, fn) {
+          this.debugLog(`${label}:start`, {
+            appId: this.appId,
+            uid: this.user && this.user.uid ? this.user.uid : null,
+          });
+          try {
+            const result = await fn();
+            this.debugLog(`${label}:ok`, { type: Array.isArray(result) ? 'array' : typeof result });
+            return result;
+          } catch (error) {
+            const message = error && error.message ? String(error.message) : String(error || '');
+            if (!this.firstDeniedAction && (message.includes('PERMISSION_DENIED') || message.includes('AUTH_CONTEXT_MISSING'))) {
+              this.firstDeniedAction = label;
+            }
+            this.debugLog(`${label}:error`, { message });
+            throw error;
+          }
+        },
+        async runSmokeProbe() {
+          if (!this.client) return null;
+          const startedAt = Date.now();
+          const report = {
+            ok: true,
+            checks: {
+              friendsList: false,
+              requestsList: false,
+              blockList: false,
+              profileHydrate: false,
+            },
+            errors: [],
+            elapsedMs: 0,
+          };
+          try {
+            const [friendRowsState, requestRowsState, blockRowsState] = await Promise.allSettled([
+              this.apiFriendsList('friends'),
+              this.apiFriendsRequestsList({ direction: 'all', status: 'pending' }),
+              this.apiFriendsBlockList(),
+            ]);
+            if (friendRowsState.status !== 'fulfilled') {
+              throw friendRowsState.reason || new Error('SMOKE_FRIENDS_LIST_FAILED');
+            }
+            if (requestRowsState.status !== 'fulfilled') {
+              throw requestRowsState.reason || new Error('SMOKE_REQUESTS_LIST_FAILED');
+            }
+            const friendRowsRaw = friendRowsState.value;
+            const requestRowsRaw = requestRowsState.value;
+            const friendRows = Array.isArray(friendRowsRaw) ? friendRowsRaw : [];
+            const requestRows = Array.isArray(requestRowsRaw) ? requestRowsRaw : [];
+            const blockRows = blockRowsState.status === 'fulfilled' && Array.isArray(blockRowsState.value)
+              ? blockRowsState.value
+              : [];
+            report.checks.friendsList = true;
+            report.checks.requestsList = true;
+            report.checks.blockList = blockRowsState.status === 'fulfilled';
+            if (blockRowsState.status !== 'fulfilled') {
+              report.errors.push(`blockList:${blockRowsState.reason && blockRowsState.reason.message ? String(blockRowsState.reason.message) : 'FAILED'}`);
+            }
+
+            const uids = new Set();
+            friendRows.forEach((row) => {
+              if (row && typeof row.peerUid === 'string' && row.peerUid.trim()) uids.add(row.peerUid.trim());
+            });
+            requestRows.forEach((row) => {
+              const requesterUid = typeof row.requesterUid === 'string' ? row.requesterUid.trim() : '';
+              const targetUid = typeof row.targetUid === 'string' ? row.targetUid.trim() : '';
+              if (requesterUid) uids.add(requesterUid);
+              if (targetUid) uids.add(targetUid);
+            });
+            blockRows.forEach((row) => {
+              const blockedUid = row && typeof row.blockedUid === 'string' ? row.blockedUid.trim() : '';
+              if (blockedUid) uids.add(blockedUid);
+            });
+            const profileTargets = Array.from(uids).slice(0, 12);
+            await this.loadProfiles(profileTargets);
+            report.checks.profileHydrate = true;
+          } catch (error) {
+            report.ok = false;
+            report.errors.push(error && error.message ? String(error.message) : String(error || 'SMOKE_FAILED'));
+          } finally {
+            report.elapsedMs = Date.now() - startedAt;
+            this.smokeReport = report;
+            this.debugLog('smoke:result', report);
+          }
+          return report;
+        },
+        shouldUseLegacyFallback(error, options) {
+          const message = error && error.message ? String(error.message) : String(error || '');
+          if (message.includes('Unknown action')) return true;
+          const allowPermissionDenied = Boolean(options && options.allowPermissionDenied);
+          if (allowPermissionDenied && message.includes('PERMISSION_DENIED')) return true;
+          return false;
+        },
+        async apiFriendsList(scope) {
+          if (!this.client) return [];
+          return this.traceApiCall('apiFriendsList', async () => {
+            try {
+            return await this.client.friendsList(scope);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: true })) throw error;
+              this.debugLog('apiFriendsList:fallback', { scope });
+              if (scope === 'friends') return await this.client.socialFriendList();
+              if (scope === 'blocked') return await this.client.socialBlockList();
+              return {
+                friends: await this.client.socialFriendList(),
+                blocked: await this.client.socialBlockList(),
+              };
+            }
+          });
+        },
+        async apiFriendsRequestsList(params) {
+          if (!this.client) return [];
+          return this.traceApiCall('apiFriendsRequestsList', async () => {
+            try {
+            return await this.client.friendsRequestsList(params);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: true })) throw error;
+              this.debugLog('apiFriendsRequestsList:fallback', params || {});
+              return await this.client._sendRequest({
+                kind: 'social.friend.listRequests',
+                direction: params && params.direction,
+                status: params && params.status,
+              }).then((res) => {
+                if (!res.ok || res.action !== 'social.friend.listRequests') {
+                  throw new Error((res && res.error) || 'Failed to list friend requests');
+                }
+                return Array.isArray(res.data) ? res.data : [];
+              });
+            }
+          });
+        },
+        async apiFriendsRequestSend(targetUid) {
+          if (!this.client) return null;
+          return this.traceApiCall('apiFriendsRequestSend', async () => {
+            try {
+            return await this.client.friendsRequestSend(targetUid);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
+              this.debugLog('apiFriendsRequestSend:fallback', { targetUid });
+              return await this.client._sendRequest({ kind: 'social.friend.request', targetUid }).then((res) => {
+                if (!res.ok || res.action !== 'social.friend.request') {
+                  throw new Error((res && res.error) || 'Failed to send friend request');
+                }
+                return res.data;
+              });
+            }
+          });
+        },
+        async apiFriendsRespond(peerUid, decision) {
+          if (!this.client) return null;
+          return this.traceApiCall('apiFriendsRespond', async () => {
+            try {
+              if (decision === 'accept') return await this.client.friendsRequestAccept(peerUid);
+              if (decision === 'reject') return await this.client.friendsRequestReject(peerUid);
+              return await this.client.friendsRequestCancel(peerUid);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
+              this.debugLog('apiFriendsRespond:fallback', { peerUid, decision });
+              return await this.client._sendRequest({ kind: 'social.friend.respond', peerUid, decision }).then((res) => {
+                if (!res.ok || res.action !== 'social.friend.respond') {
+                  throw new Error((res && res.error) || 'Failed to respond friend request');
+                }
+                return res.data;
+              });
+            }
+          });
+        },
+        async apiFriendsRemove(peerUid) {
+          if (!this.client) return null;
+          return this.traceApiCall('apiFriendsRemove', async () => {
+            try {
+            return await this.client.friendsRemove(peerUid);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
+              this.debugLog('apiFriendsRemove:fallback', { peerUid });
+              return await this.client._sendRequest({ kind: 'social.friend.remove', peerUid }).then((res) => {
+                if (!res.ok || res.action !== 'social.friend.remove') {
+                  throw new Error((res && res.error) || 'Failed to remove friend');
+                }
+                return res.data;
+              });
+            }
+          });
+        },
+        async apiFriendsBlockCreate(targetUid) {
+          if (!this.client) return null;
+          return this.traceApiCall('apiFriendsBlockCreate', async () => {
+            try {
+              return await this.client.friendsBlockCreate(targetUid);
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
+              this.debugLog('apiFriendsBlockCreate:fallback', { targetUid });
+              return await this.client.socialBlockCreate(targetUid);
+            }
+          });
+        },
+        async apiFriendsBlockList() {
+          if (!this.client) return [];
+          return this.traceApiCall('apiFriendsBlockList', async () => {
+            try {
+              return await this.client.friendsBlockList();
+            } catch (error) {
+              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: true })) throw error;
+              this.debugLog('apiFriendsBlockList:fallback', {});
+              return await this.client.socialBlockList();
+            }
+          });
+        },
+        setNotice(type, textKeyOrRaw) {
+          const text = textKeyOrRaw && this.i18n.en[textKeyOrRaw] ? this.t(textKeyOrRaw) : String(textKeyOrRaw || '');
+          if (!text) return;
+          this.notice = { type, text };
+          window.clearTimeout(this._noticeTimer);
+          this._noticeTimer = window.setTimeout(() => {
+            this.notice = { type: '', text: '' };
+          }, 2400);
+        },
+        normalizeActionError(error) {
+          const message = error && error.message ? String(error.message) : String(error || '');
+          if (message.includes('AUTH_CONTEXT_MISSING')) return this.t('errAuthContext');
+          if (message.includes('BLOCKED_RELATION')) return this.t('errBlocked');
+          if (message.includes('CONFLICT_ALREADY_EXISTS')) return this.t('errConflict');
+          if (message.includes('VALIDATION_ERROR')) return this.t('errValidation');
+          if (message.includes('NOT_FOUND')) return this.t('errNotFound');
+          if (message.includes('FRIEND_REQUEST_RULES_DENIED')) return this.t('errRulesDenied');
+          if (this.debugMode && message.includes('PERMISSION_DENIED') && this.latestFriendsDenyTrace) {
+            const trace = this.latestFriendsDenyTrace;
+            const suffix = `[deny stage=${trace.stage || '-'} appId=${trace.appId || '-'} actor=${String(trace.actorUidPresent)} tokenRead=${String(trace.hasAuthTokenRead)} userRead=${String(trace.hasAuthUserRead)}]`;
+            return `${message} ${suffix}`;
+          }
+          return message || this.t('loadError');
+        },
+        bindBridgeTraceDebug() {
+          if (this._bridgeTraceBound) return;
+          this._bridgeTraceBound = true;
+          window.addEventListener('message', (event) => {
+            const data = event && event.data ? event.data : null;
+            if (!data || data.type !== 'hayos:systemEvent' || data.event !== 'debug.trace') return;
+            const payload = data.payload && typeof data.payload === 'object' ? data.payload : null;
+            if (!payload) return;
+            if (payload.stage !== 'bridge.friends.access.denied') return;
+            this.latestFriendsDenyTrace = {
+              stage: payload.stage,
+              appId: typeof payload.appId === 'string' ? payload.appId : '',
+              actorUidPresent: Boolean(payload.actorUidPresent),
+              hasAuthTokenRead: Boolean(payload.hasAuthTokenRead),
+              hasAuthUserRead: Boolean(payload.hasAuthUserRead),
+              error: typeof payload.error === 'string' ? payload.error : '',
+              action: typeof payload.action === 'string' ? payload.action : '',
+            };
+            this.debugLog('bridge:friends:deny-trace', this.latestFriendsDenyTrace);
+          });
+        },
+        async debugProbeRequestSend(targetUid) {
+          if (!this.debugMode || !this.client || typeof this.client._sendRequest !== 'function') return;
+          const safeUid = typeof targetUid === 'string' ? targetUid.trim() : '';
+          if (!safeUid) return;
+          try {
+            const raw = await this.client._sendRequest({ kind: 'friends.request.send', targetUid: safeUid });
+            this.debugLog('probe:friends.request.send', raw);
+          } catch (error) {
+            this.debugLog('probe:friends.request.send:error', { message: error && error.message ? String(error.message) : String(error || '') });
+          }
+          try {
+            const rawLegacy = await this.client._sendRequest({ kind: 'social.friend.request', targetUid: safeUid });
+            this.debugLog('probe:social.friend.request', rawLegacy);
+          } catch (error) {
+            this.debugLog('probe:social.friend.request:error', { message: error && error.message ? String(error.message) : String(error || '') });
+          }
+        },
+        setPeerBusy(peerUid, busy) {
+          if (!peerUid) return;
+          this.busyPeers = { ...this.busyPeers, [peerUid]: Boolean(busy) };
+        },
+        searchRelationState(peerUid) {
+          const uid = typeof peerUid === 'string' ? peerUid.trim() : '';
+          if (!uid) return 'none';
+          if (this.blockedUidSet.has(uid)) return 'blocked';
+          if (this.friendUidSet.has(uid)) return 'friends';
+          if (this.inboundRequestUidSet.has(uid)) return 'pending_inbound';
+          if (this.outboundRequestUidSet.has(uid)) return 'pending_outbound';
+          return 'none';
+        },
+        searchPrimaryActionLabel(peerUid) {
+          const state = this.searchRelationState(peerUid);
+          if (state === 'friends') return this.t('friendsState');
+          if (state === 'blocked') return this.t('blockedState');
+          if (state === 'pending_inbound') return this.t('accept');
+          if (state === 'pending_outbound') return this.t('cancel');
+          return this.t('addFriend');
+        },
+        searchPrimaryActionClass(peerUid) {
+          const state = this.searchRelationState(peerUid);
+          if (state === 'friends') return 'btn-outline';
+          if (state === 'blocked') return 'btn-warning btn-outline';
+          if (state === 'pending_inbound') return 'btn-primary';
+          if (state === 'pending_outbound') return 'btn-outline';
+          return 'btn-primary';
+        },
+        isSearchPrimaryDisabled(peerUid) {
+          const state = this.searchRelationState(peerUid);
+          return state === 'friends' || state === 'blocked';
+        },
+        searchSecondaryHint(peerUid) {
+          const state = this.searchRelationState(peerUid);
+          if (state === 'friends') return this.t('friendsState');
+          if (state === 'blocked') return this.t('blockedState');
+          if (state === 'pending_inbound') return this.t('statusRequestIn');
+          if (state === 'pending_outbound') return this.t('statusRequestOut');
+          return this.t('searchResultHint');
+        },
+        snapshotRelationIndexes() {
+          return {
+            friendUidSet: new Set(this.friendUidSet),
+            inboundRequestUidSet: new Set(this.inboundRequestUidSet),
+            outboundRequestUidSet: new Set(this.outboundRequestUidSet),
+            blockedUidSet: new Set(this.blockedUidSet),
+          };
+        },
+        restoreRelationIndexes(snapshot) {
+          if (!snapshot) return;
+          this.friendUidSet = new Set(snapshot.friendUidSet || []);
+          this.inboundRequestUidSet = new Set(snapshot.inboundRequestUidSet || []);
+          this.outboundRequestUidSet = new Set(snapshot.outboundRequestUidSet || []);
+          this.blockedUidSet = new Set(snapshot.blockedUidSet || []);
+        },
+        applyOptimisticSearchRelation(peerUid, fromState) {
+          const uid = typeof peerUid === 'string' ? peerUid.trim() : '';
+          if (!uid) return;
+          if (fromState === 'none') {
+            this.outboundRequestUidSet.add(uid);
+            this.inboundRequestUidSet.delete(uid);
+            this.friendUidSet.delete(uid);
+            return;
+          }
+          if (fromState === 'pending_inbound') {
+            this.inboundRequestUidSet.delete(uid);
+            this.outboundRequestUidSet.delete(uid);
+            this.friendUidSet.add(uid);
+            return;
+          }
+          if (fromState === 'pending_outbound') {
+            this.outboundRequestUidSet.delete(uid);
+            return;
+          }
+        },
+        async handleSearchPrimaryAction(item) {
+          const peerUid = item && typeof item.peerUid === 'string' ? item.peerUid.trim() : '';
+          if (!peerUid || !this.client) return;
+          const state = this.searchRelationState(peerUid);
+          if (state === 'friends' || state === 'blocked') return;
+          const relationSnapshot = this.snapshotRelationIndexes();
+          this.applyOptimisticSearchRelation(peerUid, state);
+          this.setPeerBusy(peerUid, true);
+          try {
+            if (state === 'pending_inbound') {
+              await this.apiFriendsRespond(peerUid, 'accept');
+              this.setNotice('success', 'reqAccepted');
+            } else if (state === 'pending_outbound') {
+              await this.apiFriendsRespond(peerUid, 'cancel');
+              this.setNotice('success', 'reqCanceled');
+            } else {
+              await this.apiFriendsRequestSend(peerUid);
+              this.setNotice('success', 'reqSent');
+            }
+            await this.refreshData();
+          } catch (error) {
+            await this.debugProbeRequestSend(peerUid);
+            this.restoreRelationIndexes(relationSnapshot);
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.setPeerBusy(peerUid, false);
+          }
+        },
+        isBusyPeer(peerUid) {
+          return Boolean(peerUid && this.busyPeers[peerUid]);
+        },
+        async promptAddFriend() {
+          if (!this.client || !this.user) return;
+          const placeholder = this.language === 'hy' ? 'uid' : 'uid';
+          const raw = window.prompt(this.t('addFriend'), placeholder);
+          const targetUid = typeof raw === 'string' ? raw.trim().replace(/^@/, '') : '';
+          if (!targetUid || targetUid === this.user.uid) return;
+          const optimistic = {
+            kind: 'request',
+            listKey: `r:tmp:${targetUid}:${Date.now()}`,
+            id: targetUid,
+            peerUid: targetUid,
+            direction: 'outbound',
+            name: targetUid,
+            handle: `@${targetUid.slice(0, 8)}`,
+            status: 'offline',
+            planet: this.t('statusRequestOut'),
+            lastSeen: '',
+            badgeClass: 'badge-info',
+            badgeText: this.t('statusRequestOut'),
+          };
+          this.requests = [optimistic, ...this.requests];
+          this.actionBusy = true;
+          this.setPeerBusy(targetUid, true);
+          try {
+            await this.apiFriendsRequestSend(targetUid);
+            this.setNotice('success', 'reqSent');
+            await this.refreshData();
+          } catch (error) {
+            this.requests = this.requests.filter((entry) => entry.listKey !== optimistic.listKey);
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+            this.setPeerBusy(targetUid, false);
+          }
+        },
+        async acceptRequest(peerUid) {
+          if (!this.client) return;
+          const before = this.requests.slice();
+          this.actionBusy = true;
+          this.setPeerBusy(peerUid, true);
+          this.requests = this.requests.filter((entry) => entry.peerUid !== peerUid);
+          try {
+            await this.apiFriendsRespond(peerUid, 'accept');
+            this.setNotice('success', 'reqAccepted');
+            await this.refreshData();
+          } catch (error) {
+            this.requests = before;
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+            this.setPeerBusy(peerUid, false);
+          }
+        },
+        async rejectRequest(peerUid) {
+          if (!this.client) return;
+          const before = this.requests.slice();
+          this.actionBusy = true;
+          this.setPeerBusy(peerUid, true);
+          this.requests = this.requests.filter((entry) => entry.peerUid !== peerUid);
+          try {
+            await this.apiFriendsRespond(peerUid, 'reject');
+            this.setNotice('success', 'reqRejected');
+            await this.refreshData();
+          } catch (error) {
+            this.requests = before;
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+            this.setPeerBusy(peerUid, false);
+          }
+        },
+        async cancelRequest(peerUid) {
+          if (!this.client) return;
+          const before = this.requests.slice();
+          this.actionBusy = true;
+          this.setPeerBusy(peerUid, true);
+          this.requests = this.requests.filter((entry) => entry.peerUid !== peerUid);
+          try {
+            await this.apiFriendsRespond(peerUid, 'cancel');
+            this.setNotice('success', 'reqCanceled');
+            await this.refreshData();
+          } catch (error) {
+            this.requests = before;
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+            this.setPeerBusy(peerUid, false);
+          }
+        },
+        async removeSelectedFriend() {
+          if (!this.client || !this.selectedFriend) return;
+          const peerUid = this.selectedFriend.id;
+          const before = this.friends.slice();
+          this.actionBusy = true;
+          this.friends = this.friends.filter((entry) => entry.id !== peerUid);
+          try {
+            await this.apiFriendsRemove(peerUid);
+            this.setNotice('success', 'friendRemoved');
+            this.backToList();
+            await this.refreshData();
+          } catch (error) {
+            this.friends = before;
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+          }
+        },
+        async blockSelectedFriend() {
+          if (!this.client || !this.selectedFriend) return;
+          const peerUid = this.selectedFriend.id;
+          const before = this.friends.slice();
+          this.actionBusy = true;
+          this.friends = this.friends.filter((entry) => entry.id !== peerUid);
+          try {
+            await this.apiFriendsBlockCreate(peerUid);
+            this.setNotice('success', 'userBlocked');
+            this.backToList();
+            await this.refreshData();
+          } catch (error) {
+            this.friends = before;
+            this.error = this.normalizeActionError(error);
+          } finally {
+            this.actionBusy = false;
+          }
+        },
+        openEditor(friendId) {
+          this.selectedFriendId = friendId;
+          this.selectedFriend = this.friends.find((friend) => friend.id === friendId) || null;
+          this.hydrateDraft();
+          this.view = 'editor';
+        },
+        backToList() {
+          this.view = 'list';
+        },
+        hydrateDraft() {
+          const friend = this.selectedFriend;
+          if (!friend) return;
+          this.draft = {
+            nickname: friend.name || '',
+            planet: friend.planet || '',
+            status: friend.status === 'online' ? 'online' : 'offline',
+            note: friend.note || '',
+          };
+        },
+        resetDraft() {
+          this.hydrateDraft();
+        },
+        saveDraft() {
+          const friend = this.selectedFriend;
+          if (!friend) return;
+          friend.name = (this.draft.nickname || '').trim() || friend.name;
+          friend.planet = (this.draft.planet || '').trim() || friend.planet;
+          friend.status = this.draft.status === 'online' ? 'online' : 'offline';
+          friend.note = (this.draft.note || '').trim();
+          this.backToList();
+        },
+        async loadProfiles(uids) {
+          const map = {};
+          if (!this.client) return map;
+          await Promise.all(uids.map(async (uid) => {
+            try {
+              map[uid] = await this.client.socialProfileGet(uid);
+            } catch {
+              map[uid] = null;
+            }
+          }));
+          return map;
+        },
+        toDisplayName(uid, profile) {
+          if (profile && typeof profile.displayName === 'string' && profile.displayName.trim()) {
+            return profile.displayName.trim();
+          }
+          if (profile && typeof profile.username === 'string' && profile.username.trim()) {
+            return profile.username.trim();
+          }
+          return uid;
+        },
+        toHandle(uid, profile) {
+          const username = profile && typeof profile.username === 'string' ? profile.username.trim() : '';
+          if (username) return `@${username.replace(/^@/, '')}`;
+          return `@${uid.slice(0, 8)}`;
+        },
+        toInitials(value) {
+          const text = typeof value === 'string' ? value.trim() : '';
+          if (!text) return 'U';
+          const parts = text.split(/\s+/).filter(Boolean);
+          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+          return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+        },
+        resolveIdentity(uid, profileLike) {
+          const safeUid = typeof uid === 'string' ? uid.trim() : '';
+          const username = profileLike && typeof profileLike.username === 'string'
+            ? profileLike.username.trim()
+            : '';
+          const displayName = profileLike && typeof profileLike.displayName === 'string'
+            ? profileLike.displayName.trim()
+            : '';
+          const photoRaw = profileLike && typeof profileLike.photoUrl === 'string'
+            ? profileLike.photoUrl
+            : (profileLike && typeof profileLike.avatarUrl === 'string' ? profileLike.avatarUrl : '');
+          const planetName = profileLike && typeof profileLike.planetName === 'string'
+            ? profileLike.planetName.trim()
+            : '';
+          return {
+            name: displayName || username || safeUid,
+            handle: username ? `@${username.replace(/^@/, '')}` : `@${safeUid.slice(0, 8)}`,
+            photoUrl: photoRaw && photoRaw.trim() ? photoRaw.trim() : null,
+            planet: planetName || '-',
+          };
+        },
+        getUserUid() {
+          return this.user && typeof this.user.uid === 'string' ? this.user.uid.trim() : '';
+        },
+        async ensureUserContext() {
+          if (!this.client) return '';
+          let uid = this.getUserUid();
+          if (uid) return uid;
+
+          this.debugLog('auth:missing_uid:first', { appId: this.appId });
+          try {
+            const retryAuth = await this.client.ensureAuthenticated();
+            this.user = retryAuth && retryAuth.user ? retryAuth.user : null;
+          } catch (error) {
+            const message = error && error.message ? String(error.message) : String(error || '');
+            this.debugLog('auth:retry:error', { message });
+          }
+
+          uid = this.getUserUid();
+          if (uid) {
+            this.debugLog('auth:retry:ok', { uid });
+            return uid;
+          }
+
+          this.debugLog('auth:fresh-client:start', { appId: this.appId });
+          try {
+            const freshClient = new HayOSClient(this.appId);
+            const freshAuth = await freshClient.ensureAuthenticated();
+            this.client = freshClient;
+            this.user = freshAuth && freshAuth.user ? freshAuth.user : null;
+          } catch (error) {
+            const message = error && error.message ? String(error.message) : String(error || '');
+            this.debugLog('auth:fresh-client:error', { message });
+          }
+
+          uid = this.getUserUid();
+          if (uid) this.debugLog('auth:fresh-client:ok', { uid });
+          return uid;
+        },
+        async revalidateSessionContext(reason) {
+          if (!this.client) return '';
+          if (this._authSyncInFlight) return this.getUserUid();
+          const now = Date.now();
+          if (now - this._lastAuthSyncAt < 1200) return this.getUserUid();
+          this._authSyncInFlight = true;
+          this._lastAuthSyncAt = now;
+          try {
+            this.debugLog('auth:revalidate:start', { reason: reason || 'unknown' });
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth && auth.user ? auth.user : null;
+            const uid = await this.ensureUserContext();
+            this.debugLog('auth:revalidate:ok', { reason: reason || 'unknown', uid: uid || null });
+            return uid;
+          } catch (error) {
+            const message = error && error.message ? String(error.message) : String(error || '');
+            this.debugLog('auth:revalidate:error', { reason: reason || 'unknown', message });
+            return this.getUserUid();
+          } finally {
+            this._authSyncInFlight = false;
+          }
+        },
+        bindLifecycleAuthSync() {
+          if (this._authListenersBound) return;
+          this._authListenersBound = true;
+          const onVisibility = async () => {
+            if (document.visibilityState !== 'visible') return;
+            const uid = await this.revalidateSessionContext('visibilitychange');
+            if (!uid) return;
+            await this.refreshData();
+          };
+          const onFocus = async () => {
+            const uid = await this.revalidateSessionContext('focus');
+            if (!uid) return;
+            await this.refreshData();
+          };
+          const onPageShow = async () => {
+            const uid = await this.revalidateSessionContext('pageshow');
+            if (!uid) return;
+            await this.refreshData();
+          };
+          document.addEventListener('visibilitychange', onVisibility);
+          window.addEventListener('focus', onFocus);
+          window.addEventListener('pageshow', onPageShow);
+        },
+        async refreshData() {
+          if (!this.client) return;
+          const uid = await this.ensureUserContext();
+          if (!uid) {
+            this.error = this.t('errAuthContext');
+            this.debugLog('refreshData:auth-missing', { appId: this.appId });
+            return;
+          }
+          this.loading = true;
+          this.error = '';
+          try {
+            const [friendRowsState, requestRowsState, blockRowsState] = await Promise.allSettled([
+              this.apiFriendsList('friends'),
+              this.apiFriendsRequestsList({ direction: 'all', status: 'pending' }),
+              this.apiFriendsBlockList(),
+            ]);
+            if (friendRowsState.status !== 'fulfilled') {
+              throw friendRowsState.reason || new Error('Failed to list friends');
+            }
+            if (requestRowsState.status !== 'fulfilled') {
+              throw requestRowsState.reason || new Error('Failed to list friend requests');
+            }
+            const friendRowsRaw = friendRowsState.value;
+            const requestRowsRaw = requestRowsState.value;
+            if (blockRowsState.status !== 'fulfilled') {
+              const blockErr = blockRowsState.reason && blockRowsState.reason.message
+                ? String(blockRowsState.reason.message)
+                : 'BLOCK_LIST_FAILED';
+              this.debugLog('refreshData:blockList:soft-fail', { error: blockErr });
+            }
+            const blockRowsRaw = blockRowsState.status === 'fulfilled' ? blockRowsState.value : [];
+            const friendRows = Array.isArray(friendRowsRaw) ? friendRowsRaw : [];
+            const requestRows = Array.isArray(requestRowsRaw) ? requestRowsRaw : [];
+            const blockRows = Array.isArray(blockRowsRaw) ? blockRowsRaw : [];
+            this.blocks = blockRows;
+            this.rebuildRelationIndexes(friendRows, requestRows, blockRows, uid);
+
+            const uids = new Set();
+            friendRows.forEach((row) => {
+              if (row && typeof row.peerUid === 'string' && row.peerUid.trim()) uids.add(row.peerUid.trim());
+            });
+            requestRows.forEach((row) => {
+              const requesterUid = typeof row.requesterUid === 'string' ? row.requesterUid.trim() : '';
+              const targetUid = typeof row.targetUid === 'string' ? row.targetUid.trim() : '';
+              if (requesterUid && requesterUid !== uid) uids.add(requesterUid);
+              if (targetUid && targetUid !== uid) uids.add(targetUid);
+            });
+            this.profilesByUid = await this.loadProfiles(Array.from(uids));
+
+            this.friends = friendRows.map((row) => {
+              const peerUid = typeof row.peerUid === 'string' ? row.peerUid.trim() : '';
+              const profile = this.profilesByUid[peerUid] || null;
+              const identity = this.resolveIdentity(peerUid, profile || {});
+              const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : '';
+              return {
+                kind: 'friend',
+                listKey: `f:${peerUid}`,
+                id: peerUid,
+                peerUid,
+                name: identity.name,
+                handle: identity.handle,
+                photoUrl: identity.photoUrl,
+                status: 'offline',
+                planet: identity.planet,
+                lastSeen: updatedAt ? new Date(updatedAt).toLocaleDateString() : '',
+                badgeClass: 'badge-ghost',
+                badgeText: this.t('statusOffline'),
+                note: '',
+              };
+            });
+
+            this.requests = requestRows.map((row) => {
+              const requesterUid = typeof row.requesterUid === 'string' ? row.requesterUid.trim() : '';
+              const targetUid = typeof row.targetUid === 'string' ? row.targetUid.trim() : '';
+              const direction = targetUid === uid ? 'inbound' : 'outbound';
+              const peerUid = direction === 'inbound' ? requesterUid : targetUid;
+              const profile = this.profilesByUid[peerUid] || null;
+              const identity = this.resolveIdentity(peerUid, profile || {});
+              const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : '';
+              return {
+                kind: 'request',
+                listKey: `r:${requesterUid}:${targetUid}`,
+                id: peerUid,
+                peerUid,
+                direction,
+                name: identity.name,
+                handle: identity.handle,
+                photoUrl: identity.photoUrl,
+                status: 'offline',
+                planet: direction === 'inbound' ? this.t('statusRequestIn') : this.t('statusRequestOut'),
+                lastSeen: updatedAt ? new Date(updatedAt).toLocaleDateString() : '',
+                badgeClass: direction === 'inbound' ? 'badge-warning' : 'badge-info',
+                badgeText: direction === 'inbound' ? this.t('statusRequestIn') : this.t('statusRequestOut'),
+              };
+            });
+          } catch (error) {
+            const raw = error && error.message ? String(error.message) : this.t('loadError');
+            if (this.debugMode && this.firstDeniedAction) {
+              this.error = `${raw} [firstDenied=${this.firstDeniedAction}]`;
+            } else {
+              this.error = raw;
+            }
+          } finally {
+            this.loading = false;
+          }
+        },
+        async init() {
+          try {
+            await loadHayOSClient();
+            const params = new URLSearchParams(window.location.search);
+            this.debugMode = ['1', 'true', 'yes', 'on'].includes(String(params.get('debug') || '').toLowerCase());
+            this.smokeMode = ['1', 'true', 'yes', 'on'].includes(String(params.get('smoke') || '').toLowerCase());
+            this.appId = params.get('appId') || 'friends';
+            this.client = new HayOSClient(this.appId);
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            const initialUid = await this.ensureUserContext();
+            this.debugLog('init:auth', {
+              appId: this.appId,
+              uid: initialUid || null,
+            });
+
+            const language = await this.client.getLanguage();
+            this.language = language === 'hy' ? 'hy' : 'en';
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((nextLanguage) => {
+              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            const theme = await this.client.getTheme();
+            if (theme && typeof theme === 'string') {
+              document.documentElement.setAttribute('data-theme', theme);
+            }
+            if (typeof this.client.onFriendsChanged === 'function') {
+              this.client.onFriendsChanged(() => {
+                this.refreshData();
+              });
+            }
+            if (this.debugMode) {
+              this.bindBridgeTraceDebug();
+            }
+            this.bindLifecycleAuthSync();
+
+            await this.refreshData();
+            if (this.debugMode || this.smokeMode) {
+              await this.runSmokeProbe();
+            }
+          } catch {
+            // Continue in standalone mode when host bridge is unavailable.
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

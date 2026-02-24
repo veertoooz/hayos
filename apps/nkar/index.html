@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="nkarApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">nkar</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+
+  <style>
+    :root {
+      --nkar-bg-glow: radial-gradient(80% 120% at 0% 0%, oklch(0.72 0.06 230 / 0.12), transparent 58%),
+        radial-gradient(70% 100% at 100% 20%, oklch(0.72 0.07 30 / 0.09), transparent 64%);
+      --nkar-card-border: oklch(var(--b3) / 0.42);
+    }
+
+    .nkar-shell {
+      background-image: var(--nkar-bg-glow);
+      background-attachment: fixed;
+    }
+
+    .nkar-panel {
+      border-color: var(--nkar-card-border);
+      box-shadow: 0 8px 24px oklch(0 0 0 / 0.08);
+    }
+
+    .nkar-chrome-border {
+      border-color: oklch(var(--b3) / 0.6);
+    }
+
+    .nkar-muted {
+      opacity: 0.68;
+    }
+
+    .stories-scroll {
+      scrollbar-width: none;
+    }
+
+    .stories-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .story-ring {
+      transition: transform 160ms ease;
+    }
+
+    .story-ring:hover {
+      transform: translateY(-2px);
+    }
+
+    .feed-media {
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+    }
+
+    .icon-btn {
+      transition: background-color 160ms ease, transform 160ms ease;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.96);
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid oklch(var(--p));
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+
+<body class="h-full">
+  <div class="h-full" x-cloak>
+    <div class="nkar-shell flex h-full flex-col">
+      <header class="navbar bg-base-100/90 backdrop-blur border-b nkar-chrome-border sticky top-0 z-20 px-3 sm:px-5">
+        <div class="navbar-start gap-2">
+          <div class="avatar placeholder">
+            <div class="bg-primary text-primary-content w-9 rounded-full">
+              <span class="text-sm font-bold">n</span>
+            </div>
+          </div>
+          <div>
+            <p class="text-lg font-semibold leading-none">nkar</p>
+            <p class="text-[11px] nkar-muted leading-none mt-1" x-text="t('starterDescription')"></p>
+          </div>
+        </div>
+        <div class="navbar-center hidden md:flex px-2 w-full max-w-md">
+          <label class="input input-bordered input-sm w-full">
+            <i class="fa-solid fa-magnifying-glass opacity-60"></i>
+            <input type="search" :placeholder="t('searchPlaceholder')" />
+          </label>
+        </div>
+        <div class="navbar-end gap-2">
+          <button class="btn btn-ghost btn-circle" aria-label="notifications">
+            <i class="fa-regular fa-heart text-lg"></i>
+          </button>
+          <button class="btn btn-ghost btn-circle" aria-label="profile">
+            <i class="fa-regular fa-user text-lg"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-hidden">
+        <div class="mx-auto h-full w-full max-w-[1380px] px-0 sm:px-4 lg:px-6">
+          <div class="grid h-full grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_320px]">
+            <aside class="hidden lg:block border-r nkar-chrome-border py-5 pr-4">
+              <p class="text-xs uppercase tracking-wide nkar-muted mb-2" x-text="t('sidebarLabel')"></p>
+              <ul class="menu gap-1">
+                <template x-for="item in navItems" :key="item.key">
+                  <li>
+                    <button
+                      class="justify-start gap-3"
+                      :class="{ 'active': currentPage === item.key }"
+                      @click="setPage(item.key)">
+                      <i :class="item.icon"></i>
+                      <span x-text="t(item.labelKey)"></span>
+                    </button>
+                  </li>
+                </template>
+              </ul>
+            </aside>
+
+            <section class="h-full overflow-auto px-3 sm:px-4 lg:px-8 py-4 pb-28 lg:pb-6">
+              <div x-show="loading" class="mx-auto w-full max-w-2xl space-y-4">
+                <div class="card bg-base-200 shadow-sm">
+                  <div class="card-body p-4 sm:p-5 space-y-3">
+                    <div class="skeleton h-5 w-28"></div>
+                    <div class="skeleton h-4 w-3/4"></div>
+                    <div class="skeleton h-4 w-2/3"></div>
+                  </div>
+                </div>
+                <div class="card bg-base-100 border nkar-panel">
+                  <div class="card-body p-4 sm:p-5 space-y-3">
+                    <div class="skeleton h-6 w-40"></div>
+                    <div class="skeleton h-4 w-full"></div>
+                    <div class="skeleton h-4 w-5/6"></div>
+                  </div>
+                </div>
+                <div class="card bg-base-100 border nkar-panel">
+                  <div class="skeleton w-full h-80"></div>
+                </div>
+              </div>
+
+              <div x-show="!loading" class="mx-auto w-full max-w-2xl space-y-4">
+                <div class="alert alert-error shadow-sm" x-show="error" x-text="error"></div>
+
+                <div x-show="currentPage === 'home'" class="space-y-4">
+                  <div class="flex items-center justify-between px-1">
+                    <h1 class="text-base sm:text-lg font-semibold" x-text="t('forYouLabel')"></h1>
+                    <button class="btn btn-ghost btn-xs normal-case nkar-muted" x-text="t('watchAllLabel')"></button>
+                  </div>
+
+                  <div class="card bg-base-100 border nkar-panel">
+                    <div class="card-body px-4 py-4">
+                      <div class="flex items-center justify-between mb-3">
+                        <p class="text-sm font-medium" x-text="t('storiesLabel')"></p>
+                        <button class="btn btn-ghost btn-xs normal-case nkar-muted" x-text="t('watchAllLabel')"></button>
+                      </div>
+                      <div class="stories-scroll flex gap-3 overflow-x-auto pb-1">
+                        <template x-for="story in stories" :key="story.id">
+                          <div class="flex flex-col items-center gap-2 min-w-16">
+                            <div class="avatar" :class="{ 'online': story.online }">
+                              <div
+                                class="story-ring w-14 rounded-full ring ring-offset-base-100 ring-offset-2"
+                                :class="story.ringClass">
+                                <img :src="story.avatar" :alt="`${story.username} story`" />
+                              </div>
+                            </div>
+                            <span class="text-xs" x-text="story.username"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+
+                  <template x-for="post in posts" :key="post.id">
+                    <article class="card bg-base-100 border nkar-panel">
+                      <div class="card-body p-0">
+                        <div class="flex items-center justify-between px-4 pt-4 pb-3">
+                          <div class="flex items-center gap-3">
+                            <div class="avatar">
+                              <div class="w-10 rounded-full">
+                                <img :src="post.avatar" :alt="`${post.username} avatar`" />
+                              </div>
+                            </div>
+                            <div>
+                              <p class="text-sm font-medium" x-text="post.username"></p>
+                              <p class="text-xs nkar-muted" x-text="post.location"></p>
+                            </div>
+                          </div>
+                          <button class="icon-btn btn btn-ghost btn-sm btn-circle" aria-label="Post menu">
+                            <i class="fa-solid fa-ellipsis"></i>
+                          </button>
+                        </div>
+
+                        <figure class="w-full bg-base-200">
+                          <img
+                            class="feed-media w-full"
+                            :src="post.imageUrl"
+                            :alt="`${post.username} post`" />
+                        </figure>
+
+                        <div class="px-4 py-3 space-y-3">
+                          <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1">
+                              <button
+                                class="icon-btn btn btn-ghost btn-sm btn-circle"
+                                aria-label="Like post"
+                                :aria-pressed="post.liked"
+                                @click="toggleLike(post.id)">
+                                <i class="text-lg" :class="post.liked ? 'fa-solid fa-heart text-primary' : 'fa-regular fa-heart'"></i>
+                              </button>
+                              <button class="icon-btn btn btn-ghost btn-sm btn-circle" aria-label="Comment">
+                                <i class="fa-regular fa-comment text-lg"></i>
+                              </button>
+                            </div>
+                            <button
+                              class="icon-btn btn btn-ghost btn-sm btn-circle"
+                              aria-label="Save post"
+                              :aria-pressed="post.saved"
+                              @click="toggleSave(post.id)">
+                              <i class="text-lg" :class="post.saved ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"></i>
+                            </button>
+                          </div>
+
+                          <p class="text-sm font-medium">
+                            <span x-text="formatLikes(post.likeCount)"></span>
+                            <span class="ml-1" x-text="t('likesLabel')"></span>
+                          </p>
+                          <p class="text-sm">
+                            <span class="font-medium mr-1" x-text="post.username"></span>
+                            <span x-text="post.caption"></span>
+                          </p>
+                          <button class="btn btn-ghost btn-xs px-0 normal-case nkar-muted">
+                            <span x-text="t('viewCommentsLabel')"></span>
+                            <span class="ml-1" x-text="post.commentCount"></span>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+
+                <div x-show="currentPage === 'create'" class="space-y-4">
+                  <div class="card bg-base-100 border nkar-panel">
+                    <div class="card-body p-5">
+                      <h1 class="text-lg sm:text-xl font-semibold" x-text="t('createTitle')"></h1>
+                      <p class="text-sm nkar-muted mt-1" x-text="t('createDescription')"></p>
+                      <p class="text-xs nkar-muted mt-2" x-text="t('createHelperLabel')"></p>
+                      <div class="mt-4 flex gap-2">
+                        <button class="btn btn-primary btn-sm" @click="openCreateModal()" x-text="t('openComposerLabel')"></button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="card bg-base-100 border nkar-panel" x-show="draftPreview">
+                    <div class="card-body p-4 sm:p-5 space-y-3">
+                      <p class="text-sm font-medium" x-text="t('draftPreviewLabel')"></p>
+                      <figure class="w-full bg-base-200 rounded-xl overflow-hidden">
+                        <img class="feed-media w-full" :src="draftPreview.imageUrl" alt="Draft preview" />
+                      </figure>
+                      <p class="text-sm">
+                        <span class="font-semibold mr-1">you</span>
+                        <span x-text="draftPreview.caption || t('emptyDraftCaptionLabel')"></span>
+                      </p>
+                      <p class="text-xs nkar-muted" x-show="draftPreview.tags" x-text="draftPreview.tags"></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div x-show="currentPage === 'profile'" class="space-y-4">
+                  <div class="card bg-base-100 border nkar-panel">
+                    <div class="card-body p-5">
+                      <div class="flex items-center gap-3">
+                        <div class="avatar">
+                          <div class="w-16 rounded-full">
+                            <img src="https://i.pravatar.cc/128?img=22" alt="Profile avatar" />
+                          </div>
+                        </div>
+                        <div>
+                          <h1 class="text-lg sm:text-xl font-semibold" x-text="t('profileTitle')"></h1>
+                          <p class="text-sm nkar-muted mt-1" x-text="t('profileDescription')"></p>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+                        <div>
+                          <p class="text-base font-semibold">48</p>
+                          <p class="text-xs nkar-muted" x-text="t('profilePostsLabel')"></p>
+                        </div>
+                        <div>
+                          <p class="text-base font-semibold">1.2K</p>
+                          <p class="text-xs nkar-muted" x-text="t('profileFollowersLabel')"></p>
+                        </div>
+                        <div>
+                          <p class="text-base font-semibold">310</p>
+                          <p class="text-xs nkar-muted" x-text="t('profileFollowingLabel')"></p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="card bg-base-100 border nkar-panel">
+                    <div class="card-body p-4">
+                      <p class="text-sm nkar-muted mb-3" x-text="t('profileGridLabel')"></p>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                        <div class="skeleton aspect-square rounded-lg"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="hidden lg:block border-l nkar-chrome-border py-5 pl-4">
+              <div class="card bg-base-200 shadow-sm">
+                <div class="card-body p-4">
+                  <h2 class="font-semibold" x-text="t('rightSidebarTitle')"></h2>
+                  <p class="text-sm nkar-muted mt-1" x-text="t('rightSidebarDescription')"></p>
+                  <div class="divider my-3"></div>
+                  <div class="space-y-3">
+                    <template x-for="profile in suggestions" :key="profile.id">
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                          <div class="avatar">
+                            <div class="w-8 rounded-full">
+                              <img :src="profile.avatar" :alt="`${profile.username} avatar`" />
+                            </div>
+                          </div>
+                          <div>
+                            <p class="text-sm font-medium leading-tight" x-text="profile.username"></p>
+                            <p class="text-xs nkar-muted" x-text="profile.helperText || t('suggestedForYouLabel')"></p>
+                          </div>
+                        </div>
+                        <button
+                          class="btn btn-xs"
+                          :class="suggestionButtonClass(profile)"
+                          :aria-pressed="profile.relationState === 'friends'"
+                          :disabled="isSuggestionBusy(profile.id)"
+                          @click="handleSuggestionAction(profile)"
+                          x-text="suggestionActionLabel(profile)"></button>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="divider my-3"></div>
+                  <div class="flex gap-2 flex-wrap">
+                    <span class="badge badge-outline">#armenia</span>
+                    <span class="badge badge-outline">#ui</span>
+                    <span class="badge badge-outline">#hayos</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </main>
+
+      <nav class="dock dock-md lg:hidden border-t nkar-chrome-border bg-base-100/95 backdrop-blur">
+        <template x-for="item in navItems" :key="`mobile-${item.key}`">
+          <button
+            :class="{ 'dock-active': currentPage === item.key }"
+            @click="setPage(item.key)"
+            :aria-label="t(item.labelKey)">
+            <i :class="item.icon"></i>
+            <span class="dock-label" x-text="t(item.labelKey)"></span>
+          </button>
+        </template>
+      </nav>
+
+      <dialog class="modal" :class="{ 'modal-open': isCreateModalOpen }">
+        <div class="modal-box">
+          <h3 class="text-lg font-semibold" x-text="t('createModalTitle')"></h3>
+          <p class="text-sm nkar-muted mt-1" x-text="t('createModalDescription')"></p>
+
+          <div class="space-y-3 mt-4">
+            <label class="form-control">
+              <span class="label-text text-sm" x-text="t('imageUrlLabel')"></span>
+              <input class="input input-bordered input-sm" type="url" x-model="draftPost.imageUrl" :placeholder="t('imageUrlPlaceholder')" />
+            </label>
+            <label class="form-control">
+              <span class="label-text text-sm" x-text="t('captionLabel')"></span>
+              <textarea class="textarea textarea-bordered h-20" x-model="draftPost.caption" :placeholder="t('captionPlaceholder')"></textarea>
+            </label>
+            <label class="form-control">
+              <span class="label-text text-sm" x-text="t('tagsLabel')"></span>
+              <input class="input input-bordered input-sm" type="text" x-model="draftPost.tags" :placeholder="t('tagsPlaceholder')" />
+            </label>
+          </div>
+
+          <div class="modal-action">
+            <button class="btn btn-ghost btn-sm" @click="closeCreateModal()" x-text="t('cancelLabel')"></button>
+            <button class="btn btn-primary btn-sm" @click="publishDraftPreview()" x-text="t('publishPreviewLabel')"></button>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button @click="closeCreateModal()">close</button>
+        </form>
+      </dialog>
+    </div>
+  </div>
+
+  <script>
+    function nkarApp() {
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'nkar-app',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        currentPage: 'home',
+        appScope: 'image-only',
+        suggestionBusy: {},
+        navItems: [
+          { key: 'home', labelKey: 'menuHome', icon: 'fa-solid fa-house' },
+          { key: 'create', labelKey: 'menuCreate', icon: 'fa-regular fa-square-plus' },
+          { key: 'profile', labelKey: 'menuProfile', icon: 'fa-regular fa-user' },
+        ],
+        stories: [
+          { id: 's1', username: 'ani', avatar: 'https://i.pravatar.cc/128?img=11', ringClass: 'ring-primary', online: true },
+          { id: 's2', username: 'karen', avatar: 'https://i.pravatar.cc/128?img=15', ringClass: 'ring-secondary', online: false },
+          { id: 's3', username: 'lina', avatar: 'https://i.pravatar.cc/128?img=29', ringClass: 'ring-accent', online: false },
+          { id: 's4', username: 'aram', avatar: 'https://i.pravatar.cc/128?img=40', ringClass: 'ring-info', online: false },
+          { id: 's5', username: 'seda', avatar: 'https://i.pravatar.cc/128?img=52', ringClass: 'ring-success', online: false },
+        ],
+        posts: [
+          {
+            id: 'p1',
+            username: 'narek.design',
+            location: 'Yerevan, Armenia',
+            avatar: 'https://i.pravatar.cc/128?img=22',
+            imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
+            caption: 'Soft tones, city light, and a clean visual rhythm.',
+            likeCount: 1248,
+            commentCount: 42,
+            liked: false,
+            saved: false,
+          },
+          {
+            id: 'p2',
+            username: 'sona.photo',
+            location: 'Dilijan, Armenia',
+            avatar: 'https://i.pravatar.cc/128?img=9',
+            imageUrl: 'https://images.unsplash.com/photo-1473186505569-9c61870c11f9?auto=format&fit=crop&w=1200&q=80',
+            caption: 'Misty hills and still mornings.',
+            likeCount: 872,
+            commentCount: 18,
+            liked: true,
+            saved: true,
+          },
+        ],
+        suggestions: [],
+        isCreateModalOpen: false,
+        draftPost: {
+          imageUrl: '',
+          caption: '',
+          tags: '',
+        },
+        draftPreview: null,
+        i18n: {
+          en: {
+            pageTitle: 'nkar',
+            sidebarLabel: 'Navigation',
+            menuHome: 'Home',
+            menuCreate: 'Create',
+            menuProfile: 'Profile',
+            starterDescription: 'Instagram-like UI shell for HayOS.',
+            searchPlaceholder: 'Search users, tags, posts',
+            forYouLabel: 'For you',
+            storiesLabel: 'Stories',
+            watchAllLabel: 'Watch all',
+            viewCommentsLabel: 'View all comments',
+            likesLabel: 'likes',
+            createTitle: 'Create Post',
+            createDescription: 'Composer view for new image/video posts.',
+            createHelperLabel: 'Use composer to draft a single photo post preview.',
+            openComposerLabel: 'Open composer',
+            draftPreviewLabel: 'Draft preview',
+            emptyDraftCaptionLabel: 'No caption yet.',
+            createModalTitle: 'New Post',
+            createModalDescription: 'Mock composer for UI testing only.',
+            imageUrlLabel: 'Image URL',
+            imageUrlPlaceholder: 'https://...',
+            captionLabel: 'Caption',
+            captionPlaceholder: 'Write your caption...',
+            tagsLabel: 'Tags (optional)',
+            tagsPlaceholder: '#design #armenia',
+            cancelLabel: 'Cancel',
+            publishPreviewLabel: 'Preview',
+            profileTitle: 'Profile',
+            profileDescription: 'Your photo profile.',
+            profilePostsLabel: 'Posts',
+            profileFollowersLabel: 'Followers',
+            profileFollowingLabel: 'Following',
+            profileGridLabel: 'Recent photos',
+            rightSidebarTitle: 'Suggested',
+            rightSidebarDescription: 'Right rail placeholder for suggested users and trending tags.',
+            suggestedForYouLabel: 'Suggested for you',
+            followLabel: 'Add',
+            followingLabel: 'Friends',
+            incomingLabel: 'Accept',
+            pendingLabel: 'Pending',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+            friendsLoadError: 'Could not load friends graph.',
+          },
+          hy: {
+            pageTitle: 'nkar',
+            sidebarLabel: 'Նավիգացիա',
+            menuHome: 'Գլխավոր',
+            menuCreate: 'Ստեղծել',
+            menuProfile: 'Պրոֆիլ',
+            starterDescription: 'Instagram-անման UI shell HayOS-ի համար։',
+            searchPlaceholder: 'Որոնել օգտատերեր, թեգեր, պոստեր',
+            forYouLabel: 'Քեզ համար',
+            storiesLabel: 'Սթորիներ',
+            watchAllLabel: 'Դիտել բոլորը',
+            viewCommentsLabel: 'Դիտել բոլոր մեկնաբանությունները',
+            likesLabel: 'հավանում',
+            createTitle: 'Ստեղծել Post',
+            createDescription: 'Նոր image/video post ստեղծելու կոմպոզեր view։',
+            createHelperLabel: 'Կոմպոզերով ստեղծիր մեկ photo post preview։',
+            openComposerLabel: 'Բացել կոմպոզերը',
+            draftPreviewLabel: 'Draft preview',
+            emptyDraftCaptionLabel: 'Caption դեռ չկա։',
+            createModalTitle: 'Նոր Post',
+            createModalDescription: 'UI փորձարկման mock composer։',
+            imageUrlLabel: 'Նկարի հղում',
+            imageUrlPlaceholder: 'https://...',
+            captionLabel: 'Caption',
+            captionPlaceholder: 'Գրիր քո caption-ը...',
+            tagsLabel: 'Թեգեր (ըստ ցանկության)',
+            tagsPlaceholder: '#design #armenia',
+            cancelLabel: 'Փակել',
+            publishPreviewLabel: 'Preview',
+            profileTitle: 'Պրոֆիլ',
+            profileDescription: 'Քո լուսանկարային պրոֆիլը։',
+            profilePostsLabel: 'Փոստեր',
+            profileFollowersLabel: 'Հետևորդներ',
+            profileFollowingLabel: 'Հետևում',
+            profileGridLabel: 'Վերջին լուսանկարները',
+            rightSidebarTitle: 'Առաջարկվողներ',
+            rightSidebarDescription: 'Աջ սյունակի placeholder՝ suggested users և trending tags-ի համար։',
+            suggestedForYouLabel: 'Առաջարկված քեզ համար',
+            followLabel: 'Ավելացնել',
+            followingLabel: 'Ընկեր',
+            incomingLabel: 'Ընդունել',
+            pendingLabel: 'Սպասման մեջ',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+            friendsLoadError: 'Չհաջողվեց բեռնել ընկերների ցանցը։',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'nkar-app';
+
+            this.client = new HayOSClient(this.appId);
+            this.resolvePageFromHash();
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+            this.status = this.t('statusAuthCheck');
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+              this.status = this.t('statusReady');
+            });
+            this.status = this.t('statusAuthenticated');
+            await this.loadOsTheme();
+            await this.refreshFriendsSuggestions();
+            this.client.onFriendsChanged(() => {
+              this.refreshFriendsSuggestions();
+            });
+            this.status = this.t('statusReady');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusAuthFailed');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+        },
+
+        formatLikes(value) {
+          const locale = this.language === 'hy' ? 'hy-AM' : 'en-US';
+          return new Intl.NumberFormat(locale).format(value);
+        },
+
+        toggleLike(postId) {
+          const post = this.posts.find((item) => item.id === postId);
+          if (!post) return;
+          post.liked = !post.liked;
+          post.likeCount += post.liked ? 1 : -1;
+        },
+
+        toggleSave(postId) {
+          const post = this.posts.find((item) => item.id === postId);
+          if (!post) return;
+          post.saved = !post.saved;
+        },
+
+        suggestionActionLabel(profile) {
+          if (!profile) return this.t('followLabel');
+          if (profile.relationState === 'friends') return this.t('followingLabel');
+          if (profile.relationState === 'inbound') return this.t('incomingLabel');
+          if (profile.relationState === 'outbound') return this.t('pendingLabel');
+          return this.t('followLabel');
+        },
+
+        suggestionButtonClass(profile) {
+          if (!profile) return 'btn-outline';
+          if (profile.relationState === 'friends') return 'btn-ghost';
+          if (profile.relationState === 'inbound') return 'btn-primary';
+          if (profile.relationState === 'outbound') return 'btn-outline';
+          return 'btn-outline';
+        },
+
+        isSuggestionBusy(profileId) {
+          return Boolean(profileId && this.suggestionBusy[profileId]);
+        },
+
+        setSuggestionBusy(profileId, value) {
+          if (!profileId) return;
+          this.suggestionBusy = { ...this.suggestionBusy, [profileId]: Boolean(value) };
+        },
+
+        normalizeSuggestionPeer(peerUid) {
+          return {
+            id: peerUid,
+            username: `@${String(peerUid || '').slice(0, 8)}`,
+            avatar: `https://i.pravatar.cc/128?u=${encodeURIComponent(peerUid || 'peer')}`,
+          };
+        },
+
+        async refreshFriendsSuggestions() {
+          if (!this.client || !this.user) return;
+          try {
+            const [friendsRaw, requestsRaw] = await Promise.all([
+              this.client.friendsList('friends'),
+              this.client.friendsRequestsList({ direction: 'all', status: 'pending' }),
+            ]);
+            const friends = Array.isArray(friendsRaw) ? friendsRaw : [];
+            const requests = Array.isArray(requestsRaw) ? requestsRaw : [];
+
+            const map = new Map();
+            friends.forEach((row) => {
+              const peerUid = typeof row.peerUid === 'string' ? row.peerUid.trim() : '';
+              if (!peerUid) return;
+              const base = this.normalizeSuggestionPeer(peerUid);
+              map.set(peerUid, {
+                ...base,
+                relationState: 'friends',
+                helperText: this.t('followingLabel'),
+              });
+            });
+
+            requests.forEach((row) => {
+              const requesterUid = typeof row.requesterUid === 'string' ? row.requesterUid.trim() : '';
+              const targetUid = typeof row.targetUid === 'string' ? row.targetUid.trim() : '';
+              const peerUid = requesterUid === this.user.uid ? targetUid : requesterUid;
+              if (!peerUid || map.has(peerUid)) return;
+              const inbound = targetUid === this.user.uid;
+              const base = this.normalizeSuggestionPeer(peerUid);
+              map.set(peerUid, {
+                ...base,
+                relationState: inbound ? 'inbound' : 'outbound',
+                helperText: inbound ? this.t('incomingLabel') : this.t('pendingLabel'),
+              });
+            });
+
+            this.suggestions = Array.from(map.values()).slice(0, 8);
+          } catch (error) {
+            console.warn('Failed to refresh friends suggestions:', error);
+            this.error = this.t('friendsLoadError');
+          }
+        },
+
+        async handleSuggestionAction(profile) {
+          if (!this.client || !profile || !profile.id) return;
+          const peerUid = profile.id;
+          this.setSuggestionBusy(peerUid, true);
+          try {
+            if (profile.relationState === 'friends') {
+              await this.client.friendsRemove(peerUid);
+            } else if (profile.relationState === 'inbound') {
+              await this.client.friendsRequestAccept(peerUid);
+            } else if (profile.relationState === 'outbound') {
+              await this.client.friendsRequestCancel(peerUid);
+            } else {
+              await this.client.friendsRequestSend(peerUid);
+            }
+            await this.refreshFriendsSuggestions();
+          } catch (error) {
+            this.error = error && error.message ? error.message : this.t('friendsLoadError');
+          } finally {
+            this.setSuggestionBusy(peerUid, false);
+          }
+        },
+
+        openCreateModal() {
+          this.isCreateModalOpen = true;
+        },
+
+        closeCreateModal() {
+          this.isCreateModalOpen = false;
+        },
+
+        publishDraftPreview() {
+          this.draftPreview = {
+            imageUrl: this.draftPost.imageUrl || 'https://images.unsplash.com/photo-1473181488821-2d23949a045a?auto=format&fit=crop&w=1200&q=80',
+            caption: this.draftPost.caption.trim(),
+            tags: this.draftPost.tags.trim(),
+          };
+          this.closeCreateModal();
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'home';
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async firestoreGet(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreGet(collection, documentId);
+        },
+
+        async firestoreQuery(collection, queryParams) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreQuery(collection, queryParams);
+        },
+
+        async firestoreAdd(collection, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreAdd(collection, data);
+        },
+
+        async firestoreUpdate(collection, documentId, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreUpdate(collection, documentId, data);
+        },
+
+        async firestoreDelete(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreDelete(collection, documentId);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

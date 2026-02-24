@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="developerApp()" x-init="init()">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ծրագրավորող</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+<body class="h-full">
+  <div class="max-w-6xl mx-auto px-4 py-6 h-full" x-cloak>
+    <div class="card bg-base-200 shadow p-5">
+      <h1 class="text-xl font-semibold">Ծրագրավորող</h1>
+      <p class="text-sm opacity-70">Ստեղծիր app manifest-ը դաշտերով, պահիր testing-ում և հետո ուղարկիր review։</p>
+      <p class="text-sm mt-2"><span class="font-semibold">Status:</span> <span x-text="status"></span></p>
+      <p class="text-error text-sm mt-2" x-show="error" x-text="error"></p>
+    </div>
+
+    <div class="mt-4 grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-4">
+      <div class="card bg-base-200 shadow p-5 space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="font-semibold">Manifest Builder</h2>
+          <button class="btn btn-sm" @click="resetForm()">Նոր հայտ</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="form-control">
+            <span class="label-text">App ID</span>
+            <input class="input input-bordered" x-model.trim="form.id" placeholder="snake" :disabled="isEditing" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Name</span>
+            <input class="input input-bordered" x-model.trim="form.name" placeholder="Snake" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Version</span>
+            <input class="input input-bordered" x-model.trim="form.version" placeholder="1.0.0" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Type</span>
+            <select class="select select-bordered" x-model="form.type">
+              <option value="auth_app">auth_app</option>
+              <option value="builtin_app">builtin_app</option>
+              <option value="page">page</option>
+            </select>
+          </label>
+          <label class="form-control md:col-span-2">
+            <span class="label-text">iframePath</span>
+            <input class="input input-bordered" x-model.trim="form.iframePath" placeholder="/apps/snake/index.html" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Group</span>
+            <input class="input input-bordered" x-model.trim="form.group" placeholder="games" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">Note</span>
+            <input class="input input-bordered" x-model.trim="form.note" placeholder="short note" />
+          </label>
+          <label class="form-control md:col-span-2">
+            <span class="label-text">Description</span>
+            <textarea class="textarea textarea-bordered" rows="2" x-model.trim="form.description" placeholder="App description"></textarea>
+          </label>
+        </div>
+
+        <div>
+          <p class="font-semibold mb-2">Permissions</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-auto rounded border border-base-300 p-3 bg-base-300/30">
+            <template x-for="perm in permissionCatalog" :key="perm">
+              <label class="label cursor-pointer justify-start gap-2">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  :value="perm"
+                  :checked="form.permissions.includes(perm)"
+                  @change="togglePermission(perm, $event.target.checked)"
+                />
+                <span class="label-text font-mono text-xs" x-text="perm"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button class="btn" :disabled="submitting" @click="saveTesting()" x-text="submitting ? 'Processing...' : 'Save Testing'"></button>
+          <button class="btn btn-primary" :disabled="submitting" @click="submitForReview()" x-text="submitting ? 'Processing...' : 'Submit For Review'"></button>
+        </div>
+      </div>
+
+      <div class="card bg-base-200 shadow p-5">
+        <h3 class="font-semibold">Preview JSON</h3>
+        <pre class="text-xs bg-base-300 rounded p-3 overflow-auto mt-3 max-h-[460px]" x-text="manifestPreview()"></pre>
+      </div>
+    </div>
+
+    <div class="mt-4 card bg-base-200 shadow p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Իմ հայտերը</h2>
+        <button class="btn btn-sm" @click="loadSubmissions()">Թարմացնել</button>
+      </div>
+      <div class="overflow-x-auto mt-3">
+        <table class="table table-zebra table-sm">
+          <thead><tr><th>ID</th><th>App</th><th>Version</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
+          <tbody>
+            <template x-for="item in submissions" :key="item.id">
+              <tr>
+                <td class="font-mono text-xs" x-text="item.id"></td>
+                <td x-text="item.manifest?.name || item.appId || '-' "></td>
+                <td x-text="item.manifest?.version || item.version || '-' "></td>
+                <td><span class="badge" :class="badgeClass(item.status)" x-text="item.status || 'testing'"></span></td>
+                <td x-text="item.updatedAt || '-' "></td>
+                <td class="flex flex-wrap gap-2">
+                  <button class="btn btn-xs" x-show="item.status !== 'approved'" @click="editSubmission(item)">Edit</button>
+                  <button class="btn btn-xs" x-show="item.status === 'approved'" @click="newVersionFrom(item)">New Version</button>
+                  <button class="btn btn-xs btn-warning" x-show="item.status === 'testing' || item.status === 'rejected'" @click="submitExisting(item)">Submit</button>
+                  <button class="btn btn-xs btn-success" x-show="item.status === 'testing'" @click="openTesting(item)">Open</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function developerApp() {
+      return {
+        client: null,
+        appId: 'developer',
+        status: 'Initializing...',
+        error: '',
+        user: null,
+        submissions: [],
+        submitting: false,
+        editingSubmissionId: '',
+        permissionCatalog: [
+          'settings.theme.read',
+          'settings.theme.write',
+          'system.language.write',
+          'auth.token.read',
+          'auth.user.read',
+          'auth.user.write',
+          'firestore.get',
+          'firestore.add',
+          'firestore.update',
+          'firestore.delete',
+          'firestore.query',
+          'firestore.read',
+          'firestore.write',
+        ],
+        form: {
+          id: '',
+          name: '',
+          description: '',
+          group: 'apps',
+          iframePath: '',
+          type: 'auth_app',
+          version: '1.0.0',
+          note: '',
+          permissions: ['auth.token.read', 'auth.user.read'],
+        },
+
+        get isEditing() {
+          return this.editingSubmissionId.length > 0;
+        },
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            this.client = new HayOSClient(this.appId);
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.status = 'Ready';
+            await this.loadSubmissions();
+          } catch (error) {
+            this.error = error?.message || String(error);
+            this.status = 'Failed';
+          }
+        },
+
+        badgeClass(status) {
+          if (status === 'approved') return 'badge-success';
+          if (status === 'rejected') return 'badge-error';
+          if (status === 'reviewing') return 'badge-warning';
+          if (status === 'pending') return 'badge-info';
+          return 'badge-neutral';
+        },
+
+        togglePermission(permission, enabled) {
+          const set = new Set(this.form.permissions);
+          if (enabled) set.add(permission);
+          else set.delete(permission);
+          this.form.permissions = Array.from(set);
+        },
+
+        normalizeVersion(version) {
+          return typeof version === 'string' && version.trim() ? version.trim() : '1.0.0';
+        },
+
+        bumpPatchVersion(version) {
+          const value = this.normalizeVersion(version);
+          const parts = value.split('.').map((part) => Number.parseInt(part, 10) || 0);
+          while (parts.length < 3) parts.push(0);
+          parts[2] += 1;
+          return `${parts[0]}.${parts[1]}.${parts[2]}`;
+        },
+
+        buildManifest() {
+          const id = String(this.form.id || '').trim();
+          const name = String(this.form.name || '').trim();
+          const iframePath = String(this.form.iframePath || '').trim();
+          if (!id) throw new Error('App ID is required');
+          if (!name) throw new Error('Name is required');
+          if (!iframePath.startsWith('/')) throw new Error('iframePath must start with /');
+          const permissions = Array.from(new Set(this.form.permissions.filter((perm) => this.permissionCatalog.includes(perm))));
+          return {
+            id,
+            name,
+            description: String(this.form.description || '').trim(),
+            group: String(this.form.group || '').trim() || 'apps',
+            iframePath,
+            type: this.form.type || 'auth_app',
+            version: this.normalizeVersion(this.form.version),
+            builtin: false,
+            permissions,
+          };
+        },
+
+        manifestPreview() {
+          try {
+            return JSON.stringify(this.buildManifest(), null, 2);
+          } catch (error) {
+            return `Invalid manifest: ${error?.message || String(error)}`;
+          }
+        },
+
+        resetForm() {
+          this.editingSubmissionId = '';
+          this.form = {
+            id: '',
+            name: '',
+            description: '',
+            group: 'apps',
+            iframePath: '',
+            type: 'auth_app',
+            version: '1.0.0',
+            note: '',
+            permissions: ['auth.token.read', 'auth.user.read'],
+          };
+        },
+
+        editSubmission(item) {
+          const manifest = item?.manifest || {};
+          if (item?.status === 'approved') {
+            this.error = 'Approved submission cannot be edited. Use New Version.';
+            return;
+          }
+          this.editingSubmissionId = item.id;
+          this.form = {
+            id: manifest.id || item.appId || '',
+            name: manifest.name || '',
+            description: manifest.description || '',
+            group: manifest.group || 'apps',
+            iframePath: manifest.iframePath || '',
+            type: manifest.type || 'auth_app',
+            version: manifest.version || item.version || '1.0.0',
+            note: item.note || '',
+            permissions: Array.isArray(manifest.permissions) ? manifest.permissions.slice() : ['auth.token.read', 'auth.user.read'],
+          };
+        },
+
+        newVersionFrom(item) {
+          const manifest = item?.manifest || {};
+          this.editingSubmissionId = '';
+          this.form = {
+            id: manifest.id || item.appId || '',
+            name: manifest.name || '',
+            description: manifest.description || '',
+            group: manifest.group || 'apps',
+            iframePath: manifest.iframePath || '',
+            type: manifest.type || 'auth_app',
+            version: this.bumpPatchVersion(manifest.version || item.version || '1.0.0'),
+            note: '',
+            permissions: Array.isArray(manifest.permissions) ? manifest.permissions.slice() : ['auth.token.read', 'auth.user.read'],
+          };
+          this.error = '';
+        },
+
+        openTesting(item) {
+          const manifest = JSON.parse(JSON.stringify(item?.manifest || null));
+          const path = manifest?.iframePath;
+          if (!manifest || typeof path !== 'string' || !path.startsWith('/')) {
+            this.error = 'Invalid iframePath';
+            return;
+          }
+          window.parent.postMessage({
+            type: 'hayos:openTestingApp',
+            payload: {
+              submissionId: item.id,
+              manifest,
+            },
+          }, '*');
+        },
+
+        async loadSubmissions() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            const rows = await this.client.firestoreQuery('appSubmissions', {});
+            this.submissions = (Array.isArray(rows) ? rows : [])
+              .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+          } catch (error) {
+            this.error = error?.message || String(error);
+          }
+        },
+
+        async saveTesting() {
+          if (!this.client) return;
+          this.submitting = true;
+          this.error = '';
+          try {
+            const manifest = JSON.parse(JSON.stringify(this.buildManifest()));
+            const payload = {
+              appId: manifest.id,
+              version: manifest.version,
+              manifest,
+              note: String(this.form.note || '').trim(),
+              status: 'testing',
+            };
+
+            if (this.isEditing) {
+              await this.client.firestoreUpdate('appSubmissions', this.editingSubmissionId, payload);
+            } else {
+              const id = await this.client.firestoreAdd('appSubmissions', payload);
+              this.editingSubmissionId = id;
+            }
+
+            await this.loadSubmissions();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.submitting = false;
+          }
+        },
+
+        async submitExisting(item) {
+          if (!this.client || !item?.id) return;
+          this.submitting = true;
+          this.error = '';
+          try {
+            await this.client.firestoreUpdate('appSubmissions', item.id, {
+              status: 'pending',
+              reviewedAt: null,
+              reviewReason: '',
+            });
+            await this.loadSubmissions();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.submitting = false;
+          }
+        },
+
+        async submitForReview() {
+          if (!this.client) return;
+          this.submitting = true;
+          this.error = '';
+          try {
+            const manifest = JSON.parse(JSON.stringify(this.buildManifest()));
+            const payload = {
+              appId: manifest.id,
+              version: manifest.version,
+              manifest,
+              note: String(this.form.note || '').trim(),
+              status: 'pending',
+            };
+
+            if (this.isEditing) {
+              await this.client.firestoreUpdate('appSubmissions', this.editingSubmissionId, payload);
+            } else {
+              const id = await this.client.firestoreAdd('appSubmissions', {
+                ...payload,
+                status: 'testing',
+              });
+              await this.client.firestoreUpdate('appSubmissions', id, payload);
+              this.editingSubmissionId = id;
+            }
+
+            await this.loadSubmissions();
+          } catch (error) {
+            this.error = error?.message || String(error);
+          } finally {
+            this.submitting = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

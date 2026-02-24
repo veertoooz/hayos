@@ -1,0 +1,2165 @@
+<!doctype html>
+<html lang="hy" data-theme="black" class="h-full">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint failures
+      }
+    })();
+  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Teeezerq</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        if (window.HayOSClient) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+  <style>
+    :root {
+      --ios-font: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --surface-bg: hsl(220 34% 11% / 0.82);
+      --surface-border: hsl(215 28% 72% / 0.14);
+      --surface-shadow: 0 10px 30px hsl(228 50% 5% / 0.36);
+      --surface-blur: 18px;
+      --radius-xl: 1.15rem;
+      --radius-lg: 0.9rem;
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-6: 1.5rem;
+    }
+
+    [x-cloak] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--ios-font);
+      letter-spacing: 0.01em;
+      background:
+        radial-gradient(120% 80% at 15% -10%, hsl(213 95% 62% / 0.22), transparent 58%),
+        radial-gradient(110% 70% at 85% 120%, hsl(253 85% 66% / 0.18), transparent 62%),
+        linear-gradient(180deg, hsl(221 44% 10%), hsl(221 34% 8%));
+    }
+
+    .app-shell {
+      height: 100dvh;
+      width: min(100vw, 30rem);
+      max-width: 30rem;
+      margin: 0 auto;
+      overflow: hidden;
+      padding-top: calc(env(safe-area-inset-top) + 0.5rem);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+      padding-left: calc(env(safe-area-inset-left) + 0.75rem);
+      padding-right: calc(env(safe-area-inset-right) + 0.75rem);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .glass-surface {
+      background: var(--surface-bg);
+      border: 1px solid var(--surface-border);
+      box-shadow: var(--surface-shadow);
+      backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+      -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+      border-radius: var(--radius-xl);
+    }
+
+    .app-shell .card {
+      border-radius: var(--radius-xl);
+      border-color: var(--surface-border);
+      box-shadow: var(--surface-shadow);
+      background: var(--surface-bg);
+      backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+      -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+    }
+
+    .app-shell .btn {
+      border-radius: var(--radius-lg);
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .app-shell .badge {
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    .tree-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      padding: 0.5rem;
+    }
+
+    .tree-row {
+      min-height: 3rem;
+      border-radius: 0.85rem;
+      border: 1px solid transparent;
+      background: hsl(220 26% 18% / 0.35);
+      transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease;
+    }
+
+    .tree-row:active {
+      transform: scale(0.996);
+    }
+
+    .tree-row:focus-visible {
+      border-color: hsl(var(--p) / 0.6);
+      background: hsl(var(--p) / 0.12);
+    }
+
+    .tree-indent {
+      display: inline-flex;
+      width: 0.7rem;
+      height: 1.4rem;
+      border-left: 1px solid hsl(214 28% 70% / 0.25);
+      margin-right: 0.1rem;
+    }
+
+    .tree-title {
+      font-size: 0.88rem;
+      font-weight: 560;
+      line-height: 1.2;
+      letter-spacing: 0.01em;
+    }
+
+    .status-chip {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid hsl(214 28% 70% / 0.2);
+      background: hsl(219 24% 19% / 0.6);
+      color: hsl(210 40% 92%);
+      white-space: nowrap;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    .floating-dock {
+      position: absolute;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+      transform: translateX(-50%);
+      width: calc(100% - 1.5rem);
+      max-width: 28rem;
+      z-index: 25;
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+      animation: dock-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .inner-scroll {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      min-height: 0;
+    }
+
+    .main-views {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .view-panel {
+      position: absolute;
+      inset: 0;
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+      will-change: transform;
+    }
+
+    .tap-btn {
+      transition: transform 120ms ease;
+    }
+
+    .tap-btn:active {
+      transform: scale(0.985);
+    }
+
+    .floating-dock .btn {
+      transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease;
+    }
+
+    .floating-dock .btn:active {
+      transform: scale(0.98);
+    }
+
+    .modal-box {
+      animation: modal-pop 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes dock-rise {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(0.5rem);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    @keyframes modal-pop {
+      from {
+        opacity: 0;
+        transform: scale(0.985) translateY(0.3rem);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .touch-target {
+      min-height: 2.75rem;
+    }
+
+    .focus-ring:focus-visible {
+      outline: 2px solid hsl(var(--p));
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .row-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+      scrollbar-width: thin;
+    }
+
+    [data-view="list"] .view-list {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    [data-view="list"] .view-editor {
+      transform: translateX(16%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-view="editor"] .view-list {
+      transform: translateX(-16%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-view="editor"] .view-editor {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .swipe-shadow {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0.75rem;
+      opacity: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, hsl(var(--bc) / 0.18), transparent);
+      transition: opacity 120ms ease;
+    }
+
+    .swipe-shadow.active {
+      opacity: 1;
+    }
+
+    .editor-shell {
+      border-radius: 1.2rem;
+      border: 1px solid var(--surface-border);
+      background: hsl(220 34% 10% / 0.9);
+      box-shadow: var(--surface-shadow);
+      backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+      -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(145%);
+    }
+
+    .editor-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: hsl(220 30% 11% / 0.86);
+      border-bottom: 1px solid hsl(214 28% 70% / 0.14);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .app-shell {
+        padding-left: calc(env(safe-area-inset-left) + 0.5rem);
+        padding-right: calc(env(safe-area-inset-right) + 0.5rem);
+        gap: 0.5rem;
+      }
+
+      .tree-title {
+        font-size: 0.82rem;
+      }
+
+      .floating-dock {
+        width: calc(100% - 1rem);
+      }
+    }
+
+    @media (min-width: 700px) {
+      .app-shell {
+        max-width: 34rem;
+        width: min(100vw, 34rem);
+      }
+
+      .tree-row {
+        min-height: 3.2rem;
+      }
+    }
+  </style>
+</head>
+<body class="h-full bg-base-200 text-base-content">
+  <div class="app-shell relative" x-data="teeezerqShell()" x-init="init()" x-cloak>
+    <header class="glass-surface navbar min-h-0 px-3 py-2">
+      <div class="flex-1">
+        <h1 class="text-base font-semibold" x-text="t('appTitle')"></h1>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="badge badge-outline badge-sm" aria-label="Current theme" x-text="`OS: ${osTheme || 'black'}`"></span>
+        <span class="badge badge-outline badge-sm" aria-label="Current language" x-text="language === 'hy' ? 'HY' : 'EN'"></span>
+      </div>
+    </header>
+
+    <main class="main-views" :data-view="view">
+      <section x-show="status !== 'ready'" class="view-panel h-full">
+        <div class="card h-full border border-base-300 bg-base-100 shadow-sm">
+          <div class="card-body flex h-full items-center justify-center gap-3 p-4 text-center">
+            <span x-show="loading" class="loading loading-spinner loading-md"></span>
+            <p class="text-sm font-medium" x-text="statusTitle()"></p>
+            <p class="text-xs opacity-70" x-text="statusDescription()"></p>
+            <p class="text-xs text-error" x-show="error" x-text="error"></p>
+            <button type="button" class="btn btn-sm btn-primary" x-show="status !== 'ready' && !loading" @click="init()">
+              Retry
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="status === 'ready'" class="view-panel view-list h-full" :style="listPanelStyle()">
+        <div class="card h-full border border-base-300 bg-base-100 shadow-sm">
+          <div class="card-body relative h-full gap-2 p-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <h2 class="text-xs font-semibold uppercase tracking-wide opacity-80">Knowledge Tree</h2>
+                <p class="truncate text-[0.68rem] opacity-60" x-text="treeStatsLabel()"></p>
+              </div>
+              <span class="badge badge-outline badge-sm max-w-40 truncate" x-text="selectedNode() ? selectedNodeLabel() : 'No selection'"></span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="status-chip" role="status" aria-live="polite" x-text="syncStatusLabel()"></span>
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  class="tap-btn focus-ring btn btn-xs btn-primary"
+                  :disabled="!canManualSave() || syncState === 'saving'"
+                  @click="saveRemoteNow()"
+                >
+                  💾 Save
+                </button>
+                <button
+                  type="button"
+                  class="tap-btn focus-ring btn btn-xs btn-ghost"
+                  x-show="syncState === 'error'"
+                  @click="retrySync()"
+                >
+                  🔄 Retry
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-box border border-base-300 bg-base-200/50 p-2" x-show="reorderMode && !!selectedNode()">
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
+                  :disabled="!canMoveSelected(-1)"
+                  @click="moveSelected(-1)"
+                >
+                  ↑ Move Up
+                </button>
+                <button
+                  type="button"
+                  class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
+                  :disabled="!canMoveSelected(1)"
+                  @click="moveSelected(1)"
+                >
+                  ↓ Move Down
+                </button>
+              </div>
+            </div>
+            <div class="rounded-box border border-base-300 bg-base-200/50 p-2" x-show="!!selectedNode() && !reorderMode">
+              <div class="flex flex-wrap items-center gap-1">
+                <span class="badge badge-sm badge-outline" x-text="selectedNodeKindLabel()"></span>
+                <template x-for="mode in permissionModes" :key="mode">
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring btn btn-xs"
+                    :disabled="!selectedNode()"
+                    :class="selectedPermission() === mode ? 'btn-primary' : 'btn-ghost'"
+                    @click="setSelectedPermission(mode)"
+                    x-text="permissionLabel(mode)"
+                  ></button>
+                </template>
+              </div>
+            </div>
+
+            <div
+              x-ref="treeScroller"
+              class="inner-scroll flex-1 rounded-box border border-base-300 bg-base-100 pb-24"
+              :class="inlinePopover.open ? 'pointer-events-none opacity-80' : ''"
+              @scroll.passive="treeScrollTop = $event.target.scrollTop"
+            >
+              <template x-if="visibleNodes().length === 0">
+                <div class="grid min-h-52 place-items-center p-4">
+                  <div class="w-full max-w-xs rounded-box border border-base-300 bg-base-200/40 p-4 text-center">
+                    <p class="text-sm font-medium">🌱 Tree is empty</p>
+                    <p class="mt-1 text-xs opacity-70">Add a path or note to start.</p>
+                    <div class="mt-3 grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        class="tap-btn focus-ring touch-target btn btn-sm btn-primary w-full"
+                        @click="openInlineCreate('path')"
+                      >
+                        📁 Create Path
+                      </button>
+                      <button
+                        type="button"
+                        class="tap-btn focus-ring touch-target btn btn-sm btn-outline w-full"
+                        @click="openInlineCreate('file')"
+                      >
+                        📝 Create Note
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <ul x-show="visibleNodes().length > 0" class="tree-list">
+                <template x-for="node in visibleNodes()" :key="node.id">
+                  <li>
+                    <button
+                      type="button"
+                      class="tree-row tap-btn focus-ring w-full items-center justify-between px-2.5 py-2 text-left"
+                      :id="`node-${node.id}`"
+                      :aria-label="`Node ${node.title}, ${node.kind}, permission ${node.permission}`"
+                      :class="rowClass(node)"
+                      @click="tapNode(node)"
+                    >
+                      <span class="min-w-0 flex flex-1 items-center truncate" :style="`padding-left:${node.depth * 0.6}rem`">
+                        <span aria-hidden="true" class="mr-1.5 inline-flex" x-show="node.depth > 0">
+                          <template x-for="i in node.depth" :key="i">
+                            <span class="tree-indent"></span>
+                          </template>
+                        </span>
+                        <span class="mr-2 shrink-0" aria-hidden="true" x-text="node.kind === 'path' ? '📁' : '📝'"></span>
+                        <span class="tree-title truncate" x-text="node.title"></span>
+                      </span>
+                      <span class="ml-2 flex shrink-0 items-center gap-1.5">
+                        <span class="badge badge-xs" :class="permissionBadge(node.permission)" x-text="node.permission"></span>
+                        <span class="text-[0.68rem] opacity-65" x-text="node.kind === 'path' ? (isExpanded(node.id) ? '▾' : '▸') : 'md'"></span>
+                      </span>
+                    </button>
+                  </li>
+                </template>
+              </ul>
+            </div>
+
+            <div class="floating-dock">
+              <div class="glass-surface rounded-2xl px-2 py-2">
+                <div class="grid grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring touch-target btn btn-sm btn-primary"
+                    aria-label="Create path"
+                    :disabled="inlinePopover.open"
+                    @pointerdown.prevent.stop
+                    @click.prevent.stop="openInlineCreate('path')"
+                  >
+                    📁
+                  </button>
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring touch-target btn btn-sm btn-primary"
+                    aria-label="Create or open note"
+                    :disabled="reorderMode || inlinePopover.open"
+                    @pointerdown.prevent.stop
+                    @click.prevent.stop="selectedNode() && selectedNode().kind === 'file' ? openEditor() : openInlineCreate('file')"
+                  >
+                    <span x-text="selectedNode() && selectedNode().kind === 'file' ? '📝' : '🆕'"></span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
+                    aria-label="Rename selected node"
+                    :disabled="!selectedNode() || reorderMode || inlinePopover.open"
+                    @pointerdown.prevent.stop
+                    @click.prevent.stop="openRenameModal()"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring touch-target btn btn-sm"
+                    :aria-label="reorderMode ? 'Finish reorder mode' : 'Delete selected node'"
+                    :aria-pressed="reorderMode ? 'true' : 'false'"
+                    :class="reorderMode ? 'btn-primary' : (canDeleteSelected() ? 'btn-error' : 'btn-ghost')"
+                    :disabled="inlinePopover.open || visibleNodes().length === 0 || (!reorderMode && !canDeleteSelected())"
+                    @pointerdown.prevent.stop
+                    @click.prevent.stop="reorderMode ? toggleReorder() : openInlineDelete()"
+                  >
+                    <span x-text="reorderMode ? '✅' : '🗑️'"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              x-show="inlinePopover.open"
+              x-transition.opacity.duration.120ms
+              class="absolute inset-x-2 bottom-28 z-30"
+              @keydown.escape.window="closeInlinePopover()"
+            >
+              <div class="card border border-base-300 bg-base-100 shadow-xl" @click.stop @pointerdown.stop>
+                <div class="card-body gap-3 p-3">
+                  <h3 class="text-sm font-semibold" x-text="inlinePopover.mode === 'delete' ? 'Delete Node' : (inlinePopover.kind === 'file' ? 'Create Markdown' : 'Create Path')"></h3>
+                  <template x-if="inlinePopover.mode === 'create'">
+                    <div class="grid gap-2">
+                      <label class="input input-bordered flex items-center gap-2">
+                        <span class="text-xs opacity-70">Title</span>
+                        <input type="text" class="grow focus-ring" placeholder="Node title" aria-label="Node title" x-model="inlinePopover.title" @keydown.enter.prevent="submitInlinePopover()" />
+                      </label>
+                      <label class="grid gap-1">
+                        <span class="text-xs opacity-70">Parent</span>
+                        <select class="select select-bordered w-full focus-ring" x-model="inlinePopover.parentId">
+                          <template x-for="pathNode in pathNodesForParentSelect()" :key="`ip-${pathNode.id}`">
+                            <option :value="pathNode.id" x-text="formatPathOption(pathNode)"></option>
+                          </template>
+                        </select>
+                      </label>
+                      <div class="row-scroll flex items-center gap-2">
+                        <span class="text-xs opacity-70 whitespace-nowrap">Type</span>
+                        <button type="button" class="btn btn-xs" :class="inlinePopover.kind === 'path' ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.kind = 'path'">Path</button>
+                        <button type="button" class="btn btn-xs" :class="inlinePopover.kind === 'file' ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.kind = 'file'">Markdown</button>
+                      </div>
+                      <div class="row-scroll flex items-center gap-2">
+                        <span class="text-xs opacity-70 whitespace-nowrap">Permission</span>
+                        <template x-for="mode in permissionModes" :key="`ipop-${mode}`">
+                          <button type="button" class="btn btn-xs" :class="inlinePopover.permission === mode ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.permission = mode" x-text="permissionLabel(mode)"></button>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="inlinePopover.mode === 'delete'">
+                    <div class="space-y-1">
+                      <p class="text-sm font-medium" x-text="'Delete ' + (inlinePopover.title || 'node') + '?'"></p>
+                      <p class="text-sm opacity-80">This will delete the selected node and all nested children.</p>
+                    </div>
+                  </template>
+                  <div class="row-scroll flex items-center justify-end gap-2">
+                    <button type="button" class="tap-btn focus-ring btn btn-sm btn-ghost" :disabled="inlinePopover.busy" @click="closeInlinePopover()">Cancel</button>
+                    <button type="button" class="tap-btn focus-ring btn btn-sm" :class="inlinePopover.mode === 'delete' ? 'btn-error' : 'btn-primary'" :disabled="inlinePopover.busy" @click="submitInlinePopover()" x-text="inlinePopover.mode === 'delete' ? 'Delete' : 'Create'"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        x-show="status === 'ready'"
+        class="view-panel view-editor h-full"
+        :style="editorPanelStyle()"
+        @touchstart="onEditorTouchStart($event)"
+        @touchmove="onEditorTouchMove($event)"
+        @touchend="onEditorTouchEnd($event)"
+        @touchcancel="onEditorTouchCancel()"
+      >
+        <div class="swipe-shadow" :class="swipe.active ? 'active' : ''"></div>
+        <div class="editor-shell h-full">
+          <div class="h-full gap-3 p-0 flex flex-col">
+            <div class="editor-topbar flex items-center justify-between gap-2 px-3 py-2">
+              <button type="button" class="tap-btn focus-ring btn btn-ghost btn-sm" @click="goList()">
+                Back
+              </button>
+              <div class="join">
+                <button
+                  type="button"
+                  class="tap-btn focus-ring btn btn-sm join-item"
+                  :class="editorMode === 'write' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setEditorMode('write')"
+                >
+                  Write
+                </button>
+                <button
+                  type="button"
+                  class="tap-btn focus-ring btn btn-sm join-item"
+                  :class="editorMode === 'preview' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setEditorMode('preview')"
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+
+            <div class="grid gap-2 px-3 pt-2">
+              <label class="input input-bordered flex items-center gap-2">
+                <span class="text-xs opacity-70">Title</span>
+                <input
+                  type="text"
+                  class="grow focus-ring"
+                  placeholder="Record title"
+                  aria-label="Record title"
+                  x-model="editor.title"
+                  @input="onEditorChanged()"
+                />
+              </label>
+              <div class="text-xs opacity-70 truncate" x-text="currentFilePathLabel()"></div>
+              <div class="row-scroll flex items-center gap-2">
+                <span class="text-xs opacity-70 whitespace-nowrap">Permission</span>
+                <template x-for="mode in permissionModes" :key="`editor-${mode}`">
+                  <button
+                    type="button"
+                    class="tap-btn focus-ring btn btn-xs"
+                    :class="editor.permission === mode ? 'btn-primary' : 'btn-ghost'"
+                    @click="editor.permission = mode; onEditorChanged();"
+                    x-text="permissionLabel(mode)"
+                  ></button>
+                </template>
+              </div>
+              <div class="row-scroll flex items-center gap-2">
+                <span class="text-xs opacity-70 whitespace-nowrap">Format</span>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('# ', '')">H1</button>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('## ', '')">H2</button>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('- ', '')">List</button>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('**', '**')">Bold</button>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('`', '`')">Code</button>
+                <button type="button" class="btn btn-xs btn-ghost tap-btn focus-ring" @click="insertMarkdown('[', '](https://)')">Link</button>
+              </div>
+            </div>
+
+            <div class="inner-scroll mx-3 flex-1 rounded-box border border-base-300 bg-base-100">
+              <template x-if="editorMode === 'write'">
+                <textarea
+                  x-ref="editorArea"
+                  class="textarea textarea-ghost focus-ring h-full min-h-[18rem] w-full resize-none rounded-box p-3 leading-relaxed"
+                  placeholder="# Markdown..."
+                  aria-label="Markdown editor"
+                  x-model="editor.body"
+                  @input="onEditorChanged()"
+                ></textarea>
+              </template>
+              <template x-if="editorMode === 'preview'">
+                <article class="prose prose-sm max-w-none p-3">
+                  <h2 class="mb-2 text-base font-semibold" x-text="editor.title || 'Untitled'"></h2>
+                  <div class="rounded-box bg-base-200 p-3 text-sm leading-relaxed break-words" x-html="renderMarkdown(editor.body)"></div>
+                </article>
+              </template>
+            </div>
+
+            <div class="row-scroll flex items-center gap-2 px-3 pb-3">
+              <button type="button" class="tap-btn focus-ring btn btn-primary btn-sm min-w-24" @click="saveEditor()">
+                Save
+              </button>
+              <button type="button" class="tap-btn focus-ring btn btn-ghost btn-sm min-w-24" @click="resetEditor()">
+                Reset
+              </button>
+              <span class="badge badge-outline badge-sm whitespace-nowrap" x-text="saveStateText"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div
+      x-show="modal.open"
+      x-transition.opacity.duration.120ms
+      class="absolute inset-0 z-50 grid place-items-center bg-base-content/35 p-4"
+      @pointerdown.self="closeModalByBackdrop()"
+    >
+      <div
+        class="modal-box card w-full max-w-md max-h-[calc(100dvh-6rem)] overflow-y-auto border border-base-300 bg-base-100 shadow-xl"
+        @pointerdown.stop
+        @click.stop
+      >
+        <div class="card-body gap-3 p-4">
+          <h3 class="text-sm font-semibold" x-text="modalTitle()"></h3>
+
+          <template x-if="modal.mode === 'rename' || modal.mode === 'move'">
+            <div class="grid gap-2">
+              <template x-if="modal.mode === 'rename'">
+                <label class="input input-bordered flex items-center gap-2">
+                  <span class="text-xs opacity-70">Title</span>
+                  <input
+                    type="text"
+                    class="grow focus-ring"
+                    placeholder="Node title"
+                    aria-label="Node title"
+                    x-model="modal.title"
+                  />
+                </label>
+              </template>
+              <template x-if="modal.mode === 'move'">
+                <div class="rounded-box border border-base-300 bg-base-200/50 p-2 text-xs">
+                  <span class="opacity-60">Selected</span>
+                  <p class="mt-1 truncate font-medium" x-text="modal.title || 'Node'"></p>
+                </div>
+              </template>
+              <template x-if="modal.mode === 'move'">
+                <label class="grid gap-1">
+                  <span class="text-xs opacity-70">New Parent</span>
+                  <select class="select select-bordered w-full focus-ring" x-model="modal.parentId">
+                    <template x-for="pathNode in pathNodesForParentSelect()" :key="`p-${pathNode.id}`">
+                      <option :value="pathNode.id" x-text="formatPathOption(pathNode)"></option>
+                    </template>
+                  </select>
+                </label>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="modal.mode === 'actions'">
+            <div class="grid gap-2">
+              <button
+                type="button"
+                class="tap-btn focus-ring touch-target btn btn-sm btn-ghost justify-start"
+                :disabled="!canRenameSelected()"
+                @click="chooseAction('rename')"
+              >
+                Rename
+                <span class="ml-auto text-[0.68rem] opacity-65">Title only</span>
+              </button>
+              <button
+                type="button"
+                class="tap-btn focus-ring touch-target btn btn-sm btn-ghost justify-start"
+                :disabled="!canMoveSelectedNode()"
+                @click="chooseAction('move')"
+              >
+                Move To
+                <span class="ml-auto text-[0.68rem] opacity-65">Change parent</span>
+              </button>
+              <button
+                type="button"
+                class="tap-btn focus-ring touch-target btn btn-sm btn-error justify-start"
+                :disabled="!canDeleteSelected()"
+                @click.prevent.stop="chooseAction('delete')"
+              >
+                Delete
+                <span class="ml-auto text-[0.68rem] opacity-85">Permanent</span>
+              </button>
+            </div>
+          </template>
+
+          <div class="row-scroll flex items-center justify-end gap-2">
+            <button type="button" class="tap-btn focus-ring btn btn-sm btn-ghost" :disabled="modalBusy" @click="closeModal()">Cancel</button>
+            <button
+              x-show="modal.mode !== 'actions'"
+              type="button"
+              class="tap-btn focus-ring btn btn-sm"
+              :class="'btn-primary'"
+              :disabled="modalBusy"
+              @click="submitModal()"
+              x-text="modalPrimaryLabel()"
+            ></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function teeezerqShell() {
+      const STORAGE_KEY = 'teeezerq.ui.v1';
+      const SCHEMA_VERSION = 2;
+      const BACKEND_SCHEMA_VERSION = 1;
+      const nowIso = () => new Date().toISOString();
+      const seedTs = nowIso();
+      const defaultTree = [
+        {
+          id: 'root',
+          parentId: null,
+          title: 'Կյանք',
+          kind: 'path',
+          permission: 'public',
+          order: 10,
+          createdAt: seedTs,
+          updatedAt: seedTs,
+        },
+        {
+          id: 'art',
+          parentId: 'root',
+          title: 'Արվեստ',
+          kind: 'path',
+          permission: 'team',
+          order: 10,
+          createdAt: seedTs,
+          updatedAt: seedTs,
+        },
+        {
+          id: 'films',
+          parentId: 'art',
+          title: 'Ֆիլմեր',
+          kind: 'path',
+          permission: 'team',
+          order: 10,
+          createdAt: seedTs,
+          updatedAt: seedTs,
+        },
+        {
+          id: 'pulp-fiction',
+          parentId: 'films',
+          title: 'Pulp Fiction',
+          kind: 'file',
+          permission: 'private',
+          body: '# Pulp Fiction\n\n- Director: Quentin Tarantino\n- Year: 1994',
+          order: 10,
+          createdAt: seedTs,
+          updatedAt: seedTs,
+        },
+        {
+          id: 'taxi-driver',
+          parentId: 'films',
+          title: 'The Taxi Driver',
+          kind: 'file',
+          permission: 'public',
+          body: '# The Taxi Driver\n\nPsychological drama about Travis Bickle.',
+          order: 20,
+          createdAt: seedTs,
+          updatedAt: seedTs,
+        },
+      ];
+
+      return {
+        view: 'list',
+        appId: 'teeezerq',
+        loading: true,
+        status: 'initializing',
+        error: '',
+        client: null,
+        user: null,
+        language: document.documentElement.lang === 'hy' ? 'hy' : 'en',
+        osTheme: document.documentElement.getAttribute('data-theme') || 'black',
+        selectedId: 'root',
+        editorMode: 'write',
+        saveStateText: 'Not saved',
+        reorderMode: false,
+        swipe: {
+          active: false,
+          tracking: false,
+          startX: 0,
+          startY: 0,
+          startAt: 0,
+          dx: 0,
+        },
+        modal: {
+          open: false,
+          mode: '',
+          kind: 'path',
+          title: '',
+          parentId: 'root',
+          permission: 'private',
+        },
+        inlinePopover: {
+          open: false,
+          mode: '',
+          kind: 'path',
+          title: '',
+          parentId: 'root',
+          permission: 'private',
+          busy: false,
+        },
+        inlinePopoverOpenedAt: 0,
+        editor: {
+          id: '',
+          title: '',
+          body: '',
+          permission: 'private',
+        },
+        lastOpenedFileId: '',
+        draftPersistTimer: null,
+        treeScrollTop: 0,
+        hasUnsavedChanges: false,
+        modalOpenedAt: 0,
+        modalBackdropArmed: false,
+        modalArmTimer: null,
+        modalBusy: false,
+        isHydratingRemote: false,
+        syncState: 'idle',
+        syncError: '',
+        lastSyncedAt: '',
+        permissionModes: ['private', 'team', 'public'],
+        i18n: {
+          en: {
+            appTitle: 'Teeezerq',
+            statusInitializing: 'Initializing',
+            statusAuthCheck: 'Checking authentication',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Authentication required',
+            statusInitializingDesc: 'Bootstrapping HayOS client and settings.',
+            statusAuthCheckDesc: 'Validating session from OS.',
+            statusReadyDesc: 'App is ready.',
+            statusAuthFailedDesc: 'Sign in from HayOS to continue.',
+          },
+          hy: {
+            appTitle: 'Teeezerq',
+            statusInitializing: 'Սկսվում է',
+            statusAuthCheck: 'Ստուգվում է մուտքը',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Պետք է մուտք գործել',
+            statusInitializingDesc: 'Բեռնվում է HayOS client-ը և կարգավորումները։',
+            statusAuthCheckDesc: 'Ստուգվում է OS session-ը։',
+            statusReadyDesc: 'Հավելվածը պատրաստ է։',
+            statusAuthFailedDesc: 'Շարունակելու համար մուտք գործեք HayOS-ից։',
+          },
+        },
+        expanded: {
+          root: true,
+          art: true,
+          films: true,
+        },
+        tree: defaultTree,
+        hasFirestoreGateway() {
+          return !!(
+            this.client
+            && typeof this.client.firestoreGet === 'function'
+            && typeof this.client.firestoreUpdate === 'function'
+          );
+        },
+        canManualSave() {
+          return !!(this.user && this.hasFirestoreGateway() && this.hasUnsavedChanges);
+        },
+        markDirty() {
+          this.hasUnsavedChanges = true;
+          this.saveStateText = 'Not saved';
+          if (this.user && this.hasFirestoreGateway() && !this.isHydratingRemote && this.syncState !== 'saving') {
+            this.syncState = 'pending';
+          }
+        },
+        loadLocalSnapshot() {
+          try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return null;
+          }
+        },
+        applySnapshot(snapshot) {
+          const parsed = snapshot && typeof snapshot === 'object' ? snapshot : null;
+          this.tree = this.normalizeTree(parsed?.tree);
+          const activeTree = this.tree.filter((item) => !item.deletedAt);
+          if (parsed && parsed.expanded && typeof parsed.expanded === 'object') {
+            this.expanded = parsed.expanded;
+          }
+          if (parsed && typeof parsed.selectedId === 'string') {
+            this.selectedId = parsed.selectedId;
+          }
+          if (parsed && typeof parsed.reorderMode === 'boolean') {
+            this.reorderMode = parsed.reorderMode;
+          }
+          if (parsed && typeof parsed.lastOpenedFileId === 'string') {
+            this.lastOpenedFileId = parsed.lastOpenedFileId;
+          }
+          if (parsed && parsed.editorDraft && typeof parsed.editorDraft === 'object') {
+            this.editor = {
+              id: String(parsed.editorDraft.id || ''),
+              title: String(parsed.editorDraft.title || ''),
+              body: String(parsed.editorDraft.body || ''),
+              permission: ['private', 'team', 'public'].includes(parsed.editorDraft.permission)
+                ? parsed.editorDraft.permission
+                : 'private',
+            };
+            this.editorMode = parsed.editorDraft.editorMode === 'preview' ? 'preview' : 'write';
+          }
+          if (parsed && parsed.view === 'editor' && this.editor.id) {
+            const file = activeTree.find((item) => item.id === this.editor.id && item.kind === 'file');
+            this.view = file ? 'editor' : 'list';
+          } else {
+            this.view = 'list';
+          }
+          if (!activeTree.some((item) => item.id === this.selectedId)) {
+            this.selectedId = activeTree.find((item) => item.parentId === null)?.id || 'root';
+          }
+          if (this.lastOpenedFileId && !activeTree.some((item) => item.id === this.lastOpenedFileId)) {
+            this.lastOpenedFileId = '';
+          }
+        },
+        toBackendStatePayload() {
+          return {
+            version: BACKEND_SCHEMA_VERSION,
+            appId: this.appId || 'teeezerq',
+            updatedAt: nowIso(),
+            tree: this.tree,
+            expanded: this.expanded,
+            selectedId: this.selectedId,
+            reorderMode: this.reorderMode,
+            view: this.view,
+            lastOpenedFileId: this.lastOpenedFileId,
+            editorDraft: {
+              id: this.editor.id,
+              title: this.editor.title,
+              body: this.editor.body,
+              permission: this.editor.permission,
+              editorMode: this.editorMode,
+            },
+          };
+        },
+        toBridgeSafeValue(value) {
+          if (
+            value === null
+            || typeof value === 'string'
+            || typeof value === 'number'
+            || typeof value === 'boolean'
+          ) {
+            return value;
+          }
+          if (value instanceof Date) {
+            return value.toISOString();
+          }
+          if (Array.isArray(value)) {
+            return value.map((item) => this.toBridgeSafeValue(item));
+          }
+          if (typeof value === 'object') {
+            const out = {};
+            Object.keys(value).forEach((key) => {
+              const next = this.toBridgeSafeValue(value[key]);
+              if (typeof next !== 'undefined') {
+                out[key] = next;
+              }
+            });
+            return out;
+          }
+          return undefined;
+        },
+        toBridgeSafePayload(payload) {
+          const plain = this.toBridgeSafeValue(payload);
+          if (plain && typeof plain === 'object') return plain;
+          return {};
+        },
+        toTs(value) {
+          if (typeof value !== 'string') return 0;
+          const ts = Date.parse(value);
+          return Number.isFinite(ts) ? ts : 0;
+        },
+        pickNewerNode(localNode, remoteNode) {
+          const localDeletedTs = this.toTs(localNode?.deletedAt);
+          const remoteDeletedTs = this.toTs(remoteNode?.deletedAt);
+          if (localDeletedTs || remoteDeletedTs) {
+            if (localDeletedTs === remoteDeletedTs) {
+              const localUpdatedTs = this.toTs(localNode?.updatedAt);
+              const remoteUpdatedTs = this.toTs(remoteNode?.updatedAt);
+              return localUpdatedTs >= remoteUpdatedTs ? localNode : remoteNode;
+            }
+            return localDeletedTs >= remoteDeletedTs ? localNode : remoteNode;
+          }
+          const localTs = this.toTs(localNode?.updatedAt);
+          const remoteTs = this.toTs(remoteNode?.updatedAt);
+          if (localTs >= remoteTs) return localNode;
+          return remoteNode;
+        },
+        mergeTree(localTree, remoteTree) {
+          const local = this.normalizeTree(localTree);
+          const remote = this.normalizeTree(remoteTree);
+          const mergedById = new Map();
+          remote.forEach((node) => {
+            mergedById.set(node.id, { ...node });
+          });
+          local.forEach((node) => {
+            const prev = mergedById.get(node.id);
+            if (!prev) {
+              mergedById.set(node.id, { ...node });
+              return;
+            }
+            mergedById.set(node.id, { ...this.pickNewerNode(node, prev) });
+          });
+          return this.normalizeTree(Array.from(mergedById.values()));
+        },
+        mergeSnapshots(localSnapshot, remoteSnapshot) {
+          const local = localSnapshot && typeof localSnapshot === 'object' ? localSnapshot : null;
+          const remote = remoteSnapshot && typeof remoteSnapshot === 'object' ? remoteSnapshot : null;
+          if (!local && !remote) return null;
+          if (!remote) return local;
+          if (!local) return remote;
+          const mergedTree = this.mergeTree(local.tree, remote.tree);
+          const mergedExpanded = {
+            ...(remote.expanded && typeof remote.expanded === 'object' ? remote.expanded : {}),
+            ...(local.expanded && typeof local.expanded === 'object' ? local.expanded : {}),
+          };
+          const rootId = mergedTree.find((item) => item.parentId === null)?.id || 'root';
+          const localSelected = typeof local.selectedId === 'string' ? local.selectedId : '';
+          const remoteSelected = typeof remote.selectedId === 'string' ? remote.selectedId : '';
+          const selectedId = mergedTree.some((item) => item.id === localSelected)
+            ? localSelected
+            : (mergedTree.some((item) => item.id === remoteSelected) ? remoteSelected : rootId);
+          const localTs = this.toTs(local.updatedAt);
+          const remoteTs = this.toTs(remote.updatedAt);
+          const newest = localTs >= remoteTs ? local : remote;
+          const merged = {
+            ...newest,
+            version: BACKEND_SCHEMA_VERSION,
+            appId: this.appId || 'teeezerq',
+            updatedAt: nowIso(),
+            tree: mergedTree,
+            expanded: mergedExpanded,
+            selectedId,
+            reorderMode: typeof local.reorderMode === 'boolean' ? local.reorderMode : !!remote.reorderMode,
+            // Respect only the newest snapshot for view mode; avoid stale editor state forcing auto-open.
+            view: newest.view === 'editor' ? 'editor' : 'list',
+            lastOpenedFileId: typeof local.lastOpenedFileId === 'string' && local.lastOpenedFileId
+              ? local.lastOpenedFileId
+              : (typeof remote.lastOpenedFileId === 'string' ? remote.lastOpenedFileId : ''),
+            editorDraft: localTs >= remoteTs
+              ? (local.editorDraft || remote.editorDraft || {})
+              : (remote.editorDraft || local.editorDraft || {}),
+          };
+          if (!merged.editorDraft || typeof merged.editorDraft !== 'object') {
+            merged.editorDraft = { id: '', title: '', body: '', permission: 'private', editorMode: 'write' };
+          }
+          return merged;
+        },
+        async readRemoteSnapshot() {
+          if (!this.hasFirestoreGateway()) return null;
+          const row = await this.client.firestoreGet('appState', this.appId);
+          if (!row || typeof row !== 'object') return null;
+          if (!Array.isArray(row.tree)) return null;
+          return row;
+        },
+        async writeRemoteSnapshot() {
+          if (!this.hasFirestoreGateway()) return;
+          const localPayload = this.toBackendStatePayload();
+          this.syncState = 'saving';
+          this.syncError = '';
+          const remoteSnapshot = await this.readRemoteSnapshot().catch(() => null);
+          const mergedPayload = this.mergeSnapshots(localPayload, remoteSnapshot) || localPayload;
+          mergedPayload.updatedAt = nowIso();
+          await this.client.firestoreUpdate(
+            'appState',
+            this.appId,
+            this.toBridgeSafePayload(mergedPayload),
+          );
+          this.applySnapshot(mergedPayload);
+          this.syncState = 'saved';
+          this.lastSyncedAt = mergedPayload.updatedAt;
+          this.syncError = '';
+          this.hasUnsavedChanges = false;
+          this.saveStateText = 'Saved';
+        },
+        async retrySync() {
+          if (!this.user || !this.hasFirestoreGateway()) return;
+          try {
+            await this.writeRemoteSnapshot();
+          } catch (error) {
+            this.syncState = 'error';
+            this.syncError = error && error.message ? error.message : String(error);
+          }
+        },
+        async saveRemoteNow() {
+          if (!this.canManualSave()) return;
+          await this.retrySync();
+        },
+        async hydrateFromRemote(localSnapshot) {
+          if (!this.hasFirestoreGateway()) return;
+          this.isHydratingRemote = true;
+          try {
+            const remote = await this.readRemoteSnapshot();
+            if (remote && Array.isArray(remote.tree)) {
+              const localPayload = this.toBackendStatePayload();
+              const mergedPayload = this.mergeSnapshots(localPayload, remote) || remote;
+              this.applySnapshot(mergedPayload);
+              this.lastSyncedAt = typeof remote.updatedAt === 'string' ? remote.updatedAt : '';
+              if (this.toTs(mergedPayload.updatedAt) > this.toTs(remote.updatedAt)) {
+                await this.client.firestoreUpdate(
+                  'appState',
+                  this.appId,
+                  this.toBridgeSafePayload(mergedPayload),
+                );
+                this.lastSyncedAt = mergedPayload.updatedAt;
+              }
+              return;
+            }
+            if (localSnapshot && Array.isArray(localSnapshot.tree)) {
+              await this.writeRemoteSnapshot();
+            }
+          } catch (error) {
+            this.syncState = 'error';
+            this.syncError = error && error.message ? error.message : String(error);
+          } finally {
+            this.isHydratingRemote = false;
+          }
+        },
+        syncStatusLabel() {
+          if (!this.hasFirestoreGateway()) return '📦 Local';
+          if (this.syncState === 'saving') return '☁️ Saving…';
+          if (this.syncState === 'pending') return '⏳ Pending';
+          if (this.syncState === 'error') {
+            const brief = this.syncError ? String(this.syncError).slice(0, 32) : '';
+            return brief ? `⚠️ ${brief}` : '⚠️ Sync error';
+          }
+          if (this.syncState === 'saved') return '✅ Synced';
+          return '🕓 Idle';
+        },
+        normalizeTree(rawTree) {
+          const source = Array.isArray(rawTree) && rawTree.length > 0 ? rawTree : defaultTree;
+          const seenIds = new Set();
+          const normalized = source.map((item, index) => {
+            const fallbackId = `node-${index + 1}`;
+            const rawId = typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : fallbackId;
+            const id = seenIds.has(rawId) ? `${rawId}-${index + 1}` : rawId;
+            seenIds.add(id);
+            const kind = item?.kind === 'file' ? 'file' : 'path';
+            const createdAt = typeof item?.createdAt === 'string' && item.createdAt.trim()
+              ? item.createdAt
+              : nowIso();
+            const updatedAt = typeof item?.updatedAt === 'string' && item.updatedAt.trim()
+              ? item.updatedAt
+              : createdAt;
+            return {
+              id,
+              parentId: typeof item?.parentId === 'string' && item.parentId.trim() ? item.parentId : null,
+              title: typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : 'Untitled',
+              kind,
+              permission: ['private', 'team', 'public'].includes(item?.permission) ? item.permission : 'private',
+              body: kind === 'file' ? String(item?.body || '') : '',
+              order: Number.isFinite(Number(item?.order)) ? Number(item.order) : ((index + 1) * 10),
+              createdAt,
+              updatedAt,
+              deletedAt: typeof item?.deletedAt === 'string' && item.deletedAt.trim() ? item.deletedAt : '',
+            };
+          });
+
+          const idSet = new Set(normalized.map((item) => item.id));
+          let parentFixed = normalized.map((item) => {
+            const parentId = item.parentId && idSet.has(item.parentId) ? item.parentId : null;
+            return { ...item, parentId };
+          });
+          if (!parentFixed.some((item) => item.parentId === null) && parentFixed[0]) {
+            parentFixed[0] = { ...parentFixed[0], parentId: null };
+          }
+
+          let root = parentFixed.find((item) => item.parentId === null && item.kind === 'path')
+            || parentFixed.find((item) => item.kind === 'path')
+            || parentFixed[0];
+          if (!root) return [];
+          if (root.kind !== 'path') {
+            root = { ...root, kind: 'path', body: '' };
+            parentFixed = parentFixed.map((item) => (item.id === root.id ? root : item));
+          }
+          const nodeById = new Map(parentFixed.map((item) => [item.id, item]));
+          parentFixed = parentFixed.map((item) => {
+            if (item.id === root.id) return { ...item, parentId: null, kind: 'path', body: '' };
+            const rawParent = item.parentId && nodeById.get(item.parentId) ? nodeById.get(item.parentId) : null;
+            const parentIsPath = rawParent && rawParent.kind === 'path';
+            const fallbackParentId = root.id;
+            const nextParentId = parentIsPath ? rawParent.id : fallbackParentId;
+            if (item.kind === 'file' && !nextParentId) {
+              return { ...item, parentId: fallbackParentId };
+            }
+            return { ...item, parentId: nextParentId };
+          });
+          return this.resequenceOrders(parentFixed);
+        },
+        resequenceOrders(nodes) {
+          const bucket = new Map();
+          nodes.forEach((item, idx) => {
+            const key = item.parentId ?? '__root__';
+            if (!bucket.has(key)) bucket.set(key, []);
+            bucket.get(key).push({ idx, item });
+          });
+          bucket.forEach((entries) => {
+            entries
+              .sort((a, b) => (a.item.order - b.item.order) || (a.idx - b.idx))
+              .forEach((entry, i) => {
+                entry.item.order = (i + 1) * 10;
+              });
+          });
+          return nodes;
+        },
+        async init() {
+          this.loading = true;
+          this.status = 'initializing';
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const params = new URLSearchParams(window.location.search);
+            this.appId = params.get('appId') || 'teeezerq';
+            this.client = new HayOSClient(this.appId);
+            this.status = 'auth_check';
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((nextLanguage) => {
+              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            if (typeof this.client.onAuthStateChanged === 'function') {
+              this.client.onAuthStateChanged((nextUser) => {
+                if (!nextUser) {
+                  this.user = null;
+                  this.status = 'auth_failed';
+                  this.view = 'list';
+                  return;
+                }
+                this.user = nextUser;
+                this.status = 'ready';
+              });
+            }
+            await this.loadOsTheme();
+            this.status = 'ready';
+            const parsed = this.loadLocalSnapshot();
+            this.applySnapshot(parsed);
+            await this.hydrateFromRemote(parsed);
+            this.persistState();
+          } catch (error) {
+            // bootstrap failures should not crash UI; keep local mode available
+            this.status = 'auth_failed';
+            this.error = error && error.message ? error.message : String(error);
+            try {
+              const parsed = this.loadLocalSnapshot();
+              this.applySnapshot(parsed);
+            } catch {
+              this.tree = this.normalizeTree(defaultTree);
+            }
+          } finally {
+            this.loading = false;
+          }
+        },
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            if (this.osTheme) {
+              document.documentElement.setAttribute('data-theme', this.osTheme);
+            }
+          } catch {
+            // ignore theme resolution failures
+          }
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+        statusTitle() {
+          if (this.status === 'auth_check') return this.t('statusAuthCheck');
+          if (this.status === 'ready') return this.t('statusReady');
+          if (this.status === 'auth_failed') return this.t('statusAuthFailed');
+          return this.t('statusInitializing');
+        },
+        statusDescription() {
+          if (this.status === 'auth_check') return this.t('statusAuthCheckDesc');
+          if (this.status === 'ready') return this.t('statusReadyDesc');
+          if (this.status === 'auth_failed') return this.t('statusAuthFailedDesc');
+          return this.t('statusInitializingDesc');
+        },
+        persistState() {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              schemaVersion: SCHEMA_VERSION,
+              tree: this.tree,
+              expanded: this.expanded,
+              selectedId: this.selectedId,
+              reorderMode: this.reorderMode,
+              view: this.view,
+              lastOpenedFileId: this.lastOpenedFileId,
+              editorDraft: {
+                id: this.editor.id,
+                title: this.editor.title,
+                body: this.editor.body,
+                permission: this.editor.permission,
+                editorMode: this.editorMode,
+              },
+            }));
+          } catch {
+            // ignore persist failures
+          }
+        },
+        onEditorChanged() {
+          this.markDirty();
+          if (this.draftPersistTimer) {
+            clearTimeout(this.draftPersistTimer);
+          }
+          this.draftPersistTimer = setTimeout(() => {
+            this.persistState();
+          }, 320);
+        },
+        setEditorMode(mode) {
+          this.editorMode = mode === 'preview' ? 'preview' : 'write';
+          this.persistState();
+        },
+        openEditor() {
+          this.closeInlinePopover();
+          const node = this.tree.find((item) => item.id === this.selectedId);
+          if (!node || node.kind !== 'file') return;
+          if (this.$refs.treeScroller) {
+            this.treeScrollTop = this.$refs.treeScroller.scrollTop || 0;
+          }
+          this.editor.id = node.id;
+          this.editor.title = node.title || '';
+          this.editor.body = node.body || '';
+          this.editor.permission = node.permission || 'private';
+          this.editorMode = 'write';
+          this.lastOpenedFileId = node.id;
+          this.view = 'editor';
+          this.persistState();
+        },
+        goList() {
+          this.view = 'list';
+          this.persistState();
+          this.$nextTick(() => {
+            if (this.$refs.treeScroller) {
+              this.$refs.treeScroller.scrollTop = this.treeScrollTop || 0;
+            }
+            const target = document.getElementById(`node-${this.selectedId}`);
+            if (target) {
+              target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+          });
+        },
+        childrenOf(parentId) {
+          return this.tree
+            .filter((item) => item.parentId === parentId && !item.deletedAt)
+            .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+        },
+        isExpanded(id) {
+          return !!this.expanded[id];
+        },
+        editorPanelStyle() {
+          if (!this.swipe.active || this.view !== 'editor') return '';
+          return `transform: translateX(${Math.max(0, this.swipe.dx)}px);`;
+        },
+        listPanelStyle() {
+          if (!this.swipe.active || this.view !== 'editor') return '';
+          const partial = Math.min(1, Math.max(0, this.swipe.dx / 220));
+          const shift = -16 + (16 * partial);
+          return `transform: translateX(${shift}%); opacity: ${0.35 + (0.65 * partial)};`;
+        },
+        onEditorTouchStart(event) {
+          if (this.view !== 'editor') return;
+          const touch = event.touches && event.touches[0];
+          if (!touch) return;
+          if (touch.clientX > 24) {
+            this.swipe.tracking = false;
+            return;
+          }
+          this.swipe.active = true;
+          this.swipe.tracking = true;
+          this.swipe.startX = touch.clientX;
+          this.swipe.startY = touch.clientY;
+          this.swipe.startAt = performance.now();
+          this.swipe.dx = 0;
+        },
+        onEditorTouchMove(event) {
+          if (!this.swipe.tracking || this.view !== 'editor') return;
+          const touch = event.touches && event.touches[0];
+          if (!touch) return;
+          const dx = touch.clientX - this.swipe.startX;
+          const dy = Math.abs(touch.clientY - this.swipe.startY);
+          if (dy > 24 && Math.abs(dx) < 20) {
+            this.onEditorTouchCancel();
+            return;
+          }
+          if (dx > 0) {
+            this.swipe.dx = Math.min(dx, 320);
+            if (Math.abs(dx) > dy) {
+              event.preventDefault();
+            }
+          } else {
+            this.swipe.dx = 0;
+          }
+        },
+        onEditorTouchEnd() {
+          if (!this.swipe.active || this.view !== 'editor') {
+            this.onEditorTouchCancel();
+            return;
+          }
+          const elapsed = Math.max(1, performance.now() - this.swipe.startAt);
+          const velocity = this.swipe.dx / elapsed;
+          const shouldGoBack = this.swipe.dx >= 88 || velocity >= 0.55;
+          this.onEditorTouchCancel();
+          if (shouldGoBack) {
+            this.goList();
+          }
+        },
+        onEditorTouchCancel() {
+          this.swipe.active = false;
+          this.swipe.tracking = false;
+          this.swipe.startX = 0;
+          this.swipe.startY = 0;
+          this.swipe.startAt = 0;
+          this.swipe.dx = 0;
+        },
+        selectedNodeLabel() {
+          const item = this.tree.find((node) => node.id === this.selectedId && !node.deletedAt);
+          return item ? item.title : 'None';
+        },
+        treeStatsLabel() {
+          const activeTree = this.tree.filter((item) => !item.deletedAt);
+          const total = activeTree.length;
+          const paths = activeTree.filter((item) => item.kind === 'path').length;
+          const files = activeTree.filter((item) => item.kind === 'file').length;
+          return `${total} total · ${paths} paths · ${files} markdown`;
+        },
+        rowClass(node) {
+          if (this.selectedId !== node.id) return '';
+          if (this.reorderMode) return 'border-primary/40 bg-primary/10';
+          return 'border-base-300 bg-base-200';
+        },
+        permissionBadge(mode) {
+          if (mode === 'public') return 'badge-success badge-outline';
+          if (mode === 'team') return 'badge-warning badge-outline';
+          return 'badge-neutral badge-outline';
+        },
+        permissionLabel(mode) {
+          if (mode === 'public') return '🌍 public';
+          if (mode === 'team') return '👥 team';
+          return '🔒 private';
+        },
+        selectedNode() {
+          return this.tree.find((item) => item.id === this.selectedId && !item.deletedAt) || null;
+        },
+        pathNodesForParentSelect() {
+          if (this.modal.mode !== 'move') {
+            return this.tree.filter((item) => item.kind === 'path' && !item.deletedAt);
+          }
+          const selectedId = this.selectedId;
+          return this.tree.filter((item) => {
+            if (item.kind !== 'path') return false;
+            if (item.deletedAt) return false;
+            if (item.id === selectedId) return false;
+            if (this.isDescendantOf(item.id, selectedId)) return false;
+            return true;
+          });
+        },
+        formatPathOption(node) {
+          if (!node) return '';
+          let depth = 0;
+          let cursor = node;
+          const seen = new Set();
+          while (cursor && cursor.parentId && !seen.has(cursor.id)) {
+            seen.add(cursor.id);
+            depth += 1;
+            cursor = this.tree.find((item) => item.id === cursor.parentId);
+          }
+          return `${'. '.repeat(Math.max(0, depth + 1))}${node.title}`;
+        },
+        modalTitle() {
+          if (this.modal.mode === 'rename') return 'Rename Node';
+          if (this.modal.mode === 'move') return 'Move Node';
+          if (this.modal.mode === 'actions') return 'Node Actions';
+          return 'Edit Node';
+        },
+        modalPrimaryLabel() {
+          if (this.modal.mode === 'rename') return 'Rename';
+          if (this.modal.mode === 'move') return 'Move';
+          return 'Save';
+        },
+        defaultParentForCreate() {
+          const selected = this.selectedNode();
+          if (!selected) return this.tree.find((item) => item.parentId === null)?.id || 'root';
+          if (selected.kind === 'path') return selected.id;
+          return selected.parentId || this.tree.find((item) => item.parentId === null)?.id || 'root';
+        },
+        canRenameSelected() {
+          return !!this.selectedNode();
+        },
+        canDeleteSelected() {
+          const selected = this.selectedNode();
+          return !!selected && selected.parentId !== null;
+        },
+        canMoveSelectedNode() {
+          const selected = this.selectedNode();
+          return !!selected && selected.parentId !== null;
+        },
+        isDescendantOf(id, ancestorId) {
+          if (!id || !ancestorId) return false;
+          let cursor = this.tree.find((item) => item.id === id);
+          const seen = new Set();
+          while (cursor && cursor.parentId && !seen.has(cursor.id)) {
+            if (cursor.parentId === ancestorId) return true;
+            seen.add(cursor.id);
+            cursor = this.tree.find((item) => item.id === cursor.parentId);
+          }
+          return false;
+        },
+        armModalBackdrop() {
+          this.modalBusy = false;
+          this.modalBackdropArmed = false;
+          if (this.modalArmTimer) {
+            clearTimeout(this.modalArmTimer);
+            this.modalArmTimer = null;
+          }
+          this.modalArmTimer = setTimeout(() => {
+            this.modalBackdropArmed = true;
+            this.modalArmTimer = null;
+          }, 240);
+        },
+        openCreateModal(kind) {
+          this.openInlineCreate(kind);
+        },
+        openInlineCreate(kind) {
+          this.forceCloseModal();
+          this.inlinePopoverOpenedAt = Date.now();
+          this.inlinePopover.open = true;
+          this.inlinePopover.mode = 'create';
+          this.inlinePopover.kind = kind === 'file' ? 'file' : 'path';
+          this.inlinePopover.title = '';
+          this.inlinePopover.parentId = this.defaultParentForCreate();
+          this.inlinePopover.permission = 'private';
+          this.inlinePopover.busy = false;
+          this.$nextTick(() => {
+            const input = document.querySelector('input[aria-label="Node title"]');
+            if (input) input.focus();
+          });
+        },
+        openInlineDelete() {
+          if (!this.canDeleteSelected()) return;
+          this.forceCloseModal();
+          this.inlinePopoverOpenedAt = Date.now();
+          this.inlinePopover.open = true;
+          this.inlinePopover.mode = 'delete';
+          this.inlinePopover.kind = this.selectedNode()?.kind || 'path';
+          this.inlinePopover.title = this.selectedNode()?.title || '';
+          this.inlinePopover.parentId = '';
+          this.inlinePopover.permission = this.selectedNode()?.permission || 'private';
+          this.inlinePopover.busy = false;
+        },
+        closeInlinePopover() {
+          this.inlinePopover.open = false;
+          this.inlinePopover.mode = '';
+          this.inlinePopover.title = '';
+          this.inlinePopover.parentId = this.defaultParentForCreate();
+          this.inlinePopover.busy = false;
+        },
+        closeInlinePopoverFromSelection() {
+          if (!this.inlinePopover.open) return;
+          if (Date.now() - this.inlinePopoverOpenedAt < 220) return;
+          this.closeInlinePopover();
+        },
+        submitInlinePopover() {
+          if (!this.inlinePopover.open || this.inlinePopover.busy) return;
+          this.inlinePopover.busy = true;
+          try {
+            if (this.inlinePopover.mode === 'create') {
+              const title = (this.inlinePopover.title || '').trim();
+              if (!title) return;
+              const rawParentId = this.inlinePopover.parentId || this.defaultParentForCreate();
+              const parent = this.tree.find((item) => item.id === rawParentId && item.kind === 'path');
+              const parentId = parent ? parent.id : this.defaultParentForCreate();
+              const ts = nowIso();
+              const node = {
+                id: this.newId(this.inlinePopover.kind === 'file' ? 'md' : 'path'),
+                parentId,
+                title,
+                kind: this.inlinePopover.kind,
+                permission: this.inlinePopover.permission || 'private',
+                body: this.inlinePopover.kind === 'file' ? '' : '',
+                order: this.nextOrderFor(parentId),
+                createdAt: ts,
+                updatedAt: ts,
+              };
+              this.tree = [...this.tree, node];
+              this.expanded[parentId] = true;
+              this.selectedId = node.id;
+              this.markDirty();
+              this.persistState();
+              this.closeInlinePopover();
+              return;
+            }
+            if (this.inlinePopover.mode === 'delete') {
+              if (!this.canDeleteSelected()) return;
+              const startId = this.selectedId;
+              const toRemove = new Set([startId]);
+              const deletedAt = nowIso();
+              let changed = true;
+              while (changed) {
+                changed = false;
+                this.tree.forEach((item) => {
+                  if (item.parentId && toRemove.has(item.parentId) && !toRemove.has(item.id)) {
+                    toRemove.add(item.id);
+                    changed = true;
+                  }
+                });
+              }
+              this.tree = this.tree.map((item) => {
+                if (!toRemove.has(item.id)) return item;
+                return {
+                  ...item,
+                  deletedAt,
+                  updatedAt: deletedAt,
+                };
+              });
+              Object.keys(this.expanded).forEach((key) => {
+                if (toRemove.has(key)) delete this.expanded[key];
+              });
+              if (toRemove.has(this.editor.id)) {
+                this.editor.id = '';
+                this.editor.title = '';
+                this.editor.body = '';
+                this.editor.permission = 'private';
+                this.view = 'list';
+              }
+              const activeTree = this.tree.filter((item) => !item.deletedAt);
+              const fallback = activeTree.find((item) => item.parentId === null)?.id || '';
+              const currentSelected = this.tree.find((item) => item.id === this.selectedId);
+              this.selectedId = currentSelected && !currentSelected.deletedAt ? this.selectedId : fallback;
+              this.markDirty();
+              this.persistState();
+              this.closeInlinePopover();
+            }
+          } finally {
+            this.inlinePopover.busy = false;
+          }
+        },
+        openDeleteModal() {
+          this.openInlineDelete();
+        },
+        openRenameModal() {
+          this.closeInlinePopover();
+          const selected = this.selectedNode();
+          if (!selected) return;
+          this.modal.open = true;
+          this.modalOpenedAt = Date.now();
+          this.armModalBackdrop();
+          this.modal.mode = 'rename';
+          this.modal.kind = selected.kind;
+          this.modal.title = selected.title || '';
+          this.modal.parentId = selected.parentId || '';
+          this.modal.permission = selected.permission || 'private';
+        },
+        openMoveModal() {
+          this.closeInlinePopover();
+          const selected = this.selectedNode();
+          if (!selected || !this.canMoveSelectedNode()) return;
+          this.modal.open = true;
+          this.modalOpenedAt = Date.now();
+          this.armModalBackdrop();
+          this.modal.mode = 'move';
+          this.modal.kind = selected.kind;
+          this.modal.title = selected.title || '';
+          this.modal.parentId = selected.parentId || this.defaultParentForCreate();
+          this.modal.permission = selected.permission || 'private';
+        },
+        openActionsModal() {
+          this.closeInlinePopover();
+          if (!this.selectedNode()) return;
+          this.modal.open = true;
+          this.modalOpenedAt = Date.now();
+          this.armModalBackdrop();
+          this.modal.mode = 'actions';
+          this.modal.kind = this.selectedNode()?.kind || 'path';
+          this.modal.title = this.selectedNode()?.title || '';
+        },
+        chooseAction(action) {
+          this.closeModal();
+          if (action === 'rename') {
+            this.openRenameModal();
+            return;
+          }
+          if (action === 'move') {
+            this.openMoveModal();
+            return;
+          }
+          if (action === 'delete') {
+            this.$nextTick(() => {
+              this.openDeleteModal();
+            });
+          }
+        },
+        closeModalByBackdrop() {
+          if (!this.modal.open) return;
+          if (this.modalBusy) return;
+          if (!this.modalBackdropArmed) return;
+          if (Date.now() - this.modalOpenedAt < 220) return;
+          this.closeModal();
+        },
+        closeModal() {
+          if (this.modalBusy) return;
+          this.forceCloseModal();
+        },
+        forceCloseModal() {
+          if (this.modalArmTimer) {
+            clearTimeout(this.modalArmTimer);
+            this.modalArmTimer = null;
+          }
+          this.modalBusy = false;
+          this.modalBackdropArmed = false;
+          this.modal.open = false;
+        },
+        nextOrderFor(parentId) {
+          const siblings = this.childrenOf(parentId);
+          if (!siblings.length) return 10;
+          return siblings[siblings.length - 1].order + 10;
+        },
+        newId(prefix) {
+          const base = `${prefix}-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
+          if (!this.tree.some((item) => item.id === base)) return base;
+          return `${base}-${Math.random().toString(36).slice(2, 5)}`;
+        },
+        submitModal() {
+          if (this.modalBusy) return;
+          this.modalBusy = true;
+          try {
+          if (this.modal.mode === 'rename') {
+            const title = (this.modal.title || '').trim();
+            if (!title) return;
+            const idx = this.tree.findIndex((item) => item.id === this.selectedId);
+            if (idx < 0) return;
+            this.tree[idx] = { ...this.tree[idx], title, updatedAt: nowIso() };
+            if (this.editor.id === this.selectedId) {
+              this.editor.title = title;
+            }
+            this.markDirty();
+            this.persistState();
+            this.forceCloseModal();
+            return;
+          }
+          if (this.modal.mode === 'move') {
+            const selected = this.selectedNode();
+            if (!selected) return;
+            const nextParentId = this.modal.parentId || selected.parentId;
+            const nextParent = this.tree.find((item) => item.id === nextParentId && item.kind === 'path');
+            if (!nextParent) return;
+            if (nextParent.id === selected.id) return;
+            if (this.isDescendantOf(nextParent.id, selected.id)) return;
+            const idx = this.tree.findIndex((item) => item.id === selected.id);
+            if (idx < 0) return;
+            this.tree[idx] = {
+              ...this.tree[idx],
+              parentId: nextParent.id,
+              order: this.nextOrderFor(nextParent.id),
+              updatedAt: nowIso(),
+            };
+            this.expanded[nextParent.id] = true;
+            this.tree = this.resequenceOrders(this.tree);
+            this.markDirty();
+            this.persistState();
+            this.forceCloseModal();
+            return;
+          }
+          } finally {
+            this.modalBusy = false;
+          }
+        },
+        selectedPermission() {
+          return this.selectedNode()?.permission || 'private';
+        },
+        selectedNodeKindLabel() {
+          const selected = this.selectedNode();
+          if (!selected) return 'none';
+          return selected.kind === 'file' ? '📝 note' : '📁 path';
+        },
+        toggleReorder() {
+          this.reorderMode = !this.reorderMode;
+          if (this.reorderMode) {
+            this.closeInlinePopover();
+          }
+          this.persistState();
+        },
+        setSelectedPermission(mode) {
+          const idx = this.tree.findIndex((item) => item.id === this.selectedId);
+          if (idx < 0) return;
+          this.tree[idx] = { ...this.tree[idx], permission: mode, updatedAt: nowIso() };
+          if (this.editor.id === this.selectedId) {
+            this.editor.permission = mode;
+          }
+          this.markDirty();
+          this.persistState();
+        },
+        tapNode(node) {
+          this.closeInlinePopoverFromSelection();
+          this.selectedId = node.id;
+          if (this.reorderMode) {
+            return;
+          }
+          if (node.kind === 'path') {
+            this.expanded[node.id] = !this.expanded[node.id];
+            this.persistState();
+            return;
+          }
+          // Keep file tap as selection-first; opening editor is an explicit action via dock.
+        },
+        siblingIds(parentId) {
+          return this.childrenOf(parentId).map((item) => item.id);
+        },
+        canMoveSelected(direction) {
+          const selected = this.tree.find((item) => item.id === this.selectedId);
+          if (!selected) return false;
+          const siblings = this.siblingIds(selected.parentId);
+          const currentIndex = siblings.indexOf(selected.id);
+          const targetIndex = currentIndex + direction;
+          return targetIndex >= 0 && targetIndex < siblings.length;
+        },
+        moveSelected(direction) {
+          if (!this.canMoveSelected(direction)) return;
+          const selected = this.tree.find((item) => item.id === this.selectedId);
+          if (!selected) return;
+          const siblings = this.childrenOf(selected.parentId);
+          const siblingIds = siblings.map((item) => item.id);
+          const fromLocal = siblingIds.indexOf(selected.id);
+          const toLocal = fromLocal + direction;
+          if (fromLocal < 0 || toLocal < 0 || toLocal >= siblings.length) return;
+          const movedId = siblingIds.splice(fromLocal, 1)[0];
+          siblingIds.splice(toLocal, 0, movedId);
+
+          const siblingRank = new Map(siblingIds.map((id, index) => [id, index]));
+          this.tree = this.tree.map((item) => {
+            if (item.parentId !== selected.parentId) return item;
+            const newRank = siblingRank.get(item.id);
+            if (!Number.isFinite(newRank)) return item;
+            return {
+              ...item,
+              order: (newRank + 1) * 10,
+              updatedAt: item.id === selected.id ? nowIso() : item.updatedAt,
+            };
+          });
+          this.markDirty();
+          this.persistState();
+        },
+        currentFilePathLabel() {
+          const node = this.tree.find((item) => item.id === this.editor.id);
+          if (!node) return 'No file selected';
+          const labels = [node.title];
+          let cursor = node;
+          while (cursor && cursor.parentId) {
+            cursor = this.tree.find((item) => item.id === cursor.parentId);
+            if (cursor) labels.unshift(cursor.title);
+          }
+          return labels.join(' / ');
+        },
+        escapeHtml(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        },
+        safeHref(rawUrl) {
+          const value = String(rawUrl || '').trim();
+          if (/^(https?:\/\/|mailto:|tel:)/i.test(value)) {
+            return this.escapeHtml(value);
+          }
+          return '#';
+        },
+        inlineMarkdown(text) {
+          let html = this.escapeHtml(text);
+          html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+            return `<a href="${this.safeHref(url)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(label)}</a>`;
+          });
+          html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+          html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+          html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+          return html;
+        },
+        renderMarkdown(source) {
+          const input = String(source || '').replace(/\r\n/g, '\n');
+          if (!input.trim()) return '<p class="opacity-70">No content yet.</p>';
+          const lines = input.split('\n');
+          const chunks = [];
+          let inList = false;
+          let inCode = false;
+          let codeBuffer = [];
+          let paragraph = [];
+
+          const flushParagraph = () => {
+            if (!paragraph.length) return;
+            chunks.push(`<p>${this.inlineMarkdown(paragraph.join(' '))}</p>`);
+            paragraph = [];
+          };
+          const flushList = () => {
+            if (inList) {
+              chunks.push('</ul>');
+              inList = false;
+            }
+          };
+          const flushCode = () => {
+            if (!inCode) return;
+            chunks.push(`<pre><code>${this.escapeHtml(codeBuffer.join('\n'))}</code></pre>`);
+            codeBuffer = [];
+            inCode = false;
+          };
+
+          lines.forEach((line) => {
+            if (line.trim().startsWith('```')) {
+              flushParagraph();
+              flushList();
+              if (inCode) {
+                flushCode();
+              } else {
+                inCode = true;
+                codeBuffer = [];
+              }
+              return;
+            }
+            if (inCode) {
+              codeBuffer.push(line);
+              return;
+            }
+            if (!line.trim()) {
+              flushParagraph();
+              flushList();
+              return;
+            }
+            const heading = line.match(/^(#{1,3})\s+(.*)$/);
+            if (heading) {
+              flushParagraph();
+              flushList();
+              const level = heading[1].length;
+              chunks.push(`<h${level}>${this.inlineMarkdown(heading[2])}</h${level}>`);
+              return;
+            }
+            const list = line.match(/^\s*-\s+(.*)$/);
+            if (list) {
+              flushParagraph();
+              if (!inList) {
+                chunks.push('<ul>');
+                inList = true;
+              }
+              chunks.push(`<li>${this.inlineMarkdown(list[1])}</li>`);
+              return;
+            }
+            flushList();
+            paragraph.push(line.trim());
+          });
+
+          flushParagraph();
+          flushList();
+          flushCode();
+          return chunks.join('');
+        },
+        insertMarkdown(prefix, suffix) {
+          const area = this.$refs.editorArea;
+          if (!area) {
+            this.editor.body = `${this.editor.body || ''}${prefix}${suffix || ''}`;
+            this.onEditorChanged();
+            return;
+          }
+          const start = area.selectionStart ?? 0;
+          const end = area.selectionEnd ?? 0;
+          const text = this.editor.body || '';
+          const selected = text.slice(start, end);
+          const next = `${text.slice(0, start)}${prefix}${selected}${suffix || ''}${text.slice(end)}`;
+          this.editor.body = next;
+          this.onEditorChanged();
+          this.$nextTick(() => {
+            area.focus();
+            const caret = start + prefix.length + selected.length + (suffix || '').length;
+            area.setSelectionRange(caret, caret);
+          });
+        },
+        saveEditor() {
+          const idx = this.tree.findIndex((item) => item.id === this.editor.id);
+          if (idx < 0) return;
+          this.tree[idx] = {
+            ...this.tree[idx],
+            title: this.editor.title.trim() || this.tree[idx].title,
+            body: this.editor.body,
+            permission: this.editor.permission,
+            updatedAt: nowIso(),
+          };
+          this.markDirty();
+          this.persistState();
+        },
+        resetEditor() {
+          const node = this.tree.find((item) => item.id === this.editor.id);
+          if (!node) return;
+          this.editor.title = node.title || '';
+          this.editor.body = node.body || '';
+          this.editor.permission = node.permission || 'private';
+          this.saveStateText = 'Reset';
+        },
+        visibleNodes() {
+          const activeTree = this.tree.filter((node) => !node.deletedAt);
+          const root = activeTree.find((node) => node.parentId === null);
+          if (!root) return [];
+          const flat = [];
+          const walk = (node, depth) => {
+            flat.push({ ...node, depth });
+            if (node.kind !== 'path' || !this.isExpanded(node.id)) return;
+            this.childrenOf(node.id).forEach((child) => walk(child, depth + 1));
+          };
+          walk(root, 0);
+          return flat;
+        },
+      };
+    }
+  </script>
+</body>
+</html>

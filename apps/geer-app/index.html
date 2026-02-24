@@ -1,0 +1,3428 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-transparent" data-theme="black" x-data="templateApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Geer App</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <script src="../shared/contract.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    :root {
+      --knowledge-connector-alpha: 18%;
+      --knowledge-selected-alpha: 14%;
+      --knowledge-line-alpha: 75%;
+    }
+
+    :root[data-knowledge-tone="light"] {
+      --knowledge-connector-alpha: 30%;
+      --knowledge-selected-alpha: 20%;
+      --knowledge-line-alpha: 82%;
+    }
+
+    :root {
+      --knowledge-orbit-path-fill: color-mix(in oklab, var(--fallback-p, #4f46e5) 72%, var(--fallback-b1, #0f172a) 28%);
+      --knowledge-orbit-file-fill: color-mix(in oklab, var(--fallback-bc, #ffffff) 62%, var(--fallback-b1, #0f172a) 38%);
+      --knowledge-orbit-halo: color-mix(in oklab, var(--fallback-p, #4f46e5) 50%, transparent);
+      --knowledge-orbit-bg1: color-mix(in oklab, var(--fallback-p, #4f46e5) 18%, transparent);
+      --knowledge-orbit-bg2: color-mix(in oklab, var(--fallback-a, #22c55e) 14%, transparent);
+      --knowledge-orbit-bg3: color-mix(in oklab, var(--fallback-b2, #171717) 95%, black);
+    }
+
+    :root[data-knowledge-tone="light"] {
+      --knowledge-orbit-path-fill: color-mix(in oklab, var(--fallback-p, #4f46e5) 58%, white 42%);
+      --knowledge-orbit-file-fill: color-mix(in oklab, var(--fallback-bc, #1f2937) 58%, white 42%);
+      --knowledge-orbit-halo: color-mix(in oklab, var(--fallback-p, #4f46e5) 32%, transparent);
+      --knowledge-orbit-bg1: color-mix(in oklab, var(--fallback-p, #4f46e5) 11%, transparent);
+      --knowledge-orbit-bg2: color-mix(in oklab, var(--fallback-a, #22c55e) 9%, transparent);
+      --knowledge-orbit-bg3: color-mix(in oklab, var(--fallback-b2, #f5f7fb) 96%, white);
+    }
+
+    .mobile-shell {
+      width: min(100vw, 460px);
+      margin: 0 auto;
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 100% -10%, rgba(63, 130, 255, 0.16), transparent 35%),
+        radial-gradient(circle at 0% 120%, rgba(54, 191, 130, 0.12), transparent 35%),
+        color-mix(in oklab, var(--fallback-b1, #121212) 97%, #000);
+    }
+
+    .safe-main {
+      padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    }
+
+    .mobile-nav {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    *:focus-visible {
+      outline: 2px solid color-mix(in oklab, var(--fallback-p, #4f46e5) 80%, white);
+      outline-offset: 2px;
+    }
+
+    .knowledge-layout {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: 1fr;
+    }
+
+    @media (min-width: 1024px) {
+      .knowledge-layout {
+        grid-template-columns: minmax(220px, 0.95fr) minmax(260px, 1.2fr) minmax(260px, 1fr);
+      }
+    }
+
+    .knowledge-panel {
+      min-height: 22rem;
+    }
+
+    .dot-node {
+      font-size: 1.05rem;
+      line-height: 1;
+    }
+
+    .dot-node--path {
+      color: color-mix(in oklab, var(--fallback-p, #4f46e5) 70%, var(--fallback-bc, #fff) 30%);
+    }
+
+    .dot-node--file {
+      color: color-mix(in oklab, var(--fallback-n, #222) 60%, var(--fallback-bc, #fff) 40%);
+    }
+
+    .tree-row-selected {
+      background: color-mix(in oklab, var(--fallback-p, #4f46e5) var(--knowledge-selected-alpha), transparent);
+    }
+
+    .tree-connector {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: color-mix(in oklab, var(--fallback-bc, #fff) var(--knowledge-connector-alpha), transparent);
+      pointer-events: none;
+    }
+
+    .tree-connector-elbow {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 10px;
+      height: 1px;
+      background: color-mix(in oklab, var(--fallback-bc, #fff) var(--knowledge-connector-alpha), transparent);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .tree-drop-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: color-mix(in oklab, var(--fallback-p, #4f46e5) var(--knowledge-line-alpha), white 25%);
+      pointer-events: none;
+    }
+
+    .tree-drop-line--before {
+      top: -1px;
+    }
+
+    .tree-drop-line--after {
+      bottom: -1px;
+    }
+
+    .tree-drop-inside {
+      position: absolute;
+      inset: 0;
+      border: 1px dashed color-mix(in oklab, var(--fallback-p, #4f46e5) 60%, transparent 40%);
+      border-radius: 0.5rem;
+      pointer-events: none;
+    }
+
+    .knowledge-orbit-canvas {
+      position: relative;
+      min-height: 18rem;
+      border-radius: 0.75rem;
+      border: 1px solid color-mix(in oklab, var(--fallback-bc, #fff) 14%, transparent);
+      background:
+        radial-gradient(circle at 30% 16%, var(--knowledge-orbit-bg1), transparent 38%),
+        radial-gradient(circle at 78% 84%, var(--knowledge-orbit-bg2), transparent 34%),
+        var(--knowledge-orbit-bg3);
+      transition: background-position 240ms ease;
+      overflow: hidden;
+    }
+
+    .knowledge-orbit-svg {
+      width: 100%;
+      height: 100%;
+      min-height: 18rem;
+      display: block;
+    }
+  </style>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('themeSwitcher', (opts = {}) => ({
+        get themes() {
+          return typeof opts.getThemes === 'function' ? opts.getThemes() : [];
+        },
+        get value() {
+          return typeof opts.getTheme === 'function' ? opts.getTheme() : 'black';
+        },
+        apply(event) {
+          if (typeof opts.onChange !== 'function') return;
+          const value = event?.target?.value || '';
+          opts.onChange(value);
+        },
+      }));
+
+      Alpine.data('permissionPill', (opts = {}) => ({
+        get text() {
+          return typeof opts.getText === 'function' ? opts.getText() : '-';
+        },
+        get badgeClass() {
+          return typeof opts.getClassName === 'function' ? opts.getClassName() : 'badge-ghost';
+        },
+      }));
+
+      Alpine.data('treeNode', (opts = {}) => ({
+        select() {
+          if (typeof opts.onSelect === 'function') opts.onSelect();
+        },
+        activate() {
+          if (typeof opts.onActivate === 'function') opts.onActivate();
+        },
+        dragStart(event) {
+          if (typeof opts.onDragStart === 'function') opts.onDragStart(event);
+        },
+        dragEnd() {
+          if (typeof opts.onDragEnd === 'function') opts.onDragEnd();
+        },
+      }));
+
+      Alpine.data('markdownEditor', (opts = {}) => ({
+        get mode() {
+          return typeof opts.getMode === 'function' ? opts.getMode() : 'split';
+        },
+        setMode(nextMode) {
+          if (typeof opts.setMode === 'function') opts.setMode(nextMode);
+        },
+        get value() {
+          return typeof opts.getValue === 'function' ? opts.getValue() : '';
+        },
+        setValue(nextValue) {
+          if (typeof opts.setValue === 'function') opts.setValue(nextValue);
+        },
+        onInput(event) {
+          this.setValue(event?.target?.value || '');
+          if (typeof opts.onInput === 'function') opts.onInput();
+        },
+        get isDirty() {
+          return typeof opts.getIsDirty === 'function' ? opts.getIsDirty() : false;
+        },
+      }));
+    });
+
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+</head>
+
+<body class="h-full bg-base-100">
+  <div class="mobile-shell border-x border-base-300/40" x-cloak>
+    <header class="sticky top-0 z-20 px-4 pt-4 pb-3 border-b border-base-300/70 bg-base-100/90 backdrop-blur">
+      <div class="flex items-center justify-between gap-2">
+        <h1 class="text-base font-semibold truncate" x-text="t('pageTitle')"></h1>
+        <span class="badge badge-outline text-[11px]" x-text="status"></span>
+      </div>
+      <p class="text-xs opacity-70 mt-1 truncate" x-show="user" x-text="user?.email || user?.displayName || user?.uid"></p>
+      <p class="text-xs text-error mt-1" x-show="error" x-text="error"></p>
+    </header>
+
+    <main class="safe-main px-4 py-4 space-y-4">
+      <section x-show="currentPage === 'overview'" class="space-y-4">
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4">
+            <h2 class="text-base font-semibold" x-text="t('starterTitle')"></h2>
+            <p class="text-sm opacity-80 mt-1" x-text="t('starterDescription')"></p>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold" x-text="t('inputTitle')"></h3>
+              <span class="badge badge-outline text-[11px]" x-text="geerSourceLabel"></span>
+            </div>
+
+            <div class="join w-full">
+              <button class="btn btn-sm join-item flex-1" :class="geerSource === 'greech' ? 'btn-primary' : ''" @click="setGeerSource('greech')" x-text="t('sourceGreech')"></button>
+              <button class="btn btn-sm join-item flex-1" :class="geerSource === 'custom' ? 'btn-primary' : ''" @click="setGeerSource('custom')" x-text="t('sourceCustom')"></button>
+            </div>
+
+            <textarea
+              class="textarea textarea-bordered h-32 w-full"
+              x-model="geerInput"
+              :placeholder="t('inputPlaceholder')"
+              @input="onGeerInputChange()"></textarea>
+            <p class="text-xs opacity-65" x-show="handoffSummary" x-text="handoffSummary"></p>
+
+            <div class="flex gap-2">
+              <button class="btn btn-sm btn-outline flex-1" @click="resolveIncomingText()" x-text="t('reloadIncomingBtn')"></button>
+              <button class="btn btn-sm flex-1" @click="clearInput()" x-text="t('clearInputBtn')"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 space-y-3">
+            <h3 class="text-sm font-semibold" x-text="t('generatorTitle')"></h3>
+
+            <div class="join w-full">
+              <button class="btn btn-sm join-item flex-1" :class="captionPreset === 'short' ? 'btn-primary' : ''" @click="captionPreset = 'short'" x-text="t('presetShort')"></button>
+              <button class="btn btn-sm join-item flex-1" :class="captionPreset === 'medium' ? 'btn-primary' : ''" @click="captionPreset = 'medium'" x-text="t('presetMedium')"></button>
+              <button class="btn btn-sm join-item flex-1" :class="captionPreset === 'punchline' ? 'btn-primary' : ''" @click="captionPreset = 'punchline'" x-text="t('presetPunchline')"></button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button class="btn btn-sm btn-primary" @click="generateCaptions()" :disabled="!geerInput.trim() || generationLoading" x-text="generationLoading ? t('generatingBtn') : t('generateBtn')"></button>
+              <button class="btn btn-sm" @click="regenerateCaptions()" :disabled="!captions.length || generationLoading" x-text="t('regenerateBtn')"></button>
+            </div>
+
+            <div class="flex gap-2" x-show="captions.length">
+              <button class="btn btn-xs btn-outline" @click="copyAllCaptions()" x-text="t('copyAllBtn')"></button>
+              <p class="text-xs opacity-70 self-center" x-show="copyNotice" x-text="copyNotice"></p>
+            </div>
+
+            <div class="space-y-2" x-show="captions.length && !generationLoading">
+              <template x-for="(caption, idx) in captions" :key="`${idx}-${caption}`">
+                <article class="rounded-lg border border-base-300 bg-base-100 p-3 space-y-2">
+                  <p class="text-sm" x-text="caption"></p>
+                  <button class="btn btn-xs" @click="copyCaption(caption)" x-text="t('copyBtn')"></button>
+                </article>
+              </template>
+            </div>
+
+            <div class="rounded-lg border border-info/35 bg-info/10 px-3 py-2 text-xs" x-show="generationLoading" x-text="t('captionsLoading')"></div>
+            <div class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs" x-show="generationError" x-text="generationError"></div>
+            <p class="text-xs opacity-60" x-show="!captions.length && !generationLoading && !generationError" x-text="t('captionsEmpty')"></p>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4 space-y-2 text-sm">
+            <p><span class="font-semibold" x-text="t('statusLabel')"></span>: <span x-text="status"></span></p>
+            <p><span class="font-semibold" x-text="t('themeLabel')"></span>: <span x-text="osTheme || '(not resolved)'"></span></p>
+            <p><span class="font-semibold" x-text="t('languageLabel')"></span>: <span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span></p>
+            <p x-show="user"><span class="font-semibold" x-text="t('userLabel')"></span>: <span x-text="user?.email || user?.displayName || user?.uid"></span></p>
+            <p class="text-warning text-xs pt-1" x-text="t('permissionNote')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'music'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold" x-text="t('musicTitle')"></h2>
+          <p class="text-sm opacity-75 mt-1" x-text="t('musicDescription')"></p>
+          <div class="mt-3 border border-base-300 rounded-lg p-3">
+            <p class="text-sm" x-text="t('musicPlaceholder')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'files'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-3 md:p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-base font-semibold" x-text="t('filesTitle')"></h2>
+            <div class="join">
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                :class="knowledgeMobileTab === 'tree' ? 'btn-primary' : ''"
+                @click="setKnowledgeMobileTab('tree')"
+                x-text="t('knowledgeTabTree')"></button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                :class="knowledgeMobileTab === 'canvas' ? 'btn-primary' : ''"
+                @click="setKnowledgeMobileTab('canvas')"
+                x-text="t('knowledgeTabCanvas')"></button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                :class="knowledgeMobileTab === 'editor' ? 'btn-primary' : ''"
+                @click="setKnowledgeMobileTab('editor')"
+                x-text="t('knowledgeTabEditor')"></button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 rounded-box border border-base-300 bg-base-100/70 p-2">
+            <div
+              x-data="themeSwitcher({
+                getTheme: () => knowledgeState.uiState.activeTheme,
+                getThemes: () => knowledgeThemes,
+                onChange: (nextTheme) => { knowledgeState.uiState.activeTheme = nextTheme; applyKnowledgeTheme(); },
+              })"
+              class="flex items-center gap-2">
+              <span class="text-[11px] opacity-70" x-text="t('knowledgeThemeLabel')"></span>
+              <select class="select select-bordered select-xs max-w-[9rem]" :value="value" @change="apply($event)">
+                <template x-for="theme in themes" :key="theme">
+                  <option :value="theme" x-text="theme"></option>
+                </template>
+              </select>
+            </div>
+            <span class="badge badge-outline badge-xs">
+              <span x-text="t('knowledgeContrastLabel')"></span>
+              <span class="ml-1" x-text="t('knowledgeContrastOk')"></span>
+            </span>
+            <div class="join">
+              <button class="btn btn-xs btn-outline join-item" @click="createKnowledgePath()" x-text="t('knowledgeAddPath')"></button>
+              <button class="btn btn-xs btn-outline join-item" @click="createKnowledgeFile()" x-text="t('knowledgeAddFile')"></button>
+              <button class="btn btn-xs btn-outline join-item" @click="runKnowledgeQaSuite()" x-text="t('knowledgeRunQa')"></button>
+              <button class="btn btn-xs btn-outline join-item" @click="loadKnowledgeDemoScenario()" x-text="t('knowledgeLoadDemo')"></button>
+            </div>
+            <input
+              type="search"
+              class="input input-bordered input-xs flex-1 min-w-[10rem]"
+              :placeholder="t('knowledgeSearchPlaceholder')"
+              x-model.trim="knowledgeSearch"
+              @input="syncKnowledgeStores()" />
+          </div>
+
+          <div class="knowledge-layout">
+            <section
+              class="knowledge-panel rounded-box border border-base-300 bg-base-100/80 p-3"
+              x-show="knowledgeMobileTab === 'tree' || isKnowledgeDesktop"
+              tabindex="0"
+              @keydown.arrow-up.prevent="selectKnowledgeRowByOffset(-1)"
+              @keydown.arrow-down.prevent="selectKnowledgeRowByOffset(1)">
+              <h3 class="text-sm font-semibold mb-2" x-text="t('knowledgeTreeTitle')"></h3>
+              <template x-if="!knowledgeTreeRows.length">
+                <p class="text-xs opacity-70" x-text="t('knowledgeEmptyTree')"></p>
+              </template>
+              <template x-for="row in knowledgeTreeRows" :key="row.node.id">
+                <div
+                  x-data="treeNode({
+                    onSelect: () => selectKnowledgeNode(row.node.id),
+                    onActivate: () => activateKnowledgeNode(row.node.id),
+                    onDragStart: (event) => onKnowledgeDragStart(row.node.id, event),
+                    onDragEnd: () => onKnowledgeDragEnd(),
+                  })"
+                  class="relative flex items-center gap-1 rounded-md pr-1"
+                  :class="isKnowledgeNodeSelected(row.node.id) ? 'tree-row-selected' : ''"
+                  @dragover.prevent="onKnowledgeDragOver(row.node.id, $event)"
+                  @drop.prevent="onKnowledgeDrop(row.node.id, $event)"
+                  @dragleave="onKnowledgeDragLeave(row.node.id, $event)">
+                  <span class="tree-drop-line tree-drop-line--before" x-show="knowledgeDropHint.nodeId === row.node.id && knowledgeDropHint.position === 'before'"></span>
+                  <span class="tree-drop-line tree-drop-line--after" x-show="knowledgeDropHint.nodeId === row.node.id && knowledgeDropHint.position === 'after'"></span>
+                  <span class="tree-drop-inside" x-show="knowledgeDropHint.nodeId === row.node.id && knowledgeDropHint.position === 'inside'"></span>
+                  <span class="inline-block w-2" :style="`margin-left:${row.level * 12}px`"></span>
+                  <span
+                    class="tree-connector"
+                    x-show="row.level > 0"
+                    :style="`left:${Math.max(0, row.level * 12 - 6)}px`"></span>
+                  <span
+                    class="tree-connector-elbow"
+                    x-show="row.level > 0"
+                    :style="`left:${Math.max(0, row.level * 12 - 6)}px`"></span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs px-1 min-h-0 h-5 cursor-grab active:cursor-grabbing"
+                    draggable="true"
+                    @dragstart="dragStart($event)"
+                    @dragend="dragEnd()">⋮⋮</button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs px-1 min-h-0 h-5"
+                    x-show="row.node.type === 'path'"
+                    @click="row.node.collapsed = !row.node.collapsed; saveKnowledge()"
+                    x-text="row.node.collapsed ? '▸' : '▾'"></button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs flex-1 justify-start gap-1"
+                    @click="select()"
+                    @dblclick="activate()"
+                    @keydown.enter.prevent="activate()"
+                    @keydown.alt.arrow-up.prevent="reorderKnowledgeWithinParent(row.node.id, -1)"
+                    @keydown.alt.arrow-down.prevent="reorderKnowledgeWithinParent(row.node.id, 1)">
+                    <span class="dot-node" :class="row.node.type === 'path' ? 'dot-node--path' : 'dot-node--file'" x-text="row.node.type === 'path' ? '●' : '•'"></span>
+                    <span class="truncate" x-text="row.node.title"></span>
+                  </button>
+                  <span
+                    x-data="permissionPill({
+                      getText: () => permissionBadgeForNode(row.node.id),
+                      getClassName: () => permissionBadgeClassForNode(row.node.id),
+                    })"
+                    class="badge badge-outline badge-xs"
+                    :class="badgeClass"
+                    x-text="text"></span>
+                  <div class="dropdown dropdown-end">
+                    <label tabindex="0" class="btn btn-ghost btn-xs px-1 min-h-0 h-5">⋯</label>
+                    <ul tabindex="0" class="dropdown-content menu rounded-box z-[30] w-36 border border-base-300 bg-base-100 p-1 shadow-lg">
+                      <li><button type="button" @click="renameKnowledgeNode(row.node.id)" x-text="t('knowledgeActionRename')"></button></li>
+                      <li><button type="button" @click="duplicateKnowledgeNode(row.node.id)" x-text="t('knowledgeActionDuplicate')"></button></li>
+                      <li><button type="button" @click="moveKnowledgeNode(row.node.id)" x-text="t('knowledgeActionMove')"></button></li>
+                      <li><button type="button" class="text-error" @click="deleteKnowledgeNode(row.node.id)" x-text="t('knowledgeActionDelete')"></button></li>
+                    </ul>
+                  </div>
+                </div>
+              </template>
+              <div class="divider my-2"></div>
+              <p class="text-[11px] opacity-70" x-text="t('knowledgeBreadcrumbLabel')"></p>
+              <p class="text-xs mt-1 break-words" x-text="knowledgeBreadcrumbText"></p>
+            </section>
+
+            <section
+              class="knowledge-panel rounded-box border border-base-300 bg-base-100/80 p-3"
+              x-show="knowledgeMobileTab === 'canvas' || isKnowledgeDesktop">
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold" x-text="t('knowledgeCanvasTitle')"></h3>
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="join">
+                    <button
+                      type="button"
+                      class="btn btn-xs join-item"
+                      :class="knowledgeOrbitViewMode === 'global' ? 'btn-primary' : ''"
+                      @click="setKnowledgeOrbitViewMode('global')"
+                      x-text="t('knowledgeViewGlobal')"></button>
+                    <button
+                      type="button"
+                      class="btn btn-xs join-item"
+                      :class="knowledgeOrbitViewMode === 'focus' ? 'btn-primary' : ''"
+                      @click="setKnowledgeOrbitViewMode('focus')"
+                      x-text="t('knowledgeViewFocus')"></button>
+                  </div>
+                  <select
+                    class="select select-bordered select-xs"
+                    x-model="knowledgeOrbitQualityMode"
+                    @change="setKnowledgeOrbitQualityMode($event.target.value)">
+                    <option value="auto" x-text="t('knowledgeQualityAuto')"></option>
+                    <option value="high" x-text="t('knowledgeQualityHigh')"></option>
+                    <option value="medium" x-text="t('knowledgeQualityMedium')"></option>
+                    <option value="low" x-text="t('knowledgeQualityLow')"></option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline"
+                    @click="resetKnowledgeOrbitView()"
+                    x-text="t('knowledgeViewReset')"></button>
+                  <select
+                    class="select select-bordered select-xs"
+                    x-model="knowledgeValidationScenario">
+                    <option value="canonical" x-text="t('knowledgeScenarioCanonical')"></option>
+                    <option value="deep" x-text="t('knowledgeScenarioDeep')"></option>
+                    <option value="siblings" x-text="t('knowledgeScenarioSiblings')"></option>
+                    <option value="permissions" x-text="t('knowledgeScenarioPermissions')"></option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline"
+                    @click="applyKnowledgeValidationScenario(knowledgeValidationScenario)"
+                    x-text="t('knowledgeScenarioApply')"></button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline"
+                    :class="knowledgeValidationShuffleActive ? 'btn-warning' : ''"
+                    @click="toggleKnowledgeValidationShuffle()"
+                    x-text="knowledgeValidationShuffleActive ? t('knowledgeScenarioStop') : t('knowledgeScenarioShuffle')"></button>
+                </div>
+              </div>
+              <div class="knowledge-orbit-canvas" :style="knowledgeOrbitCanvasStyle">
+                <svg
+                  class="knowledge-orbit-svg"
+                  viewBox="0 0 640 420"
+                  role="img"
+                  :aria-label="t('knowledgeCanvasHint')"
+                  @wheel.prevent="handleKnowledgeOrbitWheel($event)"
+                  @touchstart="onKnowledgeOrbitTouchStart($event)"
+                  @touchmove="onKnowledgeOrbitTouchMove($event)"
+                  @touchend="onKnowledgeOrbitTouchEnd($event)">
+                  <defs>
+                    <filter id="knowledge-halo-soft" x="-200%" y="-200%" width="400%" height="400%">
+                      <feGaussianBlur stdDeviation="2.8"></feGaussianBlur>
+                    </filter>
+                  </defs>
+                  <g opacity="0.22">
+                    <template x-for="guide in knowledgeOrbitGuides" :key="guide.id">
+                      <circle
+                        :cx="guide.cx"
+                        :cy="guide.cy"
+                        :r="guide.r"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1"
+                        stroke-dasharray="3 4"></circle>
+                    </template>
+                  </g>
+
+                  <g opacity="0.45">
+                    <template x-for="link in knowledgeOrbitLinks" :key="link.id">
+                      <line
+                        :x1="link.x1"
+                        :y1="link.y1"
+                        :x2="link.x2"
+                        :y2="link.y2"
+                        stroke="currentColor"
+                        stroke-width="1"></line>
+                    </template>
+                  </g>
+
+                  <g>
+                    <template x-for="node in knowledgeOrbitNodes" :key="node.id">
+                      <g :transform="`translate(${node.x}, ${node.y})`">
+                        <circle
+                          :r="node.size + 7"
+                          :fill="node.haloColor"
+                          :opacity="node.haloOpacity"
+                          filter="url(#knowledge-halo-soft)"></circle>
+                        <circle
+                          :r="node.size + 3"
+                          fill="none"
+                          :opacity="node.permissionRingOpacity"
+                          :stroke-width="node.permissionRingWidth"
+                          :stroke="node.permissionRingColor"></circle>
+                        <circle
+                          :r="node.size"
+                          :fill="node.fill"
+                          :opacity="isKnowledgeNodeSelected(node.id) ? 0.95 : 0.76"
+                          stroke="color-mix(in oklab, var(--fallback-bc, #fff) 35%, transparent)"
+                          stroke-width="1.2"
+                          class="cursor-pointer"
+                          @click="selectKnowledgeNode(node.id)"
+                          @dblclick="lockKnowledgeOrbitCenter(node.id)"></circle>
+                        <text
+                          x="0"
+                          :y="node.size + 13"
+                          text-anchor="middle"
+                          font-size="10"
+                          fill="currentColor"
+                          :opacity="node.showLabel ? 0.9 : 0"
+                          x-text="node.title"></text>
+                      </g>
+                    </template>
+                  </g>
+                </svg>
+                <p
+                  class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-box border border-base-300 bg-base-100/80 px-3 py-1 text-xs"
+                  x-show="knowledgeOrbitNodes.length === 0"
+                  x-text="t('knowledgeCanvasEmpty')"></p>
+                <p
+                  class="absolute left-2 top-2 rounded-box border border-base-300/80 bg-base-100/80 px-2 py-1 text-[11px]"
+                  x-text="`${t('knowledgeZoomLabel')}: ${Math.round(knowledgeOrbitTargetZoom * 100)}%`"></p>
+                <p
+                  class="absolute right-2 bottom-2 rounded-box border border-base-300/80 bg-base-100/80 px-2 py-1 text-[11px]"
+                  x-text="t('knowledgeCanvasHint')"></p>
+              </div>
+            </section>
+
+            <section
+              class="knowledge-panel rounded-box border border-base-300 bg-base-100/80 p-3"
+              x-show="knowledgeMobileTab === 'editor' || isKnowledgeDesktop">
+              <h3 class="text-sm font-semibold mb-2" x-text="t('knowledgeInspectorTitle')"></h3>
+              <template x-if="knowledgeSelectedNode">
+                <div class="space-y-2">
+                  <div class="text-xs opacity-75">
+                    <span class="font-semibold" x-text="t('knowledgeNodeTypeLabel')"></span>
+                    <span class="ml-1" x-text="knowledgeSelectedNode.type"></span>
+                  </div>
+                  <label class="form-control">
+                    <span class="label-text text-xs" x-text="t('knowledgeTitleLabel')"></span>
+                    <input type="text" class="input input-bordered input-sm" x-model="knowledgeSelectedNode.title" @change="saveKnowledge()" />
+                  </label>
+                  <template x-if="knowledgeSelectedNode.type === 'file'">
+                    <label class="form-control">
+                      <span class="label-text text-xs" x-text="t('knowledgeTagsLabel')"></span>
+                      <input type="text" class="input input-bordered input-sm" x-model="knowledgeSelectedTagsText" @change="saveKnowledge()" />
+                    </label>
+                  </template>
+                  <div class="rounded-box border border-base-300 bg-base-200/60 p-2 text-xs space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-semibold" x-text="t('knowledgePermissionLabel')"></span>
+                      <span x-text="knowledgeEffectivePermissionText"></span>
+                    </div>
+                    <label class="label cursor-pointer justify-start gap-2 py-0.5">
+                      <input type="checkbox" class="toggle toggle-xs" :checked="knowledgeSelectedHasPermissionOverride" @change="setKnowledgePermissionOverride($event.target.checked)" />
+                      <span class="label-text text-xs" x-text="knowledgeSelectedHasPermissionOverride ? t('knowledgePermissionOverride') : t('knowledgePermissionInherit')"></span>
+                    </label>
+                    <div class="flex items-center gap-2" x-show="knowledgeSelectedHasPermissionOverride">
+                      <label class="label cursor-pointer gap-1 py-0.5">
+                        <input type="checkbox" class="checkbox checkbox-xs" :checked="knowledgeSelectedPermissionsModel.read" @change="setKnowledgePermissionFlag('read', $event.target.checked)" />
+                        <span class="label-text text-xs">R</span>
+                      </label>
+                      <label class="label cursor-pointer gap-1 py-0.5">
+                        <input type="checkbox" class="checkbox checkbox-xs" :checked="knowledgeSelectedPermissionsModel.write" @change="setKnowledgePermissionFlag('write', $event.target.checked)" />
+                        <span class="label-text text-xs">W</span>
+                      </label>
+                      <label class="label cursor-pointer gap-1 py-0.5">
+                        <input type="checkbox" class="checkbox checkbox-xs" :checked="knowledgeSelectedPermissionsModel.admin" @change="setKnowledgePermissionFlag('admin', $event.target.checked)" />
+                        <span class="label-text text-xs">A</span>
+                      </label>
+                    </div>
+                  </div>
+                  <template x-if="knowledgeSelectedNode.type === 'file'">
+                    <div
+                      x-data="markdownEditor({
+                        getMode: () => knowledgeEditorMode,
+                        setMode: (nextMode) => setKnowledgeEditorMode(nextMode),
+                        getValue: () => knowledgeSelectedMarkdown,
+                        setValue: (nextValue) => { knowledgeSelectedMarkdown = nextValue; },
+                        onInput: () => onKnowledgeMarkdownInput(),
+                        getIsDirty: () => knowledgeIsSelectedFileDirty,
+                      })"
+                      class="space-y-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="label-text text-xs font-medium" x-text="t('knowledgeMarkdownLabel')"></span>
+                        <div class="join">
+                          <button type="button" class="btn btn-xs join-item" :class="mode === 'write' ? 'btn-primary' : ''" @click="setMode('write')" x-text="t('knowledgeEditorWrite')"></button>
+                          <button type="button" class="btn btn-xs join-item" :class="mode === 'preview' ? 'btn-primary' : ''" @click="setMode('preview')" x-text="t('knowledgeEditorPreview')"></button>
+                          <button type="button" class="btn btn-xs join-item" :class="mode === 'split' ? 'btn-primary' : ''" @click="setMode('split')" x-text="t('knowledgeEditorSplit')"></button>
+                        </div>
+                      </div>
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="badge badge-xs" :class="isDirty ? 'badge-warning' : 'badge-success'" x-text="isDirty ? t('knowledgeUnsaved') : t('knowledgeSaved')"></span>
+                        <button type="button" class="btn btn-xs btn-primary" :disabled="!isDirty" @click="saveKnowledgeSelectedFileNow()" x-text="t('knowledgeSaveNow')"></button>
+                      </div>
+                      <div class="grid gap-2" :class="mode === 'split' ? 'md:grid-cols-2' : 'grid-cols-1'">
+                        <div x-show="mode !== 'preview'">
+                          <textarea class="textarea textarea-bordered min-h-44 w-full" :value="value" @input="onInput($event)"></textarea>
+                        </div>
+                        <div x-show="mode !== 'write'" class="rounded-box border border-base-300 bg-base-200/50 p-3 min-h-44">
+                          <pre class="whitespace-pre-wrap text-xs leading-relaxed" x-text="value"></pre>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!knowledgeSelectedNode">
+                <p class="text-xs opacity-70" x-text="t('knowledgeSelectNodeHint')"></p>
+              </template>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'actions'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold mb-3" x-text="t('actionsTitle')"></h2>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn btn-primary btn-sm" @click="refresh()" x-text="t('refreshBtn')"></button>
+            <button class="btn btn-sm" @click="loadCurrentUser()" x-text="t('reloadUserBtn')"></button>
+          </div>
+          <pre class="mt-3 p-3 rounded bg-base-300 text-xs overflow-auto" x-text="debugText"></pre>
+        </div>
+      </section>
+
+      <section x-show="currentPage === 'settings'" class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="text-base font-semibold" x-text="t('settingsTitle')"></h2>
+          <p class="text-sm opacity-75 mt-1" x-text="t('settingsDescription')"></p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="mobile-nav fixed bottom-0 left-0 right-0 mx-auto w-[min(100vw,460px)] bg-base-100/95 backdrop-blur border-t border-base-300 z-30">
+      <div class="grid grid-cols-5">
+        <template x-for="item in navItems" :key="item.key">
+          <button class="btn btn-ghost rounded-none h-14" :class="currentPage === item.key ? 'text-primary' : ''" @click="setPage(item.key)" :aria-label="t(item.labelKey)">
+            <div class="flex flex-col items-center gap-1 text-[11px] leading-none">
+              <i :class="item.icon"></i>
+              <span x-text="t(item.labelKey)"></span>
+            </div>
+          </button>
+        </template>
+      </div>
+    </nav>
+
+    <div class="fixed bottom-20 right-3 z-50 space-y-2 w-[min(84vw,18rem)]">
+      <template x-for="toast in knowledgeToasts" :key="toast.id">
+        <div class="alert py-2 px-3 text-xs shadow-lg" :class="toast.type === 'success' ? 'alert-success' : (toast.type === 'info' ? 'alert-info' : 'alert-error')">
+          <span x-text="toast.text"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <script>
+    function templateApp() {
+      return {
+        loading: true,
+        status: 'Initializing...',
+        error: '',
+        appId: 'geer-app',
+        user: null,
+        client: null,
+        language: 'hy',
+        osTheme: '',
+        currentPage: 'overview',
+        sidebarOpen: false,
+        debugText: 'Ready.',
+        geerSource: 'custom',
+        geerInput: '',
+        captionPreset: 'short',
+        captions: [],
+        captionSeed: 0,
+        generationLoading: false,
+        generationError: '',
+        copyNotice: '',
+        handoffMeta: null,
+        knowledgeStorageKey: 'geer.knowledge.v1',
+        knowledgeDraftStorageKey: 'geer.knowledge.drafts.v1',
+        knowledgeSchemaVersion: 1,
+        knowledgeSearch: '',
+        knowledgeMobileTab: 'tree',
+        knowledgeDesktop: false,
+        knowledgeEditorMode: 'split',
+        knowledgeThemeTone: 'dark',
+        knowledgeThemes: ['black', 'corporate', 'garden', 'abyss', 'coffee'],
+        knowledgeState: {
+          tree: [],
+          files: {},
+          uiState: {
+            selectedNodeId: '',
+            openPanels: { tree: true, canvas: true, editor: true },
+            activeTheme: 'black',
+          },
+        },
+        knowledgeDragState: {
+          draggingNodeId: '',
+        },
+        knowledgeDropHint: {
+          nodeId: '',
+          position: '',
+        },
+        knowledgeToasts: [],
+        knowledgeDrafts: {},
+        knowledgeAutosaveTimer: null,
+        knowledgeDraftAutosaveTimer: null,
+        knowledgeLastSavedAtIso: '',
+        knowledgeOrbitClockSec: 0,
+        knowledgeOrbitEpochMs: 0,
+        knowledgeOrbitPausedAtMs: null,
+        knowledgeOrbitAnimationFrameId: 0,
+        knowledgeOrbitLockNodeId: '',
+        knowledgeOrbitFocusNodeId: '',
+        knowledgeOrbitViewCenterX: 320,
+        knowledgeOrbitViewCenterY: 210,
+        knowledgeOrbitViewTargetX: 320,
+        knowledgeOrbitViewTargetY: 210,
+        knowledgeOrbitZoom: 1,
+        knowledgeOrbitTargetZoom: 1,
+        knowledgeOrbitUserZoom: 1,
+        knowledgeOrbitViewMode: 'global',
+        knowledgeOrbitTouchDistance: 0,
+        knowledgeOrbitTouchStartZoom: 1,
+        knowledgeOrbitFrameIndex: 0,
+        knowledgeOrbitQualityMode: 'auto',
+        knowledgeOrbitMorphById: {},
+        knowledgeOrbitLastLayoutSignature: '',
+        knowledgeOrbitRelayoutBoostFrames: 0,
+        knowledgeValidationScenario: 'canonical',
+        knowledgeValidationShuffleActive: false,
+        knowledgeValidationShuffleTimer: 0,
+        knowledgeValidationShuffleStep: 0,
+        knowledgeOrbitVisibilityHandler: null,
+        knowledgeOrbitBeforeUnloadHandler: null,
+        knowledgeKeydownHandler: null,
+        navItems: [
+          { key: 'overview', labelKey: 'menuOverview', icon: 'fa-solid fa-house' },
+          { key: 'music', labelKey: 'menuMusic', icon: 'fa-solid fa-music' },
+          { key: 'files', labelKey: 'menuFiles', icon: 'fa-solid fa-folder-tree' },
+          { key: 'actions', labelKey: 'menuActions', icon: 'fa-solid fa-wrench' },
+          { key: 'settings', labelKey: 'menuSettings', icon: 'fa-solid fa-gear' },
+        ],
+        i18n: {
+          en: {
+            pageTitle: 'Geer App',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuOverview: 'Overview',
+            menuMusic: 'Music Player',
+            menuFiles: 'File Manager',
+            menuActions: 'Actions',
+            menuSettings: 'Settings',
+            starterTitle: 'App Starter Template',
+            starterDescription: 'Includes base libraries + silent auth bootstrap.',
+            inputTitle: 'Caption Input Pipeline',
+            sourceGreech: 'From Greech',
+            sourceCustom: 'Custom',
+            inputPlaceholder: 'Paste source text for caption generation...',
+            reloadIncomingBtn: 'Reload incoming',
+            clearInputBtn: 'Clear',
+            generatorTitle: 'Caption Generator',
+            presetShort: 'Short',
+            presetMedium: 'Medium',
+            presetPunchline: 'Punchline',
+            generateBtn: 'Generate',
+            generatingBtn: 'Generating...',
+            regenerateBtn: 'Regenerate',
+            captionsEmpty: 'No captions yet. Generate from input text.',
+            captionsLoading: 'Generating caption cards...',
+            copyBtn: 'Copy',
+            copyAllBtn: 'Copy all',
+            copySuccess: 'Copied',
+            copyFailed: 'Copy failed',
+            statusLabel: 'Status',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            permissionNote: 'Note: resolving ui.theme requires app permission settings.theme.read.',
+            musicTitle: 'Music Player Page',
+            musicDescription: 'Use this page as a base for your player controls and playlist UI.',
+            musicPlaceholder: 'Add player controls, queue, and current track metadata here.',
+            filesTitle: 'File Manager Page',
+            filesDescription: 'Use this page for folders, files, and file actions.',
+            filesPlaceholder: 'Add file tree, list, and operation buttons here.',
+            knowledgeTabTree: 'Tree',
+            knowledgeTabCanvas: 'Canvas',
+            knowledgeTabEditor: 'Editor',
+            knowledgeAddPath: '+ Path',
+            knowledgeAddFile: '+ File',
+            knowledgeRunQa: 'Run QA',
+            knowledgeLoadDemo: 'Load Demo',
+            knowledgeThemeLabel: 'Theme',
+            knowledgeContrastLabel: 'Contrast',
+            knowledgeContrastOk: 'OK',
+            knowledgeSearchPlaceholder: 'Search nodes...',
+            knowledgeTreeTitle: 'Dot Tree',
+            knowledgeCanvasTitle: 'Graph / Orbit',
+            knowledgeInspectorTitle: 'Inspector + Markdown',
+            knowledgeCanvasHint: 'Scroll/pinch to zoom. Double-click a node to lock center.',
+            knowledgeViewGlobal: 'Global',
+            knowledgeViewFocus: 'Focus',
+            knowledgeViewReset: 'Reset',
+            knowledgeQualityAuto: 'Auto',
+            knowledgeQualityHigh: 'High',
+            knowledgeQualityMedium: 'Medium',
+            knowledgeQualityLow: 'Low',
+            knowledgeZoomLabel: 'Zoom',
+            knowledgeScenarioCanonical: 'Scenario: Canonical',
+            knowledgeScenarioDeep: 'Scenario: Deep Nesting',
+            knowledgeScenarioSiblings: 'Scenario: Many Siblings',
+            knowledgeScenarioPermissions: 'Scenario: Permission Mix',
+            knowledgeScenarioApply: 'Apply',
+            knowledgeScenarioShuffle: 'Run Shuffle',
+            knowledgeScenarioStop: 'Stop Shuffle',
+            knowledgeEmptyTree: 'No nodes yet.',
+            knowledgeBreadcrumbLabel: 'Breadcrumb',
+            knowledgeNodeTypeLabel: 'Type:',
+            knowledgeTitleLabel: 'Title',
+            knowledgeMarkdownLabel: 'Markdown',
+            knowledgePermissionLabel: 'Effective permissions:',
+            knowledgeSelectNodeHint: 'Select a node from Tree or Canvas.',
+            knowledgeEditorWrite: 'Write',
+            knowledgeEditorPreview: 'Preview',
+            knowledgeEditorSplit: 'Split',
+            knowledgeUnsaved: 'Unsaved draft',
+            knowledgeSaved: 'Saved',
+            knowledgeSaveNow: 'Save now',
+            knowledgeTagsLabel: 'Tags (comma)',
+            knowledgePermissionInherit: 'Inherit from parent',
+            knowledgePermissionOverride: 'Override permissions',
+            knowledgeDeleteConfirm: 'Delete selected node and its children?',
+            knowledgeActionRename: 'Rename',
+            knowledgeActionDuplicate: 'Duplicate',
+            knowledgeActionMove: 'Move',
+            knowledgeActionDelete: 'Delete',
+            knowledgePromptRename: 'New title',
+            knowledgePromptMove: 'Target path id',
+            knowledgeErrorDeleteRoot: 'Root path cannot be deleted.',
+            knowledgeErrorMoveInvalid: 'Invalid move target.',
+            knowledgeCanvasEmpty: 'No children in this path yet.',
+            knowledgeQaPassed: 'QA checks passed',
+            knowledgeQaFailed: 'QA checks failed',
+            knowledgeBackendOffline: 'Running in local-only mode (backend unavailable).',
+            actionsTitle: 'Starter Actions',
+            refreshBtn: 'Refresh',
+            reloadUserBtn: 'Reload User',
+            settingsTitle: 'Settings Page',
+            settingsDescription: 'Place application-level settings and preferences here.',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+          },
+          hy: {
+            pageTitle: 'Geer Հավելված',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuOverview: 'Ընդհանուր',
+            menuMusic: 'Երաժշտական նվագարկիչ',
+            menuFiles: 'Ֆայլերի կառավարիչ',
+            menuActions: 'Գործողություններ',
+            menuSettings: 'Կարգավորումներ',
+            starterTitle: 'Հավելվածի մեկնարկային տեմփլեյթ',
+            starterDescription: 'Ներառում է հիմնական գրադարաններ + silent auth bootstrap։',
+            inputTitle: 'Caption մուտքային հոսք',
+            sourceGreech: 'Greech-ից',
+            sourceCustom: 'Սեփական',
+            inputPlaceholder: 'Փակցրու սկզբնական տեքստը caption-ների համար...',
+            reloadIncomingBtn: 'Վերբեռնել մուտքը',
+            clearInputBtn: 'Մաքրել',
+            generatorTitle: 'Caption գեներատոր',
+            presetShort: 'Կարճ',
+            presetMedium: 'Միջին',
+            presetPunchline: 'Punchline',
+            generateBtn: 'Գեներացնել',
+            generatingBtn: 'Գեներացվում է...',
+            regenerateBtn: 'Կրկին գեներացնել',
+            captionsEmpty: 'Caption դեռ չկա։ Գեներացրու մուտքային տեքստից։',
+            captionsLoading: 'Ստեղծվում են caption քարտերը...',
+            copyBtn: 'Պատճենել',
+            copyAllBtn: 'Պատճենել բոլորը',
+            copySuccess: 'Պատճենված է',
+            copyFailed: 'Պատճենումը չստացվեց',
+            statusLabel: 'Կարգավիճակ',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            permissionNote: 'Նշում․ ui.theme կարդալու համար պետք է settings.theme.read permission։',
+            musicTitle: 'Երաժշտական նվագարկչի էջ',
+            musicDescription: 'Օգտագործեք այս էջը նվագարկիչի կառավարիչների և playlist-ի UI-ի համար։',
+            musicPlaceholder: 'Այստեղ ավելացրեք player controls, queue և current track տվյալները։',
+            filesTitle: 'Ֆայլերի կառավարչի էջ',
+            filesDescription: 'Օգտագործեք այս էջը թղթապանակների, ֆայլերի և file actions-ի համար։',
+            filesPlaceholder: 'Այստեղ ավելացրեք file tree, list և գործառնական կոճակները։',
+            knowledgeTabTree: 'Ծառ',
+            knowledgeTabCanvas: 'Կանվաս',
+            knowledgeTabEditor: 'Խմբագիր',
+            knowledgeAddPath: '+ Path',
+            knowledgeAddFile: '+ File',
+            knowledgeRunQa: 'QA ստուգում',
+            knowledgeLoadDemo: 'Բեռնել demo',
+            knowledgeThemeLabel: 'Թեմա',
+            knowledgeContrastLabel: 'Կոնտրաստ',
+            knowledgeContrastOk: 'OK',
+            knowledgeSearchPlaceholder: 'Փնտրել հանգույց...',
+            knowledgeTreeTitle: 'Dot Tree',
+            knowledgeCanvasTitle: 'Graph / Orbit',
+            knowledgeInspectorTitle: 'Inspector + Markdown',
+            knowledgeCanvasHint: 'Zoom՝ scroll/pinch, double click՝ center lock/unlock։',
+            knowledgeViewGlobal: 'Global',
+            knowledgeViewFocus: 'Focus',
+            knowledgeViewReset: 'Reset',
+            knowledgeQualityAuto: 'Auto',
+            knowledgeQualityHigh: 'High',
+            knowledgeQualityMedium: 'Medium',
+            knowledgeQualityLow: 'Low',
+            knowledgeZoomLabel: 'Zoom',
+            knowledgeScenarioCanonical: 'Scenario: Canonical',
+            knowledgeScenarioDeep: 'Scenario: Deep Nesting',
+            knowledgeScenarioSiblings: 'Scenario: Many Siblings',
+            knowledgeScenarioPermissions: 'Scenario: Permission Mix',
+            knowledgeScenarioApply: 'Apply',
+            knowledgeScenarioShuffle: 'Run Shuffle',
+            knowledgeScenarioStop: 'Stop Shuffle',
+            knowledgeEmptyTree: 'Հանգույց չկա։',
+            knowledgeBreadcrumbLabel: 'Ճանապարհ',
+            knowledgeNodeTypeLabel: 'Տեսակ՝',
+            knowledgeTitleLabel: 'Վերնագիր',
+            knowledgeMarkdownLabel: 'Markdown',
+            knowledgePermissionLabel: 'Արդյունքային permission-ներ՝',
+            knowledgeSelectNodeHint: 'Ընտրիր հանգույց tree կամ canvas-ից։',
+            knowledgeEditorWrite: 'Write',
+            knowledgeEditorPreview: 'Preview',
+            knowledgeEditorSplit: 'Split',
+            knowledgeUnsaved: 'Չպահված draft',
+            knowledgeSaved: 'Պահված է',
+            knowledgeSaveNow: 'Պահել հիմա',
+            knowledgeTagsLabel: 'Թեգեր (ստորակետով)',
+            knowledgePermissionInherit: 'Ժառանգել parent-ից',
+            knowledgePermissionOverride: 'Սեփական permissions',
+            knowledgeDeleteConfirm: 'Ջնջե՞լ հանգույցը և երեխաները։',
+            knowledgeActionRename: 'Վերանվանել',
+            knowledgeActionDuplicate: 'Պատճենել',
+            knowledgeActionMove: 'Տեղափոխել',
+            knowledgeActionDelete: 'Ջնջել',
+            knowledgePromptRename: 'Նոր վերնագիր',
+            knowledgePromptMove: 'Թիրախ path id',
+            knowledgeErrorDeleteRoot: 'Root path-ը չի կարելի ջնջել։',
+            knowledgeErrorMoveInvalid: 'Անթույլատրելի տեղափոխում։',
+            knowledgeCanvasEmpty: 'Այս path-ում child դեռ չկա։',
+            knowledgeQaPassed: 'QA ստուգումները անցան',
+            knowledgeQaFailed: 'QA ստուգումները ձախողվեցին',
+            knowledgeBackendOffline: 'Աշխատում է local-only ռեժիմում (backend հասանելի չէ)։',
+            actionsTitle: 'Սկզբնական գործողություններ',
+            refreshBtn: 'Թարմացնել',
+            reloadUserBtn: 'Վերբեռնել օգտատիրոջը',
+            settingsTitle: 'Կարգավորումների էջ',
+            settingsDescription: 'Այստեղ ավելացրեք ծրագրի կարգավորումները և նախընտրությունները։',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+          },
+        },
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.hy;
+          return dict[key] || this.i18n.hy[key] || this.i18n.en[key] || key;
+        },
+
+        get isKnowledgeDesktop() {
+          return this.knowledgeDesktop;
+        },
+
+        get knowledgeNodesById() {
+          const map = new Map();
+          for (const node of this.knowledgeState.tree) {
+            map.set(node.id, node);
+          }
+          return map;
+        },
+
+        get knowledgeChildrenMap() {
+          const map = new Map();
+          for (const node of this.knowledgeState.tree) {
+            const key = node.parentId || '__root__';
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(node);
+          }
+          for (const children of map.values()) {
+            children.sort((left, right) => {
+              if ((left.order || 0) !== (right.order || 0)) return (left.order || 0) - (right.order || 0);
+              return String(left.title || '').localeCompare(String(right.title || ''));
+            });
+          }
+          return map;
+        },
+
+        get knowledgeVisibleRoots() {
+          const roots = this.knowledgeChildrenMap.get('__root__') || [];
+          if (!this.knowledgeSearch) return roots;
+          const query = this.knowledgeSearch.toLowerCase();
+          return roots.filter((node) => String(node.title || '').toLowerCase().includes(query));
+        },
+
+        get knowledgeTreeRows() {
+          const rows = [];
+          const query = this.knowledgeSearch ? this.knowledgeSearch.toLowerCase() : '';
+          const visit = (parentId, level) => {
+            const key = parentId || '__root__';
+            const children = this.knowledgeChildrenMap.get(key) || [];
+            for (const child of children) {
+              const matches = !query || String(child.title || '').toLowerCase().includes(query);
+              if (matches) {
+                rows.push({ node: child, level });
+              }
+              if (child.type === 'path' && !child.collapsed) {
+                visit(child.id, level + 1);
+              }
+            }
+          };
+          visit(null, 0);
+          return rows;
+        },
+
+        get knowledgeSelectedRowIndex() {
+          const id = this.knowledgeState.uiState.selectedNodeId;
+          if (!id) return -1;
+          return this.knowledgeTreeRows.findIndex((row) => row.node.id === id);
+        },
+
+        get knowledgeSelectedNode() {
+          if (!this.knowledgeState.uiState.selectedNodeId) return null;
+          return this.knowledgeNodesById.get(this.knowledgeState.uiState.selectedNodeId) || null;
+        },
+
+        get knowledgeSelectedFileId() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected || selected.type !== 'file') return '';
+          return selected.id;
+        },
+
+        get knowledgeSelectedChildren() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected || selected.type !== 'path') return [];
+          const children = this.knowledgeChildrenMap.get(selected.id) || [];
+          if (!this.knowledgeSearch) return children;
+          const query = this.knowledgeSearch.toLowerCase();
+          return children.filter((node) => String(node.title || '').toLowerCase().includes(query));
+        },
+
+        knowledgeHash(value) {
+          const text = String(value || '');
+          let out = 2166136261;
+          for (let i = 0; i < text.length; i += 1) {
+            out ^= text.charCodeAt(i);
+            out = Math.imul(out, 16777619);
+          }
+          return out >>> 0;
+        },
+
+        get knowledgeOrbitPerformanceProfile() {
+          const totalNodes = Array.isArray(this.knowledgeState?.tree) ? this.knowledgeState.tree.length : 0;
+          let tier = this.knowledgeOrbitQualityMode;
+          if (!['high', 'medium', 'low'].includes(tier)) {
+            if (totalNodes <= 70) tier = 'high';
+            else if (totalNodes <= 150) tier = 'medium';
+            else tier = 'low';
+          }
+          if (tier === 'high') {
+            return {
+              tier,
+              maxDepth: 8,
+              maxNodes: 240,
+              showGuides: true,
+              motionScale: 1,
+              labelStride: 1,
+              cullMargin: 140,
+              updateIntervalFrames: 1,
+            };
+          }
+          if (tier === 'medium') {
+            return {
+              tier,
+              maxDepth: 7,
+              maxNodes: 160,
+              showGuides: true,
+              motionScale: 0.82,
+              labelStride: 2,
+              cullMargin: 100,
+              updateIntervalFrames: 2,
+            };
+          }
+          return {
+            tier: 'low',
+            maxDepth: 6,
+            maxNodes: 96,
+            showGuides: false,
+            motionScale: 0.62,
+            labelStride: 4,
+            cullMargin: 84,
+            updateIntervalFrames: 4,
+          };
+        },
+
+        get knowledgeOrbitThemeTokens() {
+          const tone = this.knowledgeThemeTone === 'light' ? 'light' : 'dark';
+          if (tone === 'light') {
+            return {
+              pathFill: 'var(--knowledge-orbit-path-fill)',
+              fileFill: 'var(--knowledge-orbit-file-fill)',
+              haloColor: 'var(--knowledge-orbit-halo)',
+              haloBaseOpacity: 0.16,
+            };
+          }
+          return {
+            pathFill: 'var(--knowledge-orbit-path-fill)',
+            fileFill: 'var(--knowledge-orbit-file-fill)',
+            haloColor: 'var(--knowledge-orbit-halo)',
+            haloBaseOpacity: 0.22,
+          };
+        },
+
+        get knowledgeOrbitCanvasStyle() {
+          const centerX = Number.isFinite(this.knowledgeOrbitViewCenterX) ? this.knowledgeOrbitViewCenterX : 320;
+          const centerY = Number.isFinite(this.knowledgeOrbitViewCenterY) ? this.knowledgeOrbitViewCenterY : 210;
+          const driftX = ((centerX - 320) / 320) * 6;
+          const driftY = ((centerY - 210) / 210) * 5;
+          const layerA = `${30 + driftX}% ${16 + driftY}%`;
+          const layerB = `${78 - driftX}% ${84 - driftY}%`;
+          return `background-position: ${layerA}, ${layerB}, center`;
+        },
+
+        get knowledgeOrbitLayout() {
+          const nodesById = this.knowledgeNodesById;
+          const childrenMap = this.knowledgeChildrenMap;
+          const root = nodesById.get('path-life') || this.knowledgeVisibleRoots[0] || null;
+          if (!root) {
+            return { nodes: [], links: [], guides: [] };
+          }
+
+          const canvasWidth = 640;
+          const canvasHeight = 420;
+          const centerX = canvasWidth / 2;
+          const centerY = canvasHeight / 2;
+          const compactDepthStart = 5;
+          const profile = this.knowledgeOrbitPerformanceProfile;
+          const themeTokens = this.knowledgeOrbitThemeTokens;
+          const maxDepth = profile.maxDepth;
+          const maxNodes = profile.maxNodes;
+          const motionScale = profile.motionScale;
+          const clockSec = Number.isFinite(this.knowledgeOrbitClockSec) ? this.knowledgeOrbitClockSec : 0;
+          const nodes = [];
+          const links = [];
+          const guides = [];
+          const orbitMetaById = new Map();
+          const visited = new Set();
+
+          const safePushNode = (node, x, y, depth) => {
+            if (nodes.length >= maxNodes) return;
+            const childNodes = childrenMap.get(node.id) || [];
+            const pathCount = childNodes.filter((child) => child.type === 'path').length;
+            const fileCount = childNodes.filter((child) => child.type === 'file').length;
+            const baseSize = node.type === 'path' ? 7.5 : 4.8;
+            const sizeBoost = node.type === 'path'
+              ? Math.min(8, pathCount * 1.2 + fileCount * 0.45)
+              : 0;
+            const inherited = !node.permissions || node.permissions.inherit !== false;
+            const effective = this.resolveKnowledgePermissions(node.id);
+            const ringClass = effective.admin
+              ? 'var(--fallback-p, #4f46e5)'
+              : (effective.write ? 'var(--fallback-s, #ec4899)' : 'var(--fallback-a, #22c55e)');
+            nodes.push({
+              id: node.id,
+              title: node.title,
+              type: node.type,
+              x,
+              y,
+              size: node.id === root.id ? 17 : (baseSize + sizeBoost),
+              depth,
+              orbitRadius: 0,
+              orbitSpeed: 0,
+              orbitPhase: 0,
+              fill: node.type === 'path'
+                ? themeTokens.pathFill
+                : themeTokens.fileFill,
+              haloColor: themeTokens.haloColor,
+              haloOpacity: node.id === root.id ? themeTokens.haloBaseOpacity * 1.4 : themeTokens.haloBaseOpacity,
+              permissionRingColor: ringClass,
+              permissionRingOpacity: inherited ? 0.28 : 0.82,
+              permissionRingWidth: inherited ? 0.8 : 1.5,
+            });
+          };
+
+          const estimateNodeVisualSize = (node) => {
+            const childNodes = childrenMap.get(node.id) || [];
+            const pathCount = childNodes.filter((child) => child.type === 'path').length;
+            const fileCount = childNodes.filter((child) => child.type === 'file').length;
+            const baseSize = node.type === 'path' ? 7.5 : 4.8;
+            const sizeBoost = node.type === 'path'
+              ? Math.min(8, pathCount * 1.2 + fileCount * 0.45)
+              : 0;
+            return baseSize + sizeBoost;
+          };
+
+          const resolveSiblingOrbitPlacements = ({
+            parentNodeId,
+            children,
+            parentX,
+            parentY,
+            baseRadius,
+            baseSpeed,
+            phaseBase,
+            bandStep,
+            maxPerBand,
+            gapPad,
+            spinDirection,
+            kind,
+          }) => {
+            const placements = [];
+            if (!Array.isArray(children) || children.length === 0) return placements;
+
+            const safeBandSize = Math.max(1, maxPerBand);
+            const bandCount = Math.ceil(children.length / safeBandSize);
+            for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
+              const start = bandIndex * safeBandSize;
+              const bandChildren = children.slice(start, start + safeBandSize);
+              if (!bandChildren.length) continue;
+
+              const bandSizes = bandChildren.map((child) => estimateNodeVisualSize(child));
+              const packedArcLength = bandSizes.reduce((sum, size) => sum + (size * 2 + gapPad), 0);
+              const bandBaseRadius = baseRadius + (bandStep * bandIndex);
+              const minRadiusForArcFit = packedArcLength / (Math.PI * 2);
+              const orbitRadius = Math.max(bandBaseRadius, minRadiusForArcFit);
+              const bandDirection = bandIndex % 2 === 0 ? spinDirection : -spinDirection;
+              const speedDamping = 1 - Math.min(0.35, bandIndex * 0.12);
+              const orbitSpeed = baseSpeed * speedDamping * bandDirection * motionScale;
+              const bandPhaseJitter = ((this.knowledgeHash(`${parentNodeId}:${kind}:${bandIndex}`) & 1023) / 1023) * 0.34;
+              let cursor = phaseBase + (bandIndex * 0.63) + bandPhaseJitter + (clockSec * orbitSpeed);
+
+              for (let i = 0; i < bandChildren.length; i += 1) {
+                const child = bandChildren[i];
+                const childArc = (bandSizes[i] * 2) + gapPad;
+                const deltaAngle = childArc / Math.max(1, orbitRadius);
+                cursor += deltaAngle * 0.5;
+                const phase = cursor;
+                const childX = parentX + Math.cos(phase) * orbitRadius;
+                const childY = parentY + Math.sin(phase) * orbitRadius;
+                placements.push({
+                  child,
+                  x: childX,
+                  y: childY,
+                  phase,
+                  orbitRadius,
+                  orbitSpeed,
+                  bandIndex,
+                });
+                cursor += deltaAngle * 0.5;
+              }
+            }
+
+            return placements;
+          };
+
+          const placeTree = (node, x, y, depth) => {
+            if (!node || visited.has(node.id) || depth > maxDepth || nodes.length >= maxNodes) return;
+            visited.add(node.id);
+            safePushNode(node, x, y, depth);
+
+            const children = childrenMap.get(node.id) || [];
+            const pathChildren = children.filter((child) => child.type === 'path');
+            const fileChildren = children.filter((child) => child.type === 'file');
+            const compactScale = depth >= compactDepthStart ? 0.72 : 1;
+            const pathOrbitRadius = Math.max(26, (58 + (depth * 10)) * compactScale);
+            const fileOrbitRadius = Math.max(14, pathOrbitRadius * 0.46);
+            const phaseBase = (this.knowledgeHash(node.id) / 4294967295) * Math.PI * 2;
+            const pathOrbitSpeed = Math.min(0.24, 0.04 + (depth * 0.018));
+            const fileOrbitSpeed = Math.min(0.3, pathOrbitSpeed * 1.3);
+            const pathPlacements = resolveSiblingOrbitPlacements({
+              parentNodeId: node.id,
+              children: pathChildren,
+              parentX: x,
+              parentY: y,
+              baseRadius: pathOrbitRadius,
+              baseSpeed: pathOrbitSpeed,
+              phaseBase,
+              bandStep: Math.max(20, 16 * compactScale),
+              maxPerBand: depth >= compactDepthStart ? 6 : 8,
+              gapPad: 15,
+              spinDirection: 1,
+              kind: 'path',
+            });
+
+            const filePlacements = resolveSiblingOrbitPlacements({
+              parentNodeId: node.id,
+              children: fileChildren,
+              parentX: x,
+              parentY: y,
+              baseRadius: fileOrbitRadius,
+              baseSpeed: fileOrbitSpeed,
+              phaseBase: phaseBase + Math.PI * 0.35,
+              bandStep: Math.max(12, 10 * compactScale),
+              maxPerBand: depth >= compactDepthStart ? 10 : 14,
+              gapPad: 10,
+              spinDirection: -1,
+              kind: 'file',
+            });
+
+            if (profile.showGuides) {
+              const pathGuideRadii = new Set(pathPlacements.map((placement) => Math.round(placement.orbitRadius * 1000)));
+              pathGuideRadii.forEach((radiusInt) => {
+                guides.push({
+                  id: `${node.id}-path-guide-${radiusInt}`,
+                  cx: x,
+                  cy: y,
+                  r: radiusInt / 1000,
+                });
+              });
+              const fileGuideRadii = new Set(filePlacements.map((placement) => Math.round(placement.orbitRadius * 1000)));
+              fileGuideRadii.forEach((radiusInt) => {
+                guides.push({
+                  id: `${node.id}-file-guide-${radiusInt}`,
+                  cx: x,
+                  cy: y,
+                  r: radiusInt / 1000,
+                });
+              });
+            }
+
+            for (let i = 0; i < pathPlacements.length; i += 1) {
+              const placement = pathPlacements[i];
+              links.push({
+                id: `${node.id}->${placement.child.id}`,
+                x1: x,
+                y1: y,
+                x2: placement.x,
+                y2: placement.y,
+              });
+              orbitMetaById.set(placement.child.id, {
+                orbitRadius: placement.orbitRadius,
+                orbitSpeed: placement.orbitSpeed,
+                orbitPhase: placement.phase,
+              });
+              placeTree(placement.child, placement.x, placement.y, depth + 1);
+            }
+
+            for (let i = 0; i < filePlacements.length; i += 1) {
+              const placement = filePlacements[i];
+              links.push({
+                id: `${node.id}->${placement.child.id}`,
+                x1: x,
+                y1: y,
+                x2: placement.x,
+                y2: placement.y,
+              });
+              orbitMetaById.set(placement.child.id, {
+                orbitRadius: placement.orbitRadius,
+                orbitSpeed: placement.orbitSpeed,
+                orbitPhase: placement.phase,
+              });
+              safePushNode(placement.child, placement.x, placement.y, depth + 1);
+            }
+          };
+
+          placeTree(root, centerX, centerY, 0);
+          nodes.forEach((node) => {
+            const meta = orbitMetaById.get(node.id);
+            if (!meta) return;
+            node.orbitRadius = meta.orbitRadius;
+            node.orbitSpeed = meta.orbitSpeed;
+            node.orbitPhase = meta.orbitPhase;
+          });
+
+          return { nodes, links, guides };
+        },
+
+        get knowledgeOrbitViewport() {
+          const zoom = Number.isFinite(this.knowledgeOrbitZoom) ? this.knowledgeOrbitZoom : 1;
+          const centerX = Number.isFinite(this.knowledgeOrbitViewCenterX) ? this.knowledgeOrbitViewCenterX : 320;
+          const centerY = Number.isFinite(this.knowledgeOrbitViewCenterY) ? this.knowledgeOrbitViewCenterY : 210;
+          return { zoom, centerX, centerY };
+        },
+
+        get knowledgeLabelNodeIds() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return new Set(['path-life']);
+          const focus = new Set(this.knowledgeBreadcrumbNodes.map((node) => node.id));
+          const children = this.knowledgeChildrenMap.get(selected.id) || [];
+          for (const child of children) {
+            focus.add(child.id);
+          }
+          focus.add('path-life');
+          return focus;
+        },
+
+        get knowledgeOrbitNodes() {
+          return this.knowledgeOrbitRenderState.nodes;
+        },
+
+        get knowledgeOrbitLinks() {
+          return this.knowledgeOrbitRenderState.links;
+        },
+
+        get knowledgeOrbitGuides() {
+          return this.knowledgeOrbitRenderState.guides;
+        },
+
+        get knowledgeOrbitRenderState() {
+          const layout = this.knowledgeOrbitLayout;
+          const labels = this.knowledgeLabelNodeIds;
+          const viewport = this.knowledgeOrbitViewport;
+          const profile = this.knowledgeOrbitPerformanceProfile;
+          const screenCenterX = 320;
+          const screenCenterY = 210;
+          const cullMargin = profile.cullMargin;
+          const width = 640;
+          const height = 420;
+          const stride = Math.max(1, profile.labelStride);
+          const targetNodes = layout.nodes
+            .map((node) => {
+              const x = ((node.x - viewport.centerX) * viewport.zoom) + screenCenterX;
+              const y = ((node.y - viewport.centerY) * viewport.zoom) + screenCenterY;
+              const size = node.size * viewport.zoom;
+              const inBounds = x >= -cullMargin
+                && x <= width + cullMargin
+                && y >= -cullMargin
+                && y <= height + cullMargin;
+              const keep = inBounds
+                || node.id === this.knowledgeOrbitLockNodeId
+                || node.id === this.knowledgeState.uiState.selectedNodeId;
+              if (!keep) return null;
+              const bucket = this.knowledgeHash(node.id) % stride;
+              const showLabel = labels.has(node.id)
+                && (node.depth <= 3 || viewport.zoom >= 1.08 || this.knowledgeOrbitLockNodeId === node.id)
+                && bucket === 0;
+              return {
+                ...node,
+                x,
+                y,
+                size,
+                haloOpacity: Math.min(0.34, (node.haloOpacity || 0.2) * Math.max(0.72, Math.min(1.2, viewport.zoom))),
+                showLabel,
+              };
+            })
+            .filter(Boolean);
+
+          const morphStore = this.knowledgeOrbitMorphById && typeof this.knowledgeOrbitMorphById === 'object'
+            ? this.knowledgeOrbitMorphById
+            : {};
+          const smoothing = this.knowledgeOrbitRelayoutBoostFrames > 0 ? 0.26 : 0.14;
+          const nextMorphStore = {};
+          const renderedNodes = targetNodes.map((node) => {
+            const previous = morphStore[node.id];
+            if (!previous) {
+              const seeded = { x: node.x, y: node.y, size: node.size };
+              nextMorphStore[node.id] = seeded;
+              return node;
+            }
+            const morphed = {
+              x: previous.x + ((node.x - previous.x) * smoothing),
+              y: previous.y + ((node.y - previous.y) * smoothing),
+              size: previous.size + ((node.size - previous.size) * smoothing),
+            };
+            nextMorphStore[node.id] = morphed;
+            return {
+              ...node,
+              x: morphed.x,
+              y: morphed.y,
+              size: morphed.size,
+            };
+          });
+          this.knowledgeOrbitMorphById = nextMorphStore;
+
+          const renderedNodeById = new Map(renderedNodes.map((node) => [node.id, node]));
+          const minX = -cullMargin;
+          const maxX = 640 + cullMargin;
+          const minY = -cullMargin;
+          const maxY = 420 + cullMargin;
+          const renderedLinks = layout.links
+            .map((link) => {
+              const transformed = {
+                ...link,
+                x1: ((link.x1 - viewport.centerX) * viewport.zoom) + screenCenterX,
+                y1: ((link.y1 - viewport.centerY) * viewport.zoom) + screenCenterY,
+                x2: ((link.x2 - viewport.centerX) * viewport.zoom) + screenCenterX,
+                y2: ((link.y2 - viewport.centerY) * viewport.zoom) + screenCenterY,
+              };
+              const sourceId = String(link.id || '').split('->')[0] || '';
+              const targetId = String(link.id || '').split('->')[1] || '';
+              const sourceNode = renderedNodeById.get(sourceId);
+              const targetNode = renderedNodeById.get(targetId);
+              if (!sourceNode || !targetNode) return transformed;
+              return {
+                ...transformed,
+                x1: sourceNode.x,
+                y1: sourceNode.y,
+                x2: targetNode.x,
+                y2: targetNode.y,
+              };
+            })
+            .filter((link) => {
+              const linkMinX = Math.min(link.x1, link.x2);
+              const linkMaxX = Math.max(link.x1, link.x2);
+              const linkMinY = Math.min(link.y1, link.y2);
+              const linkMaxY = Math.max(link.y1, link.y2);
+              return !(linkMaxX < minX || linkMinX > maxX || linkMaxY < minY || linkMinY > maxY);
+            });
+
+          const renderedGuides = layout.guides
+            .map((guide) => ({
+              ...guide,
+              cx: ((guide.cx - viewport.centerX) * viewport.zoom) + screenCenterX,
+              cy: ((guide.cy - viewport.centerY) * viewport.zoom) + screenCenterY,
+              r: guide.r * viewport.zoom,
+            }))
+            .filter((guide) => {
+              const minX = guide.cx - guide.r;
+              const maxX = guide.cx + guide.r;
+              const minY = guide.cy - guide.r;
+              const maxY = guide.cy + guide.r;
+              return !(maxX < -cullMargin || minX > 640 + cullMargin || maxY < -cullMargin || minY > 420 + cullMargin);
+            });
+
+          return {
+            nodes: renderedNodes,
+            links: renderedLinks,
+            guides: renderedGuides,
+          };
+        },
+
+        get knowledgeBreadcrumbNodes() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return [];
+          const chain = [];
+          let cursor = selected;
+          let guard = 0;
+          while (cursor && guard < 40) {
+            chain.push(cursor);
+            cursor = cursor.parentId ? this.knowledgeNodesById.get(cursor.parentId) : null;
+            guard += 1;
+          }
+          return chain.reverse();
+        },
+
+        get knowledgeBreadcrumbText() {
+          const chain = this.knowledgeBreadcrumbNodes;
+          if (!chain.length) return '-';
+          return chain.map((node) => node.title).join(' > ');
+        },
+
+        get knowledgeEffectivePermissions() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return { read: false, write: false, admin: false };
+          return this.resolveKnowledgePermissions(selected.id);
+        },
+
+        get knowledgeEffectivePermissionText() {
+          const effective = this.knowledgeEffectivePermissions;
+          const tokens = [];
+          if (effective.read) tokens.push('R');
+          if (effective.write) tokens.push('W');
+          if (effective.admin) tokens.push('A');
+          return tokens.length ? tokens.join('/') : 'None';
+        },
+
+        get knowledgeSelectedMarkdown() {
+          const fileId = this.knowledgeSelectedFileId;
+          if (!fileId) return '';
+          if (typeof this.knowledgeDrafts[fileId] === 'string') {
+            return this.knowledgeDrafts[fileId];
+          }
+          const value = this.knowledgeState.files[fileId];
+          return typeof value === 'string' ? value : '';
+        },
+
+        set knowledgeSelectedMarkdown(value) {
+          const fileId = this.knowledgeSelectedFileId;
+          if (!fileId) return;
+          this.knowledgeDrafts[fileId] = String(value || '');
+        },
+
+        get knowledgeSelectedTagsText() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected || selected.type !== 'file') return '';
+          const tags = Array.isArray(selected.tags) ? selected.tags : [];
+          return tags.join(', ');
+        },
+
+        set knowledgeSelectedTagsText(value) {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected || selected.type !== 'file') return;
+          const tags = String(value || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+          selected.tags = Array.from(new Set(tags));
+        },
+
+        get knowledgeSelectedHasPermissionOverride() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return false;
+          return selected.permissions?.inherit === false;
+        },
+
+        get knowledgeSelectedPermissionsModel() {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return { read: false, write: false, admin: false };
+          const effective = this.resolveKnowledgePermissions(selected.id);
+          if (selected.permissions?.inherit === false) {
+            return {
+              read: Boolean(selected.permissions.read),
+              write: Boolean(selected.permissions.write),
+              admin: Boolean(selected.permissions.admin),
+            };
+          }
+          return effective;
+        },
+
+        get knowledgeIsSelectedFileDirty() {
+          const fileId = this.knowledgeSelectedFileId;
+          if (!fileId) return false;
+          const stored = typeof this.knowledgeState.files[fileId] === 'string' ? this.knowledgeState.files[fileId] : '';
+          const draft = typeof this.knowledgeDrafts[fileId] === 'string' ? this.knowledgeDrafts[fileId] : stored;
+          return draft !== stored;
+        },
+
+        get geerSourceLabel() {
+          return this.geerSource === 'greech' ? this.t('sourceGreech') : this.t('sourceCustom');
+        },
+
+        defaultKnowledgeSeed() {
+          const tree = [
+            {
+              id: 'path-life',
+              type: 'path',
+              parentId: null,
+              title: 'Կյանք',
+              order: 0,
+              permissions: { inherit: false, read: true, write: true, admin: true },
+              collapsed: false,
+            },
+            {
+              id: 'path-art',
+              type: 'path',
+              parentId: 'path-life',
+              title: 'Արվեստ',
+              order: 0,
+              permissions: { inherit: true },
+              collapsed: false,
+            },
+            {
+              id: 'path-films',
+              type: 'path',
+              parentId: 'path-art',
+              title: 'Ֆիլմեր',
+              order: 0,
+              permissions: { inherit: true },
+              collapsed: false,
+            },
+            {
+              id: 'file-pulp-fiction',
+              type: 'file',
+              parentId: 'path-films',
+              title: 'Pulp Fiction',
+              order: 0,
+              tags: ['crime', 'classic'],
+              permissions: { inherit: true },
+              collapsed: false,
+            },
+            {
+              id: 'file-taxi-driver',
+              type: 'file',
+              parentId: 'path-films',
+              title: 'Taxi Driver',
+              order: 1,
+              tags: ['drama'],
+              permissions: { inherit: true },
+              collapsed: false,
+            },
+          ];
+          const files = {
+            'file-pulp-fiction': '# Pulp Fiction\n\n- Director: Quentin Tarantino\n- Year: 1994',
+            'file-taxi-driver': '# Taxi Driver\n\n- Director: Martin Scorsese\n- Year: 1976',
+          };
+          return {
+            schemaVersion: this.knowledgeSchemaVersion,
+            tree,
+            files,
+            uiState: {
+              selectedNodeId: 'path-films',
+              openPanels: { tree: true, canvas: true, editor: true },
+              activeTheme: document.documentElement.getAttribute('data-theme') || 'black',
+            },
+          };
+        },
+
+        loadKnowledgeDemoScenario() {
+          this.knowledgeState = this.defaultKnowledgeSeed();
+          this.knowledgeDrafts = {};
+          this.knowledgeState.uiState.activeTheme = 'black';
+          this.knowledgeState.uiState.selectedNodeId = 'file-pulp-fiction';
+          this.knowledgeState.files['file-pulp-fiction'] = '# Pulp Fiction\n\n- Director: Quentin Tarantino\n- Notes: Demo-ready markdown content.';
+          this.knowledgeState.files['file-taxi-driver'] = '# Taxi Driver\n\n- Director: Martin Scorsese\n- Notes: Reordered against sibling during demo.';
+          const films = this.knowledgeState.tree.find((node) => node.id === 'path-films');
+          if (films) films.collapsed = false;
+          this.reorderKnowledgeWithinParent('file-taxi-driver', -1);
+          this.applyKnowledgeTheme();
+          this.saveKnowledge();
+          this.persistKnowledgeDrafts();
+          this.pushKnowledgeToast(this.t('knowledgeSaved'), 'success');
+        },
+
+        buildKnowledgeValidationScenario(kind) {
+          if (kind === 'deep') {
+            const tree = [{
+              id: 'path-life',
+              type: 'path',
+              parentId: null,
+              title: 'Կյանք',
+              order: 0,
+              permissions: { inherit: false, read: true, write: true, admin: true },
+              collapsed: false,
+            }];
+            const files = {};
+            let parentId = 'path-life';
+            for (let level = 1; level <= 7; level += 1) {
+              const pathId = `path-depth-${level}`;
+              const fileId = `file-depth-${level}`;
+              tree.push({
+                id: pathId,
+                type: 'path',
+                parentId,
+                title: `Level ${level}`,
+                order: 0,
+                permissions: { inherit: true },
+                collapsed: false,
+              });
+              tree.push({
+                id: fileId,
+                type: 'file',
+                parentId: pathId,
+                title: `Deep-${level}.md`,
+                order: 0,
+                tags: ['deep'],
+                permissions: { inherit: true },
+                collapsed: false,
+              });
+              files[fileId] = `# Level ${level}\n\nDeep nesting validation.`;
+              parentId = pathId;
+            }
+            return { tree, files, selectedNodeId: 'path-depth-4' };
+          }
+
+          if (kind === 'siblings') {
+            const tree = [
+              {
+                id: 'path-life',
+                type: 'path',
+                parentId: null,
+                title: 'Կյանք',
+                order: 0,
+                permissions: { inherit: false, read: true, write: true, admin: true },
+                collapsed: false,
+              },
+              {
+                id: 'path-shelf',
+                type: 'path',
+                parentId: 'path-life',
+                title: 'Shelf',
+                order: 0,
+                permissions: { inherit: true },
+                collapsed: false,
+              },
+            ];
+            const files = {};
+            for (let i = 0; i < 20; i += 1) {
+              const id = `file-sib-${i + 1}`;
+              tree.push({
+                id,
+                type: 'file',
+                parentId: 'path-shelf',
+                title: `Item ${i + 1}.md`,
+                order: i,
+                tags: ['siblings'],
+                permissions: { inherit: true },
+                collapsed: false,
+              });
+              files[id] = `# Item ${i + 1}\n\nMany sibling nodes.`;
+            }
+            for (let i = 0; i < 8; i += 1) {
+              tree.push({
+                id: `path-sib-${i + 1}`,
+                type: 'path',
+                parentId: 'path-shelf',
+                title: `Folder ${i + 1}`,
+                order: 20 + i,
+                permissions: { inherit: true },
+                collapsed: false,
+              });
+            }
+            return { tree, files, selectedNodeId: 'path-shelf' };
+          }
+
+          if (kind === 'permissions') {
+            const tree = [
+              {
+                id: 'path-life',
+                type: 'path',
+                parentId: null,
+                title: 'Կյանք',
+                order: 0,
+                permissions: { inherit: false, read: true, write: true, admin: true },
+                collapsed: false,
+              },
+              {
+                id: 'path-read',
+                type: 'path',
+                parentId: 'path-life',
+                title: 'ReadBranch',
+                order: 0,
+                permissions: { inherit: false, read: true, write: false, admin: false },
+                collapsed: false,
+              },
+              {
+                id: 'path-write',
+                type: 'path',
+                parentId: 'path-life',
+                title: 'WriteBranch',
+                order: 1,
+                permissions: { inherit: false, read: true, write: true, admin: false },
+                collapsed: false,
+              },
+              {
+                id: 'file-read-a',
+                type: 'file',
+                parentId: 'path-read',
+                title: 'ReadA.md',
+                order: 0,
+                permissions: { inherit: true },
+                collapsed: false,
+              },
+              {
+                id: 'file-read-override',
+                type: 'file',
+                parentId: 'path-read',
+                title: 'OverrideAdmin.md',
+                order: 1,
+                permissions: { inherit: false, read: true, write: true, admin: true },
+                collapsed: false,
+              },
+              {
+                id: 'file-write-a',
+                type: 'file',
+                parentId: 'path-write',
+                title: 'WriteA.md',
+                order: 0,
+                permissions: { inherit: true },
+                collapsed: false,
+              },
+            ];
+            const files = {
+              'file-read-a': '# Read only\n',
+              'file-read-override': '# Override admin\n',
+              'file-write-a': '# Write branch\n',
+            };
+            return { tree, files, selectedNodeId: 'file-read-override' };
+          }
+
+          const canonical = this.defaultKnowledgeSeed();
+          return {
+            tree: canonical.tree,
+            files: canonical.files,
+            selectedNodeId: canonical.uiState?.selectedNodeId || 'path-films',
+          };
+        },
+
+        applyKnowledgeValidationScenario(kind) {
+          const scenarioKind = typeof kind === 'string' ? kind : 'canonical';
+          const scenario = this.buildKnowledgeValidationScenario(scenarioKind);
+          const activeTheme = this.knowledgeState?.uiState?.activeTheme || 'black';
+          this.stopKnowledgeValidationShuffle();
+          this.knowledgeValidationScenario = scenarioKind;
+          this.knowledgeState = {
+            tree: Array.isArray(scenario.tree) ? scenario.tree : [],
+            files: scenario.files && typeof scenario.files === 'object' ? scenario.files : {},
+            uiState: {
+              selectedNodeId: scenario.selectedNodeId || 'path-life',
+              openPanels: { tree: true, canvas: true, editor: true },
+              activeTheme,
+            },
+          };
+          this.knowledgeDrafts = {};
+          this.knowledgeOrbitFocusNodeId = this.knowledgeState.uiState.selectedNodeId || 'path-life';
+          this.knowledgeOrbitLockNodeId = '';
+          this.knowledgeOrbitViewMode = 'global';
+          this.knowledgeOrbitUserZoom = 1;
+          this.knowledgeOrbitTargetZoom = 1;
+          this.knowledgeOrbitRelayoutBoostFrames = 22;
+          this.saveKnowledge();
+          this.persistKnowledgeDrafts();
+        },
+
+        stopKnowledgeValidationShuffle() {
+          this.knowledgeValidationShuffleActive = false;
+          this.knowledgeValidationShuffleStep = 0;
+          if (this.knowledgeValidationShuffleTimer) {
+            window.clearTimeout(this.knowledgeValidationShuffleTimer);
+            this.knowledgeValidationShuffleTimer = 0;
+          }
+        },
+
+        toggleKnowledgeValidationShuffle() {
+          if (this.knowledgeValidationShuffleActive) {
+            this.stopKnowledgeValidationShuffle();
+            return;
+          }
+          this.knowledgeValidationShuffleActive = true;
+          this.knowledgeValidationShuffleStep = 0;
+
+          const runStep = () => {
+            if (!this.knowledgeValidationShuffleActive) return;
+            const selected = this.knowledgeNodesById.get(this.knowledgeState.uiState.selectedNodeId);
+            const targetPath = selected && selected.type === 'path'
+              ? selected
+              : (this.knowledgeNodesById.get('path-films') || this.knowledgeNodesById.get('path-shelf') || this.knowledgeNodesById.get('path-life'));
+            if (!targetPath) {
+              this.stopKnowledgeValidationShuffle();
+              return;
+            }
+
+            const files = this.sortedKnowledgeSiblings(targetPath.id, '').filter((node) => node.type === 'file');
+            if (files.length > 1) {
+              const first = files[0];
+              const last = files[files.length - 1];
+              first.order = files.length - 1;
+              last.order = 0;
+              this.reindexKnowledgeOrders(targetPath.id);
+              this.knowledgeOrbitRelayoutBoostFrames = 16;
+              this.saveKnowledge();
+            }
+
+            this.knowledgeValidationShuffleStep += 1;
+            if (this.knowledgeValidationShuffleStep >= 10) {
+              this.stopKnowledgeValidationShuffle();
+              return;
+            }
+            this.knowledgeValidationShuffleTimer = window.setTimeout(runStep, 340);
+          };
+
+          runStep();
+        },
+
+        bootstrapKnowledgeLocalState() {
+          this.loadKnowledgeState();
+          this.loadKnowledgeDrafts();
+          for (const fileId of Object.keys(this.knowledgeDrafts)) {
+            if (!this.knowledgeNodesById.has(fileId)) {
+              delete this.knowledgeDrafts[fileId];
+            }
+          }
+          this.persistKnowledgeDrafts();
+          if (!this.knowledgeState.uiState.selectedNodeId && this.knowledgeVisibleRoots[0]) {
+            this.knowledgeState.uiState.selectedNodeId = this.knowledgeVisibleRoots[0].id;
+          }
+          if (!this.knowledgeState.uiState.activeTheme) {
+            this.knowledgeState.uiState.activeTheme = document.documentElement.getAttribute('data-theme') || 'black';
+          }
+          this.applyKnowledgeTheme();
+          this.syncKnowledgeStores();
+        },
+
+        migrateKnowledgePayload(parsed) {
+          if (!parsed || typeof parsed !== 'object') return this.defaultKnowledgeSeed();
+          const sourceVersion = Number(parsed.schemaVersion) || 0;
+          if (sourceVersion === this.knowledgeSchemaVersion) return parsed;
+          // Migration hook for future schema updates.
+          if (sourceVersion > 0 && sourceVersion < this.knowledgeSchemaVersion) {
+            return {
+              ...this.defaultKnowledgeSeed(),
+              tree: Array.isArray(parsed.tree) ? parsed.tree : this.defaultKnowledgeSeed().tree,
+              files: parsed.files && typeof parsed.files === 'object' ? parsed.files : {},
+              uiState: parsed.uiState && typeof parsed.uiState === 'object'
+                ? {
+                  ...this.defaultKnowledgeSeed().uiState,
+                  ...parsed.uiState,
+                }
+                : this.defaultKnowledgeSeed().uiState,
+            };
+          }
+          return this.defaultKnowledgeSeed();
+        },
+
+        loadKnowledgeState() {
+          try {
+            const raw = localStorage.getItem(this.knowledgeStorageKey);
+            if (!raw) {
+              this.knowledgeState = this.defaultKnowledgeSeed();
+              this.saveKnowledge();
+              return;
+            }
+            const parsed = this.migrateKnowledgePayload(JSON.parse(raw));
+            this.knowledgeState = {
+              tree: Array.isArray(parsed.tree)
+                ? parsed.tree.map((node) => ({
+                  ...node,
+                  tags: Array.isArray(node?.tags) ? node.tags.filter((tag) => typeof tag === 'string') : [],
+                  permissions: node?.permissions && typeof node.permissions === 'object'
+                    ? node.permissions
+                    : { inherit: true },
+                }))
+                : [],
+              files: parsed.files && typeof parsed.files === 'object' ? parsed.files : {},
+              uiState: {
+                selectedNodeId: typeof parsed.uiState?.selectedNodeId === 'string' ? parsed.uiState.selectedNodeId : '',
+                openPanels: parsed.uiState?.openPanels || { tree: true, canvas: true, editor: true },
+                activeTheme: typeof parsed.uiState?.activeTheme === 'string' ? parsed.uiState.activeTheme : 'black',
+              },
+            };
+            this.saveKnowledge();
+          } catch {
+            this.knowledgeState = this.defaultKnowledgeSeed();
+            this.saveKnowledge();
+          }
+        },
+
+        saveKnowledge() {
+          const payload = {
+            schemaVersion: this.knowledgeSchemaVersion,
+            tree: this.knowledgeState.tree,
+            files: this.knowledgeState.files,
+            uiState: this.knowledgeState.uiState,
+          };
+          localStorage.setItem(this.knowledgeStorageKey, JSON.stringify(payload));
+          this.knowledgeLastSavedAtIso = new Date().toISOString();
+          this.syncKnowledgeStores();
+        },
+
+        loadKnowledgeDrafts() {
+          try {
+            const raw = localStorage.getItem(this.knowledgeDraftStorageKey);
+            if (!raw) {
+              this.knowledgeDrafts = {};
+              return;
+            }
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') {
+              this.knowledgeDrafts = {};
+              return;
+            }
+            this.knowledgeDrafts = Object.fromEntries(
+              Object.entries(parsed).filter(([, value]) => typeof value === 'string'),
+            );
+          } catch {
+            this.knowledgeDrafts = {};
+          }
+        },
+
+        persistKnowledgeDrafts() {
+          localStorage.setItem(this.knowledgeDraftStorageKey, JSON.stringify(this.knowledgeDrafts));
+          this.syncKnowledgeStores();
+        },
+
+        ensureKnowledgeStores() {
+          if (typeof Alpine === 'undefined' || typeof Alpine.store !== 'function') return;
+          if (!Alpine.store('treeStore')) {
+            Alpine.store('treeStore', {
+              tree: [],
+              selectedNodeId: '',
+              draggingNodeId: '',
+            });
+          }
+          if (!Alpine.store('editorStore')) {
+            Alpine.store('editorStore', {
+              selectedFileId: '',
+              mode: 'split',
+              isDirty: false,
+              lastSavedAt: '',
+            });
+          }
+          if (!Alpine.store('uiStore')) {
+            Alpine.store('uiStore', {
+              theme: 'black',
+              mobileTab: 'tree',
+              search: '',
+              error: '',
+            });
+          }
+        },
+
+        syncKnowledgeStores() {
+          if (typeof Alpine === 'undefined' || typeof Alpine.store !== 'function') return;
+          this.ensureKnowledgeStores();
+          const treeStore = Alpine.store('treeStore');
+          const editorStore = Alpine.store('editorStore');
+          const uiStore = Alpine.store('uiStore');
+          if (treeStore) {
+            treeStore.tree = this.knowledgeState.tree;
+            treeStore.selectedNodeId = this.knowledgeState.uiState.selectedNodeId;
+            treeStore.draggingNodeId = this.knowledgeDragState.draggingNodeId;
+          }
+          if (editorStore) {
+            editorStore.selectedFileId = this.knowledgeSelectedFileId;
+            editorStore.mode = this.knowledgeEditorMode;
+            editorStore.isDirty = this.knowledgeIsSelectedFileDirty;
+            editorStore.lastSavedAt = this.knowledgeLastSavedAtIso;
+          }
+          if (uiStore) {
+            uiStore.theme = this.knowledgeState.uiState.activeTheme;
+            uiStore.mobileTab = this.knowledgeMobileTab;
+            uiStore.search = this.knowledgeSearch;
+            uiStore.error = this.error;
+          }
+        },
+
+        emitKnowledgeEvent(name, detail) {
+          try {
+            window.dispatchEvent(new CustomEvent(name, {
+              detail: {
+                ...(detail || {}),
+                atMs: Date.now(),
+              },
+            }));
+          } catch {
+            // ignore event dispatch failures
+          }
+        },
+
+        pushKnowledgeToast(message, type) {
+          const text = String(message || '').trim();
+          if (!text) return;
+          const toastType = type === 'success' ? 'success' : (type === 'info' ? 'info' : 'error');
+          const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          this.knowledgeToasts.push({ id, text, type: toastType });
+          window.setTimeout(() => {
+            this.knowledgeToasts = this.knowledgeToasts.filter((item) => item.id !== id);
+          }, 2600);
+        },
+
+        runKnowledgeQaSuite() {
+          const checks = [];
+          const addCheck = (name, ok, details) => {
+            checks.push({ name, ok, details: details || '' });
+          };
+
+          const tree = Array.isArray(this.knowledgeState.tree) ? this.knowledgeState.tree : [];
+          const ids = new Set();
+          let duplicateId = '';
+          for (const node of tree) {
+            if (ids.has(node.id)) {
+              duplicateId = node.id;
+              break;
+            }
+            ids.add(node.id);
+          }
+          addCheck('unique_ids', !duplicateId, duplicateId ? `duplicate: ${duplicateId}` : '');
+
+          const missingParentNode = tree.find((node) => node.parentId && !ids.has(node.parentId)) || null;
+          addCheck('parent_exists', !missingParentNode, missingParentNode ? `node: ${missingParentNode.id}` : '');
+
+          const cycleCheck = (() => {
+            for (const node of tree) {
+              const seen = new Set([node.id]);
+              let cursor = node;
+              let guard = 0;
+              while (cursor.parentId && guard < 80) {
+                if (seen.has(cursor.parentId)) {
+                  return { ok: false, nodeId: node.id };
+                }
+                seen.add(cursor.parentId);
+                cursor = tree.find((item) => item.id === cursor.parentId) || { parentId: null };
+                guard += 1;
+              }
+            }
+            return { ok: true, nodeId: '' };
+          })();
+          addCheck('acyclic_tree', cycleCheck.ok, cycleCheck.ok ? '' : `node: ${cycleCheck.nodeId}`);
+
+          const byParent = new Map();
+          for (const node of tree) {
+            const key = node.parentId || '__root__';
+            if (!byParent.has(key)) byParent.set(key, []);
+            byParent.get(key).push(node);
+          }
+          let orderIssue = '';
+          for (const [parentId, siblings] of byParent.entries()) {
+            const orders = siblings.map((node) => Number(node.order || 0)).sort((a, b) => a - b);
+            const contiguous = orders.every((value, index) => value === index);
+            if (!contiguous) {
+              orderIssue = `parent=${parentId} orders=${orders.join(',')}`;
+              break;
+            }
+          }
+          addCheck('sibling_order_contiguous', !orderIssue, orderIssue);
+
+          const fileNodes = tree.filter((node) => node.type === 'file');
+          const missingContent = fileNodes.find((node) => typeof this.knowledgeState.files[node.id] !== 'string') || null;
+          addCheck('file_content_binding', !missingContent, missingContent ? `file: ${missingContent.id}` : '');
+
+          const migrated = this.migrateKnowledgePayload({
+            schemaVersion: this.knowledgeSchemaVersion - 1,
+            tree: this.knowledgeState.tree,
+            files: this.knowledgeState.files,
+            uiState: this.knowledgeState.uiState,
+          });
+          const migrationOk = migrated && Array.isArray(migrated.tree);
+          addCheck('migration_hook', Boolean(migrationOk), migrationOk ? '' : 'migrate returned invalid payload');
+
+          const deepScenario = this.buildKnowledgeValidationScenario('deep');
+          const deepDepth = (() => {
+            const byId = new Map((deepScenario.tree || []).map((node) => [node.id, node]));
+            let maxDepth = 0;
+            (deepScenario.tree || []).forEach((node) => {
+              let cursor = node;
+              let depth = 0;
+              let guard = 0;
+              while (cursor && cursor.parentId && guard < 80) {
+                cursor = byId.get(cursor.parentId) || null;
+                depth += 1;
+                guard += 1;
+              }
+              if (depth > maxDepth) maxDepth = depth;
+            });
+            return maxDepth;
+          })();
+          addCheck('scenario_deep_nesting', deepDepth >= 6, `depth=${deepDepth}`);
+
+          const siblingsScenario = this.buildKnowledgeValidationScenario('siblings');
+          const siblingCount = (siblingsScenario.tree || []).filter((node) => node.parentId === 'path-shelf').length;
+          addCheck('scenario_many_siblings', siblingCount >= 20, `siblings=${siblingCount}`);
+
+          const permissionsScenario = this.buildKnowledgeValidationScenario('permissions');
+          const hasOverride = (permissionsScenario.tree || []).some((node) => node.permissions && node.permissions.inherit === false);
+          addCheck('scenario_permission_mixed', hasOverride, hasOverride ? '' : 'no explicit override found');
+
+          const failed = checks.filter((item) => !item.ok);
+          const ok = failed.length === 0;
+          this.debugText = JSON.stringify({
+            kind: 'knowledge.qa.report',
+            ok,
+            generatedAt: new Date().toISOString(),
+            checks,
+          }, null, 2);
+          this.pushKnowledgeToast(ok ? this.t('knowledgeQaPassed') : this.t('knowledgeQaFailed'), ok ? 'success' : 'error');
+        },
+
+        handleKnowledgeKeyboardShortcuts(event) {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return;
+          const isSave = (event.metaKey || event.ctrlKey) && String(event.key || '').toLowerCase() === 's';
+          if (isSave) {
+            event.preventDefault();
+            if (this.knowledgeSelectedFileId) {
+              this.saveKnowledgeSelectedFileNow();
+              this.pushKnowledgeToast(this.t('knowledgeSaved'), 'success');
+            } else {
+              this.saveKnowledge();
+              this.pushKnowledgeToast(this.t('knowledgeSaved'), 'success');
+            }
+            return;
+          }
+          const isDelete = !event.metaKey && !event.ctrlKey && !event.altKey && (event.key === 'Delete' || event.key === 'Backspace');
+          if (isDelete && selected.id !== 'path-life') {
+            event.preventDefault();
+            this.deleteKnowledgeNode(selected.id);
+          }
+        },
+
+        selectKnowledgeRowByOffset(offset) {
+          const rows = this.knowledgeTreeRows;
+          if (!rows.length) return;
+          const currentIndex = this.knowledgeSelectedRowIndex;
+          const safeCurrent = currentIndex < 0 ? 0 : currentIndex;
+          const nextIndex = Math.max(0, Math.min(rows.length - 1, safeCurrent + offset));
+          const next = rows[nextIndex];
+          if (!next) return;
+          this.selectKnowledgeNode(next.node.id);
+        },
+
+        scheduleKnowledgeSave() {
+          if (this.knowledgeAutosaveTimer) {
+            window.clearTimeout(this.knowledgeAutosaveTimer);
+          }
+          this.knowledgeAutosaveTimer = window.setTimeout(() => {
+            this.saveKnowledge();
+            this.knowledgeAutosaveTimer = null;
+          }, 220);
+        },
+
+        scheduleKnowledgeDraftSave() {
+          if (this.knowledgeDraftAutosaveTimer) {
+            window.clearTimeout(this.knowledgeDraftAutosaveTimer);
+          }
+          this.knowledgeDraftAutosaveTimer = window.setTimeout(() => {
+            this.persistKnowledgeDrafts();
+            this.knowledgeDraftAutosaveTimer = null;
+          }, 220);
+        },
+
+        resolveKnowledgePermissions(nodeId) {
+          const chain = [];
+          let cursor = this.knowledgeNodesById.get(nodeId) || null;
+          let guard = 0;
+          while (cursor && guard < 40) {
+            chain.push(cursor);
+            cursor = cursor.parentId ? this.knowledgeNodesById.get(cursor.parentId) : null;
+            guard += 1;
+          }
+          const defaults = { read: true, write: false, admin: false };
+          for (let i = chain.length - 1; i >= 0; i -= 1) {
+            const permissions = chain[i].permissions || {};
+            if (permissions.inherit !== false) continue;
+            return {
+              read: Boolean(permissions.read),
+              write: Boolean(permissions.write),
+              admin: Boolean(permissions.admin),
+            };
+          }
+          return defaults;
+        },
+
+        selectKnowledgeNode(nodeId) {
+          if (!this.knowledgeNodesById.has(nodeId)) return;
+          this.knowledgeState.uiState.selectedNodeId = nodeId;
+          this.knowledgeOrbitFocusNodeId = nodeId;
+          if (!this.knowledgeOrbitLockNodeId) {
+            this.knowledgeOrbitTargetZoom = 1.06;
+          }
+          this.saveKnowledge();
+          this.emitKnowledgeEvent('node:selected', { nodeId });
+        },
+
+        setKnowledgeMobileTab(tabKey) {
+          this.knowledgeMobileTab = ['tree', 'canvas', 'editor'].includes(tabKey) ? tabKey : 'tree';
+          this.syncKnowledgeStores();
+        },
+
+        setKnowledgeEditorMode(mode) {
+          this.knowledgeEditorMode = ['write', 'preview', 'split'].includes(mode) ? mode : 'split';
+          this.syncKnowledgeStores();
+        },
+
+        isKnowledgeNodeSelected(nodeId) {
+          return this.knowledgeState.uiState.selectedNodeId === nodeId;
+        },
+
+        permissionBadgeForNode(nodeId) {
+          const effective = this.resolveKnowledgePermissions(nodeId);
+          const tokens = [];
+          if (effective.read) tokens.push('R');
+          if (effective.write) tokens.push('W');
+          if (effective.admin) tokens.push('A');
+          return tokens.length ? tokens.join('/') : '-';
+        },
+
+        permissionBadgeClassForNode(nodeId) {
+          const effective = this.resolveKnowledgePermissions(nodeId);
+          if (effective.admin) return 'badge-primary';
+          if (effective.write) return 'badge-secondary';
+          if (effective.read) return 'badge-accent';
+          return 'badge-ghost';
+        },
+
+        activateKnowledgeNode(nodeId) {
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          this.selectKnowledgeNode(nodeId);
+          if (node.type === 'path') {
+            node.collapsed = !node.collapsed;
+            this.saveKnowledge();
+            return;
+          }
+          this.setKnowledgeMobileTab('editor');
+        },
+
+        nextKnowledgeOrder(parentId) {
+          const siblings = this.knowledgeState.tree.filter((node) => (node.parentId || null) === (parentId || null));
+          return siblings.length;
+        },
+
+        sortedKnowledgeSiblings(parentId, excludedId) {
+          return this.knowledgeState.tree
+            .filter((node) => (node.parentId || null) === (parentId || null) && node.id !== excludedId)
+            .sort((left, right) => (left.order || 0) - (right.order || 0));
+        },
+
+        reindexKnowledgeOrders(parentId) {
+          const siblings = this.sortedKnowledgeSiblings(parentId, '');
+          siblings.forEach((node, index) => {
+            node.order = index;
+          });
+        },
+
+        reorderKnowledgeWithinParent(nodeId, delta) {
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          const parentId = node.parentId || null;
+          const siblings = this.sortedKnowledgeSiblings(parentId, '').sort((left, right) => (left.order || 0) - (right.order || 0));
+          const index = siblings.findIndex((item) => item.id === nodeId);
+          if (index < 0) return;
+          const nextIndex = index + delta;
+          if (nextIndex < 0 || nextIndex >= siblings.length) return;
+          const [moved] = siblings.splice(index, 1);
+          siblings.splice(nextIndex, 0, moved);
+          siblings.forEach((item, orderIndex) => {
+            item.order = orderIndex;
+          });
+          this.selectKnowledgeNode(nodeId);
+          this.saveKnowledge();
+          this.emitKnowledgeEvent('node:moved', {
+            nodeId,
+            mode: 'reorder',
+            parentId: parentId || null,
+            order: this.knowledgeNodesById.get(nodeId)?.order ?? 0,
+          });
+        },
+
+        onKnowledgeDragStart(nodeId, event) {
+          this.knowledgeDragState.draggingNodeId = nodeId;
+          this.syncKnowledgeStores();
+          if (event?.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', nodeId);
+          }
+        },
+
+        onKnowledgeDragEnd() {
+          this.knowledgeDragState.draggingNodeId = '';
+          this.knowledgeDropHint.nodeId = '';
+          this.knowledgeDropHint.position = '';
+          this.syncKnowledgeStores();
+        },
+
+        resolveKnowledgeDropPosition(overNodeId, event) {
+          const overNode = this.knowledgeNodesById.get(overNodeId);
+          if (!overNode) return 'after';
+          const target = event?.currentTarget;
+          if (!target || typeof target.getBoundingClientRect !== 'function') return 'after';
+          const rect = target.getBoundingClientRect();
+          const offsetY = event.clientY - rect.top;
+          const ratio = rect.height > 0 ? (offsetY / rect.height) : 0.5;
+          if (overNode.type === 'path' && ratio >= 0.33 && ratio <= 0.66) return 'inside';
+          if (ratio < 0.5) return 'before';
+          return 'after';
+        },
+
+        onKnowledgeDragOver(overNodeId, event) {
+          if (!this.knowledgeDragState.draggingNodeId) return;
+          const position = this.resolveKnowledgeDropPosition(overNodeId, event);
+          this.knowledgeDropHint.nodeId = overNodeId;
+          this.knowledgeDropHint.position = position;
+          if (event?.dataTransfer) {
+            event.dataTransfer.dropEffect = 'move';
+          }
+        },
+
+        onKnowledgeDragLeave(overNodeId, event) {
+          if (!this.knowledgeDropHint.nodeId) return;
+          const related = event?.relatedTarget;
+          if (related && event?.currentTarget && event.currentTarget.contains(related)) return;
+          if (this.knowledgeDropHint.nodeId === overNodeId) {
+            this.knowledgeDropHint.nodeId = '';
+            this.knowledgeDropHint.position = '';
+          }
+        },
+
+        onKnowledgeDrop(overNodeId, event) {
+          const sourceId = this.knowledgeDragState.draggingNodeId
+            || event?.dataTransfer?.getData('text/plain')
+            || '';
+          if (!sourceId) return;
+          const position = this.knowledgeDropHint.nodeId === overNodeId && this.knowledgeDropHint.position
+            ? this.knowledgeDropHint.position
+            : this.resolveKnowledgeDropPosition(overNodeId, event);
+          this.applyKnowledgeDrop(sourceId, overNodeId, position);
+          this.onKnowledgeDragEnd();
+        },
+
+        applyKnowledgeDrop(sourceId, overNodeId, position) {
+          const sourceNode = this.knowledgeNodesById.get(sourceId);
+          const overNode = this.knowledgeNodesById.get(overNodeId);
+          if (!sourceNode || !overNode) return;
+          if (sourceId === overNodeId) return;
+
+          let targetParentId = null;
+          let targetIndex = 0;
+          if (position === 'inside') {
+            if (overNode.type !== 'path') return;
+            targetParentId = overNode.id;
+            targetIndex = this.sortedKnowledgeSiblings(targetParentId, sourceId).length;
+          } else {
+            targetParentId = overNode.parentId || null;
+            const siblings = this.sortedKnowledgeSiblings(targetParentId, sourceId);
+            const overIndex = siblings.findIndex((node) => node.id === overNode.id);
+            if (overIndex < 0) return;
+            targetIndex = position === 'before' ? overIndex : overIndex + 1;
+          }
+
+          if (targetParentId === sourceNode.id) {
+            this.error = this.t('knowledgeErrorMoveInvalid');
+            this.pushKnowledgeToast(this.error, 'error');
+            return;
+          }
+          if (targetParentId && this.isKnowledgeDescendant(targetParentId, sourceNode.id)) {
+            this.error = this.t('knowledgeErrorMoveInvalid');
+            this.pushKnowledgeToast(this.error, 'error');
+            return;
+          }
+
+          const oldParentId = sourceNode.parentId || null;
+          sourceNode.parentId = targetParentId;
+          const siblingsAfterMove = this.sortedKnowledgeSiblings(targetParentId, sourceId);
+          const safeIndex = Math.max(0, Math.min(targetIndex, siblingsAfterMove.length));
+          siblingsAfterMove.splice(safeIndex, 0, sourceNode);
+          siblingsAfterMove.forEach((node, index) => {
+            node.order = index;
+          });
+          if (oldParentId !== targetParentId) {
+            this.reindexKnowledgeOrders(oldParentId);
+          }
+          this.selectKnowledgeNode(sourceId);
+          this.saveKnowledge();
+          this.emitKnowledgeEvent('node:moved', {
+            nodeId: sourceId,
+            mode: 'drag-drop',
+            parentId: targetParentId || null,
+            order: sourceNode.order,
+          });
+        },
+
+        generateKnowledgeId(prefix) {
+          return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        },
+
+        renameKnowledgeNode(nodeId) {
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          const nextTitle = (window.prompt(this.t('knowledgePromptRename'), node.title || '') || '').trim();
+          if (!nextTitle) return;
+          node.title = nextTitle;
+          this.saveKnowledge();
+        },
+
+        deleteKnowledgeNode(nodeId) {
+          if (nodeId === 'path-life') {
+            this.error = this.t('knowledgeErrorDeleteRoot');
+            this.pushKnowledgeToast(this.error, 'error');
+            return;
+          }
+          if (!window.confirm(this.t('knowledgeDeleteConfirm'))) {
+            return;
+          }
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          const ids = new Set([nodeId]);
+          let changed = true;
+          while (changed) {
+            changed = false;
+            for (const item of this.knowledgeState.tree) {
+              if (!ids.has(item.id) && item.parentId && ids.has(item.parentId)) {
+                ids.add(item.id);
+                changed = true;
+              }
+            }
+          }
+          this.knowledgeState.tree = this.knowledgeState.tree.filter((item) => !ids.has(item.id));
+          for (const id of ids) {
+            delete this.knowledgeState.files[id];
+            delete this.knowledgeDrafts[id];
+          }
+          if (ids.has(this.knowledgeState.uiState.selectedNodeId)) {
+            const fallback = this.knowledgeState.tree[0];
+            this.knowledgeState.uiState.selectedNodeId = fallback ? fallback.id : '';
+          }
+          this.saveKnowledge();
+          this.persistKnowledgeDrafts();
+        },
+
+        duplicateKnowledgeNode(nodeId) {
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          if (node.type === 'file') {
+            const id = this.generateKnowledgeId('file');
+            const duplicate = {
+              ...node,
+              id,
+              title: `${node.title} Copy`,
+              order: this.nextKnowledgeOrder(node.parentId || null),
+            };
+            this.knowledgeState.tree.push(duplicate);
+            this.knowledgeState.files[id] = this.knowledgeState.files[node.id] || '';
+            if (typeof this.knowledgeDrafts[node.id] === 'string') {
+              this.knowledgeDrafts[id] = this.knowledgeDrafts[node.id];
+            }
+            this.selectKnowledgeNode(id);
+            this.saveKnowledge();
+            this.persistKnowledgeDrafts();
+            return;
+          }
+
+          const toClone = [];
+          const queue = [node];
+          while (queue.length > 0) {
+            const current = queue.shift();
+            if (!current) continue;
+            toClone.push(current);
+            const children = this.knowledgeState.tree
+              .filter((item) => item.parentId === current.id)
+              .sort((left, right) => (left.order || 0) - (right.order || 0));
+            queue.push(...children);
+          }
+
+          const idMap = new Map();
+          for (const item of toClone) {
+            const prefix = item.type === 'path' ? 'path' : 'file';
+            idMap.set(item.id, this.generateKnowledgeId(prefix));
+          }
+
+          const cloned = toClone.map((item) => {
+            const newId = idMap.get(item.id);
+            const parentId = item.id === node.id
+              ? item.parentId
+              : (item.parentId ? idMap.get(item.parentId) : null);
+            return {
+              ...item,
+              id: newId,
+              parentId: parentId || null,
+              title: item.id === node.id ? `${item.title} Copy` : item.title,
+              order: item.id === node.id ? this.nextKnowledgeOrder(item.parentId || null) : item.order,
+            };
+          });
+
+          this.knowledgeState.tree.push(...cloned);
+          for (const item of toClone) {
+            if (item.type !== 'file') continue;
+            const newId = idMap.get(item.id);
+            this.knowledgeState.files[newId] = this.knowledgeState.files[item.id] || '';
+            if (typeof this.knowledgeDrafts[item.id] === 'string') {
+              this.knowledgeDrafts[newId] = this.knowledgeDrafts[item.id];
+            }
+          }
+          const rootDuplicateId = idMap.get(node.id);
+          this.selectKnowledgeNode(rootDuplicateId);
+          this.saveKnowledge();
+          this.persistKnowledgeDrafts();
+        },
+
+        isKnowledgeDescendant(targetId, maybeAncestorId) {
+          let cursor = this.knowledgeNodesById.get(targetId) || null;
+          let guard = 0;
+          while (cursor && guard < 60) {
+            if (cursor.parentId === maybeAncestorId) return true;
+            cursor = cursor.parentId ? this.knowledgeNodesById.get(cursor.parentId) : null;
+            guard += 1;
+          }
+          return false;
+        },
+
+        moveKnowledgeNode(nodeId) {
+          const node = this.knowledgeNodesById.get(nodeId);
+          if (!node) return;
+          const input = (window.prompt(this.t('knowledgePromptMove'), node.parentId || 'path-life') || '').trim();
+          if (!input) return;
+          const target = this.knowledgeNodesById.get(input);
+          if (!target || target.type !== 'path' || input === node.id || this.isKnowledgeDescendant(input, node.id)) {
+            this.error = this.t('knowledgeErrorMoveInvalid');
+            this.pushKnowledgeToast(this.error, 'error');
+            return;
+          }
+          node.parentId = target.id;
+          node.order = this.nextKnowledgeOrder(target.id);
+          this.saveKnowledge();
+          this.emitKnowledgeEvent('node:moved', {
+            nodeId,
+            mode: 'prompt-move',
+            parentId: target.id,
+            order: node.order,
+          });
+        },
+
+        createKnowledgePath() {
+          const parent = this.knowledgeSelectedNode && this.knowledgeSelectedNode.type === 'path'
+            ? this.knowledgeSelectedNode
+            : this.knowledgeNodesById.get('path-life');
+          const parentId = parent ? parent.id : null;
+          const siblings = this.knowledgeState.tree.filter((node) => (node.parentId || null) === parentId);
+          const nextOrder = siblings.length;
+          const id = `path-${Date.now()}`;
+          this.knowledgeState.tree.push({
+            id,
+            type: 'path',
+            parentId,
+            title: `Նոր Path ${nextOrder + 1}`,
+            order: nextOrder,
+            permissions: { inherit: true },
+            collapsed: false,
+          });
+          this.selectKnowledgeNode(id);
+          this.saveKnowledge();
+        },
+
+        createKnowledgeFile() {
+          const parent = this.knowledgeSelectedNode && this.knowledgeSelectedNode.type === 'path'
+            ? this.knowledgeSelectedNode
+            : this.knowledgeNodesById.get('path-life');
+          const parentId = parent ? parent.id : 'path-life';
+          const siblings = this.knowledgeState.tree.filter((node) => (node.parentId || null) === parentId);
+          const nextOrder = siblings.length;
+          const id = `file-${Date.now()}`;
+          this.knowledgeState.tree.push({
+            id,
+            type: 'file',
+            parentId,
+            title: `Նոր File ${nextOrder + 1}`,
+            order: nextOrder,
+            permissions: { inherit: true },
+            collapsed: false,
+          });
+          this.knowledgeState.files[id] = '# Hello\n';
+          this.selectKnowledgeNode(id);
+          this.saveKnowledge();
+        },
+
+        onKnowledgeMarkdownInput() {
+          this.scheduleKnowledgeDraftSave();
+        },
+
+        saveKnowledgeSelectedFileNow() {
+          const fileId = this.knowledgeSelectedFileId;
+          if (!fileId) return;
+          const draft = typeof this.knowledgeDrafts[fileId] === 'string' ? this.knowledgeDrafts[fileId] : '';
+          this.knowledgeState.files[fileId] = draft;
+          delete this.knowledgeDrafts[fileId];
+          this.saveKnowledge();
+          this.persistKnowledgeDrafts();
+          this.emitKnowledgeEvent('file:saved', { fileId });
+        },
+
+        setKnowledgePermissionOverride(enabled) {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return;
+          if (!enabled) {
+            selected.permissions = { inherit: true };
+            this.saveKnowledge();
+            return;
+          }
+          const effective = this.resolveKnowledgePermissions(selected.id);
+          selected.permissions = {
+            inherit: false,
+            read: Boolean(effective.read),
+            write: Boolean(effective.write),
+            admin: Boolean(effective.admin),
+          };
+          this.saveKnowledge();
+        },
+
+        setKnowledgePermissionFlag(flag, value) {
+          const selected = this.knowledgeSelectedNode;
+          if (!selected) return;
+          if (selected.permissions?.inherit !== false) return;
+          if (!['read', 'write', 'admin'].includes(flag)) return;
+          selected.permissions[flag] = Boolean(value);
+          if (flag === 'admin' && value) {
+            selected.permissions.read = true;
+            selected.permissions.write = true;
+          }
+          if ((flag === 'read' || flag === 'write') && !value && selected.permissions.admin) {
+            selected.permissions.admin = false;
+          }
+          this.saveKnowledge();
+        },
+
+        applyKnowledgeTheme() {
+          const theme = (this.knowledgeState.uiState.activeTheme || '').trim() || 'black';
+          document.documentElement.setAttribute('data-theme', theme);
+          this.knowledgeThemeTone = ['black', 'abyss', 'coffee'].includes(theme) ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-knowledge-tone', this.knowledgeThemeTone);
+          this.knowledgeState.uiState.activeTheme = theme;
+          try {
+            const raw = localStorage.getItem('hayos.settings');
+            const parsed = raw ? JSON.parse(raw) : {};
+            const next = {
+              ...(parsed && typeof parsed === 'object' ? parsed : {}),
+              theme,
+            };
+            localStorage.setItem('hayos.settings', JSON.stringify(next));
+          } catch {
+            // ignore settings storage sync failures
+          }
+          this.saveKnowledge();
+          this.emitKnowledgeEvent('theme:changed', { theme });
+        },
+
+        lockKnowledgeOrbitCenter(nodeId) {
+          if (!nodeId || !this.knowledgeNodesById.has(nodeId)) return;
+          const nextLock = this.knowledgeOrbitLockNodeId === nodeId ? '' : nodeId;
+          this.knowledgeOrbitLockNodeId = nextLock;
+          this.knowledgeOrbitFocusNodeId = nodeId;
+          this.knowledgeOrbitViewMode = nextLock ? 'focus' : this.knowledgeOrbitViewMode;
+          this.knowledgeOrbitTargetZoom = nextLock ? 1.18 : 1.06;
+        },
+
+        clampKnowledgeOrbitUserZoom(value) {
+          const numeric = Number.isFinite(value) ? value : 1;
+          return Math.min(1.95, Math.max(0.62, numeric));
+        },
+
+        setKnowledgeOrbitViewMode(mode) {
+          if (mode !== 'global' && mode !== 'focus') return;
+          this.knowledgeOrbitViewMode = mode;
+          if (mode === 'global') {
+            this.knowledgeOrbitLockNodeId = '';
+            this.knowledgeOrbitTargetZoom = this.clampKnowledgeOrbitUserZoom(this.knowledgeOrbitUserZoom);
+            return;
+          }
+          this.knowledgeOrbitFocusNodeId = this.knowledgeState.uiState.selectedNodeId || this.knowledgeOrbitFocusNodeId || 'path-life';
+        },
+
+        setKnowledgeOrbitQualityMode(mode) {
+          if (!['auto', 'high', 'medium', 'low'].includes(mode)) return;
+          this.knowledgeOrbitQualityMode = mode;
+          this.knowledgeOrbitFrameIndex = 0;
+        },
+
+        resetKnowledgeOrbitView() {
+          this.knowledgeOrbitLockNodeId = '';
+          this.knowledgeOrbitViewMode = 'global';
+          this.knowledgeOrbitUserZoom = 1;
+          this.knowledgeOrbitTargetZoom = 1;
+          this.knowledgeOrbitZoom = 1;
+        },
+
+        handleKnowledgeOrbitWheel(event) {
+          const deltaY = Number(event?.deltaY) || 0;
+          const direction = deltaY > 0 ? -1 : 1;
+          const step = direction > 0 ? 0.08 : -0.08;
+          const next = this.clampKnowledgeOrbitUserZoom(this.knowledgeOrbitUserZoom + step);
+          this.knowledgeOrbitUserZoom = next;
+        },
+
+        onKnowledgeOrbitTouchStart(event) {
+          const touches = event?.touches;
+          if (!touches || touches.length !== 2) return;
+          const dx = touches[0].clientX - touches[1].clientX;
+          const dy = touches[0].clientY - touches[1].clientY;
+          this.knowledgeOrbitTouchDistance = Math.hypot(dx, dy);
+          this.knowledgeOrbitTouchStartZoom = this.knowledgeOrbitUserZoom;
+        },
+
+        onKnowledgeOrbitTouchMove(event) {
+          const touches = event?.touches;
+          if (!touches || touches.length !== 2 || !this.knowledgeOrbitTouchDistance) return;
+          const dx = touches[0].clientX - touches[1].clientX;
+          const dy = touches[0].clientY - touches[1].clientY;
+          const distance = Math.hypot(dx, dy);
+          if (!distance) return;
+          const ratio = distance / this.knowledgeOrbitTouchDistance;
+          this.knowledgeOrbitUserZoom = this.clampKnowledgeOrbitUserZoom(this.knowledgeOrbitTouchStartZoom * ratio);
+        },
+
+        onKnowledgeOrbitTouchEnd() {
+          this.knowledgeOrbitTouchDistance = 0;
+          this.knowledgeOrbitTouchStartZoom = this.knowledgeOrbitUserZoom;
+        },
+
+        handleKnowledgeOrbitVisibility() {
+          if (document.visibilityState === 'hidden') {
+            this.knowledgeOrbitPausedAtMs = performance.now();
+            return;
+          }
+          if (this.knowledgeOrbitPausedAtMs && this.knowledgeOrbitEpochMs) {
+            const hiddenDuration = Math.max(0, performance.now() - this.knowledgeOrbitPausedAtMs);
+            this.knowledgeOrbitEpochMs += hiddenDuration;
+          }
+          this.knowledgeOrbitPausedAtMs = null;
+        },
+
+        computeKnowledgeOrbitLayoutSignature() {
+          const source = Array.isArray(this.knowledgeState?.tree) ? this.knowledgeState.tree : [];
+          return source
+            .map((node) => `${node.id}|${node.parentId || 'root'}|${Number(node.order) || 0}|${node.type}`)
+            .sort()
+            .join(';');
+        },
+
+        startKnowledgeOrbitAnimation() {
+          if (this.knowledgeOrbitAnimationFrameId) return;
+          const now = performance.now();
+          if (!this.knowledgeOrbitEpochMs) {
+            this.knowledgeOrbitEpochMs = now - (this.knowledgeOrbitClockSec * 1000);
+          }
+          const tick = (frameNow) => {
+            if (document.visibilityState !== 'hidden') {
+              this.knowledgeOrbitFrameIndex += 1;
+              const profile = this.knowledgeOrbitPerformanceProfile;
+              const updateEvery = Math.max(1, profile.updateIntervalFrames);
+              if ((this.knowledgeOrbitFrameIndex % updateEvery) === 0) {
+                this.knowledgeOrbitClockSec = Math.max(0, (frameNow - this.knowledgeOrbitEpochMs) / 1000);
+                const signature = this.computeKnowledgeOrbitLayoutSignature();
+                if (signature !== this.knowledgeOrbitLastLayoutSignature) {
+                  this.knowledgeOrbitLastLayoutSignature = signature;
+                  this.knowledgeOrbitRelayoutBoostFrames = 16;
+                }
+                const layout = this.knowledgeOrbitLayout;
+                const focusId = this.knowledgeOrbitViewMode === 'focus'
+                  ? (
+                    this.knowledgeOrbitLockNodeId
+                    || this.knowledgeOrbitFocusNodeId
+                    || this.knowledgeState.uiState.selectedNodeId
+                    || 'path-life'
+                  )
+                  : 'path-life';
+                const focusNode = layout.nodes.find((node) => node.id === focusId) || null;
+                const targetX = focusNode ? focusNode.x : 320;
+                const targetY = focusNode ? focusNode.y : 210;
+                const modeBaseZoom = this.knowledgeOrbitViewMode === 'focus'
+                  ? (this.knowledgeOrbitLockNodeId ? 1.18 : 1.08)
+                  : 1;
+                const targetZoom = this.clampKnowledgeOrbitUserZoom(modeBaseZoom * this.knowledgeOrbitUserZoom);
+                this.knowledgeOrbitViewTargetX = targetX;
+                this.knowledgeOrbitViewTargetY = targetY;
+                this.knowledgeOrbitTargetZoom = targetZoom;
+              }
+
+              const centerLerp = 0.12;
+              const zoomLerp = 0.1;
+              this.knowledgeOrbitViewCenterX += (this.knowledgeOrbitViewTargetX - this.knowledgeOrbitViewCenterX) * centerLerp;
+              this.knowledgeOrbitViewCenterY += (this.knowledgeOrbitViewTargetY - this.knowledgeOrbitViewCenterY) * centerLerp;
+              this.knowledgeOrbitZoom += (this.knowledgeOrbitTargetZoom - this.knowledgeOrbitZoom) * zoomLerp;
+              if (this.knowledgeOrbitRelayoutBoostFrames > 0) {
+                this.knowledgeOrbitRelayoutBoostFrames -= 1;
+              }
+            }
+            this.knowledgeOrbitAnimationFrameId = window.requestAnimationFrame(tick);
+          };
+          this.knowledgeOrbitAnimationFrameId = window.requestAnimationFrame(tick);
+        },
+
+        stopKnowledgeOrbitAnimation() {
+          if (this.knowledgeOrbitAnimationFrameId) {
+            window.cancelAnimationFrame(this.knowledgeOrbitAnimationFrameId);
+            this.knowledgeOrbitAnimationFrameId = 0;
+          }
+          this.stopKnowledgeValidationShuffle();
+        },
+
+        onKnowledgeResize() {
+          this.knowledgeDesktop = window.matchMedia('(min-width: 1024px)').matches;
+        },
+
+        get handoffSummary() {
+          if (!this.handoffMeta) return '';
+          const src = this.handoffMeta.sourceType || 'greech';
+          const lang = this.handoffMeta.language || 'hy';
+          return `source=${src} · lang=${lang}`;
+        },
+
+        async init() {
+          this.error = '';
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'geer-app';
+
+            this.client = new HayOSClient(this.appId);
+            this.ensureKnowledgeStores();
+            this.resolvePageFromHash();
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+            window.addEventListener('resize', () => this.onKnowledgeResize());
+            this.knowledgeKeydownHandler = (event) => this.handleKnowledgeKeyboardShortcuts(event);
+            window.addEventListener('keydown', this.knowledgeKeydownHandler);
+            this.knowledgeOrbitVisibilityHandler = () => this.handleKnowledgeOrbitVisibility();
+            document.addEventListener('visibilitychange', this.knowledgeOrbitVisibilityHandler);
+            this.knowledgeOrbitBeforeUnloadHandler = () => this.stopKnowledgeOrbitAnimation();
+            window.addEventListener('beforeunload', this.knowledgeOrbitBeforeUnloadHandler);
+            this.onKnowledgeResize();
+            this.startKnowledgeOrbitAnimation();
+            this.bootstrapKnowledgeLocalState();
+            this.knowledgeOrbitFocusNodeId = this.knowledgeState.uiState.selectedNodeId || 'path-life';
+            this.knowledgeOrbitLastLayoutSignature = this.computeKnowledgeOrbitLayoutSignature();
+            this.syncKnowledgeStores();
+
+            this.status = this.t('statusAuthCheck');
+            try {
+              const auth = await this.client.ensureAuthenticated();
+              this.user = auth.user || null;
+              this.language = await this.client.getLanguage();
+              document.documentElement.lang = this.language;
+              this.client.onLanguageChanged((language) => {
+                this.language = language === 'hy' ? 'hy' : 'en';
+                document.documentElement.lang = this.language;
+                this.status = this.t('statusReady');
+              });
+              this.status = this.t('statusAuthenticated');
+              await this.loadOsTheme();
+              if (!this.knowledgeState.uiState.activeTheme) {
+                this.knowledgeState.uiState.activeTheme = this.osTheme || 'black';
+              }
+              this.applyKnowledgeTheme();
+            } catch (authError) {
+              this.status = this.t('statusReady');
+              this.pushKnowledgeToast(this.t('knowledgeBackendOffline'), 'info');
+              console.warn('Backend auth unavailable, continuing with local-only mode:', authError);
+            }
+
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+            2,
+            );
+
+            await this.refresh();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusAuthFailed');
+            this.pushKnowledgeToast(this.error, 'error');
+          } finally {
+            this.resolveIncomingText();
+            this.loading = false;
+          }
+        },
+
+        async loadCurrentUser() {
+          if (!this.client) return;
+          this.error = '';
+          try {
+            this.user = await this.client.getCurrentUser();
+            this.debugText = JSON.stringify(
+              { appId: this.appId, user: this.user, language: this.language, osTheme: this.osTheme || null },
+              null,
+              2,
+            );
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.pushKnowledgeToast(this.error, 'error');
+          }
+        },
+
+        async refresh() {
+          this.error = '';
+          await this.loadOsTheme();
+          this.applyKnowledgeTheme();
+          this.status = this.t('statusReady');
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+          this.sidebarOpen = false;
+        },
+
+        setGeerSource(source) {
+          this.geerSource = source === 'greech' ? 'greech' : 'custom';
+          this.persistInputDraft();
+        },
+
+        onGeerInputChange() {
+          this.persistInputDraft();
+        },
+
+        clearInput() {
+          this.geerInput = '';
+          this.geerSource = 'custom';
+          this.handoffMeta = null;
+          this.persistInputDraft();
+        },
+
+        resolveIncomingText() {
+          const params = new URLSearchParams(window.location.search);
+          const incomingTextFromUrl = (params.get('text') || params.get('input') || '').trim();
+          const incomingSourceFromUrl = (params.get('source') || '').trim().toLowerCase();
+
+          const contractHandoff =
+            window.HopContract && typeof window.HopContract.getHandoff === 'function'
+              ? window.HopContract.getHandoff()
+              : null;
+          const contractDraft =
+            window.HopContract && typeof window.HopContract.getGeerDraft === 'function'
+              ? window.HopContract.getGeerDraft()
+              : null;
+
+          const incomingTextFromStorage = (localStorage.getItem('hop.geer.handoffText') || '').trim();
+          const incomingSourceFromStorage = (localStorage.getItem('hop.geer.handoffSource') || '').trim().toLowerCase();
+          const draftText = localStorage.getItem('hop.geer.draftText') || '';
+          const draftSource = (localStorage.getItem('hop.geer.draftSource') || '').trim().toLowerCase();
+
+          const text =
+            incomingTextFromUrl ||
+            ((contractHandoff && contractHandoff.text) || '').trim() ||
+            incomingTextFromStorage ||
+            ((contractDraft && contractDraft.text) || '').trim() ||
+            draftText;
+
+          const sourceRaw = incomingTextFromUrl
+            ? incomingSourceFromUrl
+            : (contractHandoff && contractHandoff.sourceType)
+              ? contractHandoff.sourceType
+              : incomingTextFromStorage
+                ? incomingSourceFromStorage
+                : (contractDraft && contractDraft.sourceType)
+                  ? contractDraft.sourceType
+                  : draftSource;
+
+          if (!text) return;
+
+          this.geerInput = text;
+          this.geerSource = sourceRaw === 'custom' ? 'custom' : 'greech';
+          this.handoffMeta =
+            contractHandoff && contractHandoff.text
+              ? {
+                sourceType: contractHandoff.sourceType || 'greech',
+                language: contractHandoff.language || 'hy',
+                selectedTextId: contractHandoff.selectedTextId || '',
+                context: contractHandoff.context || {},
+              }
+              : null;
+          this.persistInputDraft();
+        },
+
+        persistInputDraft() {
+          if (window.HopContract && typeof window.HopContract.setGeerDraft === 'function') {
+            window.HopContract.setGeerDraft({
+              text: this.geerInput || '',
+              sourceType: this.geerSource || 'custom',
+              language: this.language || 'hy',
+            });
+          }
+          localStorage.setItem('hop.geer.draftText', this.geerInput || '');
+          localStorage.setItem('hop.geer.draftSource', this.geerSource || 'custom');
+        },
+
+        generateCaptions() {
+          const source = (this.geerInput || '').trim();
+          this.generationError = '';
+          this.copyNotice = '';
+          if (!source) {
+            this.captions = [];
+            return;
+          }
+
+          this.generationLoading = true;
+
+          try {
+            const words = source.split(/\s+/).filter(Boolean);
+            const shortBase = words.slice(0, 6).join(' ');
+            const mediumBase = words.slice(0, 12).join(' ');
+            const lastWord = (words[words.length - 1] || 'flow').replace(/[^a-z0-9ա-ֆ]/gi, '').toLowerCase();
+            const variant = this.captionSeed % 3;
+
+            if (this.captionPreset === 'short') {
+              this.captions = [
+                `${shortBase}...`,
+                variant === 0 ? 'Stay real, stay loud.' : (variant === 1 ? 'Քուչեն խոսում է։' : 'Street mood on point.'),
+                `#hayhiphop #${lastWord || 'rap'}`,
+              ];
+              return;
+            }
+
+            if (this.captionPreset === 'medium') {
+              this.captions = [
+                `Այսօրվա vibe-ը՝ ${mediumBase}...`,
+                variant === 0 ? 'Տող առ տող, բակ առ բակ, հայկական հոսք։' : (variant === 1 ? 'From text to frame, բառը աշխատում է։' : 'Rhythm, context, and real talk in one take.'),
+                'Drop your version in comments.',
+              ];
+              return;
+            }
+
+            this.captions = [
+              `${shortBase} — punchline mode.`,
+              variant === 0 ? 'No fake bars, only pressure.' : (variant === 1 ? 'Սթեյջը փոքր չի, միտքը մեծ է։' : 'Real bars. Real city. Real timing.'),
+              `#punchline #${lastWord || 'bars'}`,
+            ];
+          } catch (error) {
+            this.generationError = error && error.message ? error.message : 'Failed to generate captions.';
+            this.captions = [];
+          } finally {
+            this.generationLoading = false;
+          }
+        },
+
+        regenerateCaptions() {
+          if (!this.geerInput.trim()) return;
+          this.captionSeed += 1;
+          this.generateCaptions();
+        },
+
+        async copyCaption(text) {
+          const ok = await this.copyWithFallback(text);
+          this.copyNotice = ok ? this.t('copySuccess') : this.t('copyFailed');
+        },
+
+        async copyAllCaptions() {
+          if (!this.captions.length) return;
+          const ok = await this.copyWithFallback(this.captions.join('\n'));
+          this.copyNotice = ok ? this.t('copySuccess') : this.t('copyFailed');
+        },
+
+        async copyWithFallback(text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch (_error) {
+            try {
+              const area = document.createElement('textarea');
+              area.value = text;
+              area.setAttribute('readonly', '');
+              area.style.position = 'fixed';
+              area.style.opacity = '0';
+              document.body.appendChild(area);
+              area.select();
+              const success = document.execCommand('copy');
+              area.remove();
+              return Boolean(success);
+            } catch (_innerError) {
+              return false;
+            }
+          }
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'overview';
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            this.applyOsTheme(this.osTheme);
+            if (!this.knowledgeState.uiState.activeTheme && this.osTheme) {
+              this.knowledgeState.uiState.activeTheme = this.osTheme;
+            }
+          } catch (error) {
+            console.warn('Failed to resolve OS theme:', error);
+            this.osTheme = '';
+          }
+        },
+
+        applyOsTheme(themeName) {
+          if (!themeName || typeof themeName !== 'string') {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', themeName);
+        },
+
+        async firestoreGet(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreGet(collection, documentId);
+        },
+
+        async firestoreQuery(collection, queryParams) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreQuery(collection, queryParams);
+        },
+
+        async firestoreAdd(collection, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreAdd(collection, data);
+        },
+
+        async firestoreUpdate(collection, documentId, data) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreUpdate(collection, documentId, data);
+        },
+
+        async firestoreDelete(collection, documentId) {
+          if (!this.client) throw new Error('Client not initialized');
+          return this.client.firestoreDelete(collection, documentId);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

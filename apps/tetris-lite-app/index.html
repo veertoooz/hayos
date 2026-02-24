@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="tetrisApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Tetris Lite</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    .game-canvas {
+      touch-action: manipulation;
+      user-select: none;
+    }
+  </style>
+</head>
+
+<body class="h-full overflow-hidden">
+  <div class="h-full" x-cloak>
+    <div class="drawer lg:drawer-open h-full">
+      <input id="app-sidebar" type="checkbox" class="drawer-toggle" x-model="sidebarOpen" />
+      <div class="drawer-content h-full p-4 lg:p-6 overflow-hidden">
+        <div class="mb-4 lg:hidden">
+          <label for="app-sidebar" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-bars mr-2"></i>
+            <span x-text="t('menuBtn')"></span>
+          </label>
+        </div>
+
+        <template x-if="loading">
+          <div class="h-full flex items-center justify-center">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        </template>
+
+        <div x-show="!loading" class="h-[calc(100%-2.5rem)] lg:h-full overflow-hidden">
+          <section x-show="currentPage === 'game'" class="h-full min-h-0 grid grid-rows-[auto,1fr] gap-3">
+            <div class="card bg-base-200 shadow py-3 px-4">
+              <div class="flex flex-wrap items-center gap-2 justify-between">
+                <div>
+                  <h1 class="text-lg font-semibold" x-text="t('gameTitle')"></h1>
+                  <p class="text-sm opacity-70" x-text="t('gameHint')"></p>
+                </div>
+                <div class="flex gap-2 items-center">
+                  <span class="badge badge-outline" x-text="`${t('statusLabel')}: ${statusLabel()}`"></span>
+                  <span class="badge badge-primary" x-text="`${t('scoreLabel')}: ${score}`"></span>
+                  <span class="badge badge-secondary" x-text="`${t('bestLabel')}: ${bestScore}`"></span>
+                  <button
+                    class="btn btn-xs btn-warning"
+                    x-show="gameState === 'playing'"
+                    @click="togglePause()"
+                    x-text="t('pauseBtn')"></button>
+                </div>
+              </div>
+              <div class="mt-3 text-error text-sm" x-show="error" x-text="error"></div>
+            </div>
+
+            <div class="card bg-base-200 shadow overflow-hidden h-full min-h-0">
+              <div class="h-full w-full p-2 sm:p-3 relative">
+                <canvas
+                  x-ref="gameCanvas"
+                  class="game-canvas w-full h-full rounded-xl bg-slate-900 border border-base-300"
+                  @pointerdown.prevent="handleAction()"></canvas>
+
+                <div
+                  x-show="gameState !== 'playing'"
+                  class="absolute inset-x-0 bottom-4 flex items-center justify-center px-4"
+                  x-transition.opacity>
+                  <div class="rounded-xl bg-base-300/85 backdrop-blur px-3 py-2 flex flex-wrap items-center justify-center gap-2">
+                    <button class="btn btn-primary btn-sm" @click="startNewGame()" x-show="gameState === 'idle' || gameState === 'gameover'" x-text="t('startBtn')"></button>
+                    <button class="btn btn-warning btn-sm" @click="togglePause()" x-show="gameState === 'paused'" x-text="t('resumeBtn')"></button>
+                    <button class="btn btn-accent btn-sm" @click="resumeSavedGame()" x-show="hasSavedState && (gameState === 'idle' || gameState === 'gameover')" x-text="t('continueBtn')"></button>
+                    <button class="btn btn-sm" @click="resetGame()" x-text="t('resetBtn')"></button>
+                    <span class="text-xs opacity-70 hidden sm:inline" x-text="t('controlHelp')"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section x-show="currentPage === 'scores'" class="h-full grid grid-rows-[auto,1fr] gap-3">
+            <div class="card bg-base-200 shadow p-4">
+              <h2 class="text-lg font-semibold" x-text="t('scoresTitle')"></h2>
+              <p class="text-sm opacity-70" x-text="t('scoresSubtitle')"></p>
+            </div>
+
+            <div class="card bg-base-200 shadow p-4 overflow-auto">
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-sm" x-text="`${t('runsLabel')}: ${scoreRuns.length}`"></span>
+                <button class="btn btn-sm" @click="loadScores()" x-text="t('refreshBtn')"></button>
+              </div>
+
+              <template x-if="scoresLoading">
+                <div class="py-8 text-center">
+                  <span class="loading loading-spinner loading-md"></span>
+                </div>
+              </template>
+
+              <template x-if="!scoresLoading && scoreRuns.length === 0">
+                <div class="alert">
+                  <i class="fa-regular fa-circle-info"></i>
+                  <span x-text="t('scoresEmpty')"></span>
+                </div>
+              </template>
+
+              <template x-if="!scoresLoading && scoreRuns.length > 0">
+                <div class="overflow-x-auto">
+                  <table class="table table-zebra table-sm">
+                    <thead>
+                      <tr>
+                        <th x-text="t('scoreLabel')"></th>
+                        <th x-text="t('linesLabel')"></th>
+                        <th x-text="t('levelLabel')"></th>
+                        <th x-text="t('durationLabel')"></th>
+                        <th x-text="t('dateLabel')"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="run in scoreRuns" :key="run.id">
+                        <tr>
+                          <td x-text="run.score"></td>
+                          <td x-text="run.lines"></td>
+                          <td x-text="run.level"></td>
+                          <td x-text="formatDuration(run.durationMs)"></td>
+                          <td x-text="formatDate(run.createdAt)"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+          </section>
+
+          <section x-show="currentPage === 'settings'" class="h-full grid grid-rows-[auto,1fr] gap-3">
+            <div class="card bg-base-200 shadow p-4">
+              <h2 class="text-lg font-semibold" x-text="t('settingsTitle')"></h2>
+              <p class="text-sm opacity-70" x-text="t('settingsSubtitle')"></p>
+            </div>
+
+            <div class="card bg-base-200 shadow p-4 overflow-auto space-y-4">
+              <div class="form-control">
+                <label class="label cursor-pointer justify-start gap-3">
+                  <input type="checkbox" class="toggle" x-model="showGhost" @change="persistProfile()" />
+                  <span class="label-text" x-text="t('ghostLabel')"></span>
+                </label>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="text-sm space-y-2">
+                <div><span class="font-semibold" x-text="`${t('themeLabel')}: `"></span><span x-text="osTheme || '-' "></span></div>
+                <div><span class="font-semibold" x-text="`${t('languageLabel')}: `"></span><span x-text="language === 'hy' ? 'Հայերեն' : 'English'"></span></div>
+                <div><span class="font-semibold" x-text="`${t('userLabel')}: `"></span><span x-text="user?.email || user?.displayName || user?.uid || '-' "></span></div>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="text-sm">
+                <h3 class="font-semibold mb-2" x-text="t('dataModelTitle')"></h3>
+                <ul class="list-disc pl-5 space-y-1 opacity-80">
+                  <li>`tetrisProfiles/{appId}`: bestScore, totalRuns, showGhost, updatedAt</li>
+                  <li>`tetrisRuns/{autoId}`: appId, score, lines, level, durationMs, createdAt</li>
+                  <li>`tetrisState/{appId}`: board + active piece + score progress (resume session)</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="drawer-side">
+        <label for="app-sidebar" class="drawer-overlay"></label>
+        <aside class="min-h-full w-72 bg-base-200 border-r border-base-300 p-4">
+          <div class="mb-4">
+            <p class="text-xs uppercase tracking-wide opacity-60" x-text="t('sidebarLabel')"></p>
+          </div>
+          <ul class="menu gap-1">
+            <template x-for="item in navItems" :key="item.key">
+              <li>
+                <button class="justify-start" :class="{ 'active': currentPage === item.key }" @click="setPage(item.key)">
+                  <i :class="item.icon"></i>
+                  <span x-text="t(item.labelKey)"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function tetrisApp() {
+      const PIECES = {
+        I: { id: 1, color: '#22d3ee', matrix: [[1, 1, 1, 1]] },
+        O: { id: 2, color: '#facc15', matrix: [[2, 2], [2, 2]] },
+        T: { id: 3, color: '#a78bfa', matrix: [[0, 3, 0], [3, 3, 3]] },
+        S: { id: 4, color: '#4ade80', matrix: [[0, 4, 4], [4, 4, 0]] },
+        Z: { id: 5, color: '#fb7185', matrix: [[5, 5, 0], [0, 5, 5]] },
+        J: { id: 6, color: '#60a5fa', matrix: [[6, 0, 0], [6, 6, 6]] },
+        L: { id: 7, color: '#fb923c', matrix: [[0, 0, 7], [7, 7, 7]] },
+      };
+      const PIECE_TYPES = Object.keys(PIECES);
+
+      return {
+        loading: true,
+        scoresLoading: false,
+        status: 'Initializing...',
+        error: '',
+        appId: 'tetris-lite',
+        user: null,
+        client: null,
+        language: 'en',
+        osTheme: '',
+        currentPage: 'game',
+        sidebarOpen: false,
+        navItems: [
+          { key: 'game', labelKey: 'menuGame', icon: 'fa-solid fa-border-all' },
+          { key: 'scores', labelKey: 'menuScores', icon: 'fa-solid fa-ranking-star' },
+          { key: 'settings', labelKey: 'menuSettings', icon: 'fa-solid fa-gear' },
+        ],
+        cols: 10,
+        rows: 20,
+        board: [],
+        activePiece: null,
+        nextType: null,
+        gameState: 'idle',
+        score: 0,
+        lines: 0,
+        level: 1,
+        bestScore: 0,
+        showGhost: true,
+        hasSavedState: false,
+        scoreRuns: [],
+        rafId: null,
+        lastFrameTime: 0,
+        dropAccumulator: 0,
+        runStartedAt: 0,
+        saveTimer: null,
+        stateSaveTimer: null,
+        keydownHandler: null,
+        resizeHandler: null,
+        resizeObserver: null,
+        canvasReady: false,
+        ensureCanvasReadyRaf: null,
+        cellSize: 28,
+        boardOffsetX: 0,
+        boardOffsetY: 0,
+        i18n: {
+          en: {
+            pageTitle: 'Tetris Lite',
+            menuBtn: 'Menu',
+            sidebarLabel: 'Navigation',
+            menuGame: 'Game',
+            menuScores: 'Scores',
+            menuSettings: 'Settings',
+            gameTitle: 'Tetris Lite',
+            gameHint: 'Arrow keys to move, Up rotate, Space hard drop.',
+            statusLabel: 'Status',
+            scoreLabel: 'Score',
+            bestLabel: 'Best',
+            linesLabel: 'Lines',
+            levelLabel: 'Level',
+            startBtn: 'Start',
+            continueBtn: 'Continue',
+            pauseBtn: 'Pause',
+            resumeBtn: 'Resume',
+            resetBtn: 'Reset',
+            controlHelp: 'Left/Right/Down/Up/Space',
+            scoresTitle: 'Recent Runs',
+            scoresSubtitle: 'Your last games are stored per user.',
+            runsLabel: 'Runs',
+            refreshBtn: 'Refresh',
+            scoresEmpty: 'No runs yet. Play one game to save score.',
+            durationLabel: 'Duration',
+            dateLabel: 'Date',
+            settingsTitle: 'Settings',
+            settingsSubtitle: 'Game options and saved state behavior.',
+            ghostLabel: 'Show ghost piece',
+            themeLabel: 'OS Theme',
+            languageLabel: 'Language',
+            userLabel: 'User',
+            dataModelTitle: 'Data Model',
+            statusInitializing: 'Initializing...',
+            statusAuthCheck: 'Checking auth (silent)...',
+            statusAuthenticated: 'Authenticated',
+            statusReady: 'Ready',
+            statusAuthFailed: 'Auth failed',
+            statusIdle: 'Idle',
+            statusPlaying: 'Playing',
+            statusPaused: 'Paused',
+            statusGameOver: 'Game Over',
+          },
+          hy: {
+            pageTitle: 'Tetris Lite',
+            menuBtn: 'Մենյու',
+            sidebarLabel: 'Նավիգացիա',
+            menuGame: 'Խաղ',
+            menuScores: 'Միավորներ',
+            menuSettings: 'Կարգավորումներ',
+            gameTitle: 'Tetris Lite',
+            gameHint: 'Սլաքներով շարժիր, Up՝ պտույտ, Space՝ արագ անկում։',
+            statusLabel: 'Կարգավիճակ',
+            scoreLabel: 'Միավոր',
+            bestLabel: 'Լավագույն',
+            linesLabel: 'Գծեր',
+            levelLabel: 'Մակարդակ',
+            startBtn: 'Սկսել',
+            continueBtn: 'Շարունակել',
+            pauseBtn: 'Դադար',
+            resumeBtn: 'Շարունակել',
+            resetBtn: 'Վերասկսել',
+            controlHelp: 'Ձախ/Աջ/Վար/Վեր/Space',
+            scoresTitle: 'Վերջին խաղեր',
+            scoresSubtitle: 'Վերջին արդյունքները պահվում են ըստ օգտատիրոջ։',
+            runsLabel: 'Փորձեր',
+            refreshBtn: 'Թարմացնել',
+            scoresEmpty: 'Դեռ խաղ չի պահվել։ Խաղա մեկ անգամ։',
+            durationLabel: 'Տևողություն',
+            dateLabel: 'Ամսաթիվ',
+            settingsTitle: 'Կարգավորումներ',
+            settingsSubtitle: 'Խաղի ընտրանքներ և պահպանված սեսիա։',
+            ghostLabel: 'Ցույց տալ ուրվական ֆիգուրը',
+            themeLabel: 'OS թեմա',
+            languageLabel: 'Լեզու',
+            userLabel: 'Օգտատեր',
+            dataModelTitle: 'Տվյալների մոդել',
+            statusInitializing: 'Սկսվում է...',
+            statusAuthCheck: 'Ստուգվում է auth-ը...',
+            statusAuthenticated: 'Միացված է',
+            statusReady: 'Պատրաստ է',
+            statusAuthFailed: 'Auth սխալ',
+            statusIdle: 'Սպասում',
+            statusPlaying: 'Խաղում է',
+            statusPaused: 'Դադար',
+            statusGameOver: 'Խաղի ավարտ',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        statusLabel() {
+          if (this.gameState === 'playing') return this.t('statusPlaying');
+          if (this.gameState === 'paused') return this.t('statusPaused');
+          if (this.gameState === 'gameover') return this.t('statusGameOver');
+          return this.t('statusIdle');
+        },
+
+        async init() {
+          this.error = '';
+          this.status = this.t('statusInitializing');
+
+          try {
+            await loadHayOSClient();
+            const urlParams = new URLSearchParams(window.location.search);
+            this.appId = urlParams.get('appId') || 'tetris-lite';
+            this.client = new HayOSClient(this.appId);
+            this.resolvePageFromHash();
+            window.addEventListener('hashchange', () => this.resolvePageFromHash());
+            this.keydownHandler = (event) => this.onKeyDown(event);
+            this.resizeHandler = () => {
+              const resized = this.resizeCanvas();
+              if (resized) this.drawFrame();
+            };
+            window.addEventListener('keydown', this.keydownHandler);
+            window.addEventListener('resize', this.resizeHandler);
+
+            this.status = this.t('statusAuthCheck');
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth.user || null;
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((language) => {
+              this.language = language === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            this.status = this.t('statusAuthenticated');
+
+            this.resetBoard();
+            this.nextType = this.randomPieceType();
+
+            await this.loadOsTheme();
+            await this.loadProfile();
+            await this.loadSavedState();
+            await this.loadScores();
+            this.status = this.t('statusReady');
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+            this.status = this.t('statusAuthFailed');
+          } finally {
+            this.loading = false;
+            this.$nextTick(() => {
+              this.observeCanvasContainer();
+              this.ensureCanvasReady();
+            });
+          }
+        },
+
+        destroy() {
+          if (this.keydownHandler) {
+            window.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
+          }
+          if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
+          }
+          if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+          }
+          if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+          if (this.ensureCanvasReadyRaf) {
+            cancelAnimationFrame(this.ensureCanvasReadyRaf);
+            this.ensureCanvasReadyRaf = null;
+          }
+          if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+          }
+          if (this.stateSaveTimer) {
+            clearTimeout(this.stateSaveTimer);
+            this.stateSaveTimer = null;
+          }
+          if (this.client) {
+            this.client.destroy();
+          }
+        },
+
+        onKeyDown(event) {
+          if (this.currentPage !== 'game') return;
+
+          if (event.code === 'KeyP') {
+            this.togglePause();
+            return;
+          }
+
+          if (this.gameState !== 'playing') {
+            if (event.code === 'Space' && (this.gameState === 'idle' || this.gameState === 'gameover')) {
+              event.preventDefault();
+              this.startNewGame();
+            }
+            return;
+          }
+
+          if (event.code === 'ArrowLeft') {
+            event.preventDefault();
+            this.movePiece(-1);
+          } else if (event.code === 'ArrowRight') {
+            event.preventDefault();
+            this.movePiece(1);
+          } else if (event.code === 'ArrowDown') {
+            event.preventDefault();
+            this.softDrop();
+          } else if (event.code === 'ArrowUp') {
+            event.preventDefault();
+            this.rotatePiece();
+          } else if (event.code === 'Space') {
+            event.preventDefault();
+            this.hardDrop();
+          }
+        },
+
+        async loadOsTheme() {
+          if (!this.client) return;
+          try {
+            const value = await this.client.getModuleValue('ui.theme');
+            this.osTheme = typeof value === 'string' ? value : '';
+            if (this.osTheme) {
+              document.documentElement.setAttribute('data-theme', this.osTheme);
+            }
+          } catch {
+            this.osTheme = '';
+          }
+        },
+
+        setPage(pageKey) {
+          this.currentPage = pageKey;
+          window.location.hash = pageKey;
+          this.sidebarOpen = false;
+          if (pageKey === 'game') {
+            this.$nextTick(() => this.ensureCanvasReady());
+          } else if (pageKey === 'scores') {
+            this.loadScores();
+          }
+        },
+
+        resolvePageFromHash() {
+          const allowedPages = new Set(this.navItems.map((item) => item.key));
+          const hashPage = window.location.hash.replace('#', '').trim();
+          this.currentPage = allowedPages.has(hashPage) ? hashPage : 'game';
+        },
+
+        observeCanvasContainer() {
+          if (!window.ResizeObserver) return;
+          const canvas = this.$refs.gameCanvas;
+          if (!canvas || this.resizeObserver) return;
+          const container = canvas.parentElement;
+          if (!container) return;
+
+          this.resizeObserver = new ResizeObserver(() => {
+            const resized = this.resizeCanvas();
+            if (resized) this.drawFrame();
+          });
+          this.resizeObserver.observe(container);
+        },
+
+        ensureCanvasReady(maxAttempts = 12) {
+          let attempts = 0;
+          const tick = () => {
+            attempts += 1;
+            const resized = this.resizeCanvas();
+            if (resized) {
+              this.canvasReady = true;
+              this.drawFrame();
+              this.ensureCanvasReadyRaf = null;
+              return;
+            }
+            if (attempts < maxAttempts) {
+              this.ensureCanvasReadyRaf = requestAnimationFrame(tick);
+            } else {
+              this.canvasReady = false;
+              this.ensureCanvasReadyRaf = null;
+            }
+          };
+
+          if (this.ensureCanvasReadyRaf) {
+            cancelAnimationFrame(this.ensureCanvasReadyRaf);
+            this.ensureCanvasReadyRaf = null;
+          }
+          this.ensureCanvasReadyRaf = requestAnimationFrame(tick);
+        },
+
+        resizeCanvas() {
+          const canvas = this.$refs.gameCanvas;
+          if (!canvas) return false;
+          const rect = canvas.getBoundingClientRect();
+          if (!rect.width || !rect.height) return false;
+
+          const dpr = Math.max(1, window.devicePixelRatio || 1);
+          canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+          canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          }
+
+          const usableW = Math.floor(rect.width);
+          const usableH = Math.floor(rect.height);
+          const sidePanel = usableW >= 540 ? 140 : 0;
+          const maxCellByWidth = Math.floor((usableW - sidePanel - 30) / this.cols);
+          const maxCellByHeight = Math.floor((usableH - 20) / this.rows);
+          this.cellSize = Math.max(14, Math.min(36, maxCellByWidth, maxCellByHeight));
+          const boardPixelW = this.cellSize * this.cols;
+          const boardPixelH = this.cellSize * this.rows;
+          this.boardOffsetX = Math.max(12, Math.floor((usableW - boardPixelW - sidePanel) / 2));
+          this.boardOffsetY = Math.max(8, Math.floor((usableH - boardPixelH) / 2));
+          return true;
+        },
+
+        randomPieceType() {
+          const idx = Math.floor(Math.random() * PIECE_TYPES.length);
+          return PIECE_TYPES[idx];
+        },
+
+        cloneMatrix(matrix) {
+          return matrix.map((row) => row.slice());
+        },
+
+        resetBoard() {
+          this.board = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+        },
+
+        makePiece(type) {
+          const spec = PIECES[type];
+          const matrix = this.cloneMatrix(spec.matrix);
+          const x = Math.floor((this.cols - matrix[0].length) / 2);
+          const y = -1;
+          return { type, id: spec.id, matrix, x, y };
+        },
+
+        rotateMatrixCW(matrix) {
+          const h = matrix.length;
+          const w = matrix[0].length;
+          const out = Array.from({ length: w }, () => Array(h).fill(0));
+          for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+              out[x][h - 1 - y] = matrix[y][x];
+            }
+          }
+          return out;
+        },
+
+        collides(piece, dx = 0, dy = 0, matrix = piece.matrix) {
+          for (let y = 0; y < matrix.length; y += 1) {
+            for (let x = 0; x < matrix[y].length; x += 1) {
+              const cell = matrix[y][x];
+              if (!cell) continue;
+              const nx = piece.x + x + dx;
+              const ny = piece.y + y + dy;
+              if (nx < 0 || nx >= this.cols || ny >= this.rows) return true;
+              if (ny >= 0 && this.board[ny][nx] !== 0) return true;
+            }
+          }
+          return false;
+        },
+
+        spawnPiece() {
+          const type = this.nextType || this.randomPieceType();
+          this.nextType = this.randomPieceType();
+          this.activePiece = this.makePiece(type);
+          if (this.collides(this.activePiece, 0, 0)) {
+            this.endGame();
+          }
+        },
+
+        mergePiece() {
+          const piece = this.activePiece;
+          if (!piece) return;
+          for (let y = 0; y < piece.matrix.length; y += 1) {
+            for (let x = 0; x < piece.matrix[y].length; x += 1) {
+              const cell = piece.matrix[y][x];
+              if (!cell) continue;
+              const by = piece.y + y;
+              const bx = piece.x + x;
+              if (by >= 0 && by < this.rows && bx >= 0 && bx < this.cols) {
+                this.board[by][bx] = cell;
+              }
+            }
+          }
+        },
+
+        clearLines() {
+          let removed = 0;
+          for (let y = this.rows - 1; y >= 0; y -= 1) {
+            if (this.board[y].every((cell) => cell !== 0)) {
+              this.board.splice(y, 1);
+              this.board.unshift(Array(this.cols).fill(0));
+              removed += 1;
+              y += 1;
+            }
+          }
+          return removed;
+        },
+
+        applyLineScore(linesCleared) {
+          if (linesCleared <= 0) return;
+          const points = [0, 100, 300, 500, 800];
+          this.score += points[Math.min(linesCleared, 4)] * this.level;
+          this.lines += linesCleared;
+          this.level = Math.floor(this.lines / 10) + 1;
+          if (this.score > this.bestScore) {
+            this.bestScore = this.score;
+            this.persistProfile();
+          }
+        },
+
+        dropIntervalMs() {
+          return Math.max(120, 760 - (this.level - 1) * 55);
+        },
+
+        stepDrop() {
+          if (!this.activePiece) return;
+          if (!this.collides(this.activePiece, 0, 1)) {
+            this.activePiece.y += 1;
+            return;
+          }
+          this.mergePiece();
+          const removed = this.clearLines();
+          this.applyLineScore(removed);
+          this.spawnPiece();
+          this.scheduleStateSave();
+        },
+
+        movePiece(dx) {
+          if (!this.activePiece || this.gameState !== 'playing') return;
+          if (!this.collides(this.activePiece, dx, 0)) {
+            this.activePiece.x += dx;
+            this.scheduleStateSave();
+          }
+        },
+
+        softDrop() {
+          if (!this.activePiece || this.gameState !== 'playing') return;
+          if (!this.collides(this.activePiece, 0, 1)) {
+            this.activePiece.y += 1;
+            this.score += 1;
+          } else {
+            this.stepDrop();
+          }
+          this.scheduleStateSave();
+        },
+
+        hardDrop() {
+          if (!this.activePiece || this.gameState !== 'playing') return;
+          let moved = 0;
+          while (!this.collides(this.activePiece, 0, 1)) {
+            this.activePiece.y += 1;
+            moved += 1;
+          }
+          this.score += moved * 2;
+          this.stepDrop();
+          this.scheduleStateSave();
+        },
+
+        rotatePiece() {
+          if (!this.activePiece || this.gameState !== 'playing') return;
+          const rotated = this.rotateMatrixCW(this.activePiece.matrix);
+          const kicks = [0, -1, 1, -2, 2];
+          for (const kick of kicks) {
+            if (!this.collides(this.activePiece, kick, 0, rotated)) {
+              this.activePiece.matrix = rotated;
+              this.activePiece.x += kick;
+              this.scheduleStateSave();
+              return;
+            }
+          }
+        },
+
+        gameLoop(ts) {
+          if (this.gameState !== 'playing') return;
+          if (!this.lastFrameTime) {
+            this.lastFrameTime = ts;
+          }
+          const delta = Math.min(50, ts - this.lastFrameTime);
+          this.lastFrameTime = ts;
+          this.dropAccumulator += delta;
+
+          const interval = this.dropIntervalMs();
+          while (this.dropAccumulator >= interval && this.gameState === 'playing') {
+            this.stepDrop();
+            this.dropAccumulator -= interval;
+          }
+
+          this.drawFrame();
+          if (this.gameState === 'playing') {
+            this.rafId = requestAnimationFrame((t) => this.gameLoop(t));
+          }
+        },
+
+        handleAction() {
+          if (this.gameState === 'idle' || this.gameState === 'gameover') {
+            this.startNewGame();
+          } else if (this.gameState === 'paused') {
+            this.togglePause();
+          }
+        },
+
+        startNewGame() {
+          this.resetBoard();
+          this.activePiece = null;
+          this.score = 0;
+          this.lines = 0;
+          this.level = 1;
+          this.dropAccumulator = 0;
+          this.nextType = this.randomPieceType();
+          this.gameState = 'playing';
+          this.hasSavedState = false;
+          this.runStartedAt = Date.now();
+          this.lastFrameTime = 0;
+          this.spawnPiece();
+          this.saveStateNow();
+          this.drawFrame();
+          if (this.rafId) cancelAnimationFrame(this.rafId);
+          this.rafId = requestAnimationFrame((t) => this.gameLoop(t));
+        },
+
+        resumeSavedGame() {
+          if (!this.hasSavedState) return;
+          this.gameState = 'playing';
+          this.lastFrameTime = 0;
+          this.dropAccumulator = 0;
+          if (!this.runStartedAt) {
+            this.runStartedAt = Date.now();
+          }
+          this.drawFrame();
+          if (this.rafId) cancelAnimationFrame(this.rafId);
+          this.rafId = requestAnimationFrame((t) => this.gameLoop(t));
+        },
+
+        togglePause() {
+          if (this.gameState === 'playing') {
+            this.gameState = 'paused';
+            if (this.rafId) {
+              cancelAnimationFrame(this.rafId);
+              this.rafId = null;
+            }
+            this.saveStateNow();
+            this.drawFrame();
+          } else if (this.gameState === 'paused') {
+            this.gameState = 'playing';
+            this.lastFrameTime = 0;
+            if (this.rafId) cancelAnimationFrame(this.rafId);
+            this.rafId = requestAnimationFrame((t) => this.gameLoop(t));
+          }
+        },
+
+        resetGame() {
+          if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+          this.gameState = 'idle';
+          this.score = 0;
+          this.lines = 0;
+          this.level = 1;
+          this.runStartedAt = 0;
+          this.dropAccumulator = 0;
+          this.resetBoard();
+          this.activePiece = null;
+          this.nextType = this.randomPieceType();
+          this.drawFrame();
+          this.saveStateNow();
+        },
+
+        async endGame() {
+          this.gameState = 'gameover';
+          if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+          const durationMs = this.runStartedAt > 0 ? Math.max(0, Date.now() - this.runStartedAt) : 0;
+          if (this.score > this.bestScore) {
+            this.bestScore = this.score;
+          }
+          this.hasSavedState = false;
+          this.runStartedAt = 0;
+          this.scheduleRunSave(durationMs);
+          this.saveStateNow();
+          this.drawFrame();
+        },
+
+        getGhostY() {
+          if (!this.activePiece || !this.showGhost) return null;
+          const probe = {
+            type: this.activePiece.type,
+            id: this.activePiece.id,
+            matrix: this.activePiece.matrix,
+            x: this.activePiece.x,
+            y: this.activePiece.y,
+          };
+          while (!this.collides(probe, 0, 1)) {
+            probe.y += 1;
+          }
+          return probe.y;
+        },
+
+        colorForId(id) {
+          if (id === 1) return PIECES.I.color;
+          if (id === 2) return PIECES.O.color;
+          if (id === 3) return PIECES.T.color;
+          if (id === 4) return PIECES.S.color;
+          if (id === 5) return PIECES.Z.color;
+          if (id === 6) return PIECES.J.color;
+          if (id === 7) return PIECES.L.color;
+          return '#334155';
+        },
+
+        drawCell(ctx, x, y, color, alpha = 1) {
+          const px = this.boardOffsetX + x * this.cellSize;
+          const py = this.boardOffsetY + y * this.cellSize;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = color;
+          ctx.fillRect(px + 1, py + 1, this.cellSize - 2, this.cellSize - 2);
+          ctx.restore();
+        },
+
+        drawFrame() {
+          const canvas = this.$refs.gameCanvas;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          const w = Math.floor(canvas.clientWidth);
+          const h = Math.floor(canvas.clientHeight);
+          ctx.clearRect(0, 0, w, h);
+
+          const bg = ctx.createLinearGradient(0, 0, 0, h);
+          bg.addColorStop(0, '#0f172a');
+          bg.addColorStop(1, '#1e293b');
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, 0, w, h);
+
+          const boardW = this.cols * this.cellSize;
+          const boardH = this.rows * this.cellSize;
+          const boardX = this.boardOffsetX;
+          const boardY = this.boardOffsetY;
+
+          ctx.fillStyle = '#020617';
+          ctx.fillRect(boardX, boardY, boardW, boardH);
+
+          for (let y = 0; y < this.rows; y += 1) {
+            for (let x = 0; x < this.cols; x += 1) {
+              const id = this.board[y][x];
+              if (id) {
+                this.drawCell(ctx, x, y, this.colorForId(id));
+              }
+            }
+          }
+
+          const ghostY = this.getGhostY();
+          if (this.activePiece && ghostY !== null && this.gameState === 'playing') {
+            for (let y = 0; y < this.activePiece.matrix.length; y += 1) {
+              for (let x = 0; x < this.activePiece.matrix[y].length; x += 1) {
+                const val = this.activePiece.matrix[y][x];
+                if (!val) continue;
+                const gx = this.activePiece.x + x;
+                const gy = ghostY + y;
+                if (gy >= 0) {
+                  this.drawCell(ctx, gx, gy, this.colorForId(val), 0.22);
+                }
+              }
+            }
+          }
+
+          if (this.activePiece) {
+            for (let y = 0; y < this.activePiece.matrix.length; y += 1) {
+              for (let x = 0; x < this.activePiece.matrix[y].length; x += 1) {
+                const val = this.activePiece.matrix[y][x];
+                if (!val) continue;
+                const bx = this.activePiece.x + x;
+                const by = this.activePiece.y + y;
+                if (by >= 0) {
+                  this.drawCell(ctx, bx, by, this.colorForId(val));
+                }
+              }
+            }
+          }
+
+          ctx.strokeStyle = 'rgba(148,163,184,0.18)';
+          for (let y = 0; y <= this.rows; y += 1) {
+            const yy = boardY + y * this.cellSize;
+            ctx.beginPath();
+            ctx.moveTo(boardX, yy);
+            ctx.lineTo(boardX + boardW, yy);
+            ctx.stroke();
+          }
+          for (let x = 0; x <= this.cols; x += 1) {
+            const xx = boardX + x * this.cellSize;
+            ctx.beginPath();
+            ctx.moveTo(xx, boardY);
+            ctx.lineTo(xx, boardY + boardH);
+            ctx.stroke();
+          }
+
+          const panelX = boardX + boardW + 20;
+          if (panelX + 110 < w) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '600 16px sans-serif';
+            ctx.fillText(`${this.t('linesLabel')}: ${this.lines}`, panelX, boardY + 26);
+            ctx.fillText(`${this.t('levelLabel')}: ${this.level}`, panelX, boardY + 50);
+
+            if (this.nextType && PIECES[this.nextType]) {
+              const spec = PIECES[this.nextType];
+              ctx.fillStyle = '#94a3b8';
+              ctx.font = '600 14px sans-serif';
+              ctx.fillText('NEXT', panelX, boardY + 92);
+              for (let y = 0; y < spec.matrix.length; y += 1) {
+                for (let x = 0; x < spec.matrix[y].length; x += 1) {
+                  if (!spec.matrix[y][x]) continue;
+                  const px = panelX + x * 18;
+                  const py = boardY + 102 + y * 18;
+                  ctx.fillStyle = spec.color;
+                  ctx.fillRect(px, py, 16, 16);
+                }
+              }
+            }
+          }
+
+          if (this.gameState !== 'playing') {
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.55)';
+            ctx.fillRect(boardX, boardY, boardW, boardH);
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.font = '700 34px sans-serif';
+            const text = this.gameState === 'paused'
+              ? this.t('statusPaused')
+              : this.gameState === 'gameover'
+                ? this.t('statusGameOver')
+                : this.t('statusIdle');
+            ctx.fillText(text, boardX + boardW / 2, boardY + boardH / 2 - 8);
+            ctx.font = '500 18px sans-serif';
+            ctx.fillText(this.t('controlHelp'), boardX + boardW / 2, boardY + boardH / 2 + 24);
+            ctx.textAlign = 'start';
+          }
+        },
+
+        scheduleRunSave(durationMs) {
+          if (this.saveTimer) clearTimeout(this.saveTimer);
+          this.saveTimer = setTimeout(() => {
+            this.saveTimer = null;
+            this.saveRunNow(durationMs);
+          }, 120);
+        },
+
+        scheduleStateSave() {
+          if (this.gameState !== 'playing') return;
+          if (this.stateSaveTimer) clearTimeout(this.stateSaveTimer);
+          this.stateSaveTimer = setTimeout(() => {
+            this.stateSaveTimer = null;
+            this.saveStateNow();
+          }, 700);
+        },
+
+        serializeState() {
+          return {
+            appId: this.appId,
+            gameState: this.gameState,
+            score: this.score,
+            lines: this.lines,
+            level: this.level,
+            board: this.board,
+            nextType: this.nextType,
+            runStartedAt: this.runStartedAt || 0,
+            activePiece: this.activePiece
+              ? {
+                type: this.activePiece.type,
+                x: this.activePiece.x,
+                y: this.activePiece.y,
+                matrix: this.activePiece.matrix,
+              }
+              : null,
+          };
+        },
+
+        async saveStateNow() {
+          if (!this.client || !this.user?.uid) return;
+          this.error = '';
+          try {
+            await this.client.firestoreUpdate('tetrisState', this.appId, this.serializeState());
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async loadSavedState() {
+          if (!this.client || !this.user?.uid) return;
+          this.error = '';
+          try {
+            const state = await this.client.firestoreGet('tetrisState', this.appId);
+            if (!state || typeof state !== 'object') return;
+
+            const board = Array.isArray(state.board) ? state.board : null;
+            if (board && board.length === this.rows) {
+              const safeBoard = board.map((row) => Array.isArray(row) ? row.slice(0, this.cols).map((v) => Number(v) || 0) : Array(this.cols).fill(0));
+              while (safeBoard.length < this.rows) safeBoard.push(Array(this.cols).fill(0));
+              this.board = safeBoard;
+            }
+
+            this.score = Number.isFinite(state.score) ? Number(state.score) : 0;
+            this.lines = Number.isFinite(state.lines) ? Number(state.lines) : 0;
+            this.level = Number.isFinite(state.level) ? Math.max(1, Number(state.level)) : 1;
+            this.nextType = typeof state.nextType === 'string' && PIECES[state.nextType] ? state.nextType : this.randomPieceType();
+            this.runStartedAt = Number.isFinite(state.runStartedAt) ? Number(state.runStartedAt) : 0;
+
+            if (state.activePiece && typeof state.activePiece === 'object') {
+              const apType = typeof state.activePiece.type === 'string' && PIECES[state.activePiece.type] ? state.activePiece.type : null;
+              if (apType) {
+                this.activePiece = {
+                  type: apType,
+                  id: PIECES[apType].id,
+                  x: Number.isFinite(state.activePiece.x) ? Number(state.activePiece.x) : 3,
+                  y: Number.isFinite(state.activePiece.y) ? Number(state.activePiece.y) : -1,
+                  matrix: Array.isArray(state.activePiece.matrix)
+                    ? state.activePiece.matrix.map((row) => Array.isArray(row) ? row.map((v) => Number(v) || 0) : [])
+                    : this.cloneMatrix(PIECES[apType].matrix),
+                };
+              }
+            }
+
+            const resumable = state.gameState === 'playing' || state.gameState === 'paused';
+            this.hasSavedState = resumable && (this.score > 0 || this.lines > 0 || !!this.activePiece);
+            this.gameState = this.hasSavedState ? 'paused' : 'idle';
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async saveRunNow(durationMs) {
+          if (!this.client || !this.user?.uid) return;
+          this.error = '';
+          try {
+            await this.client.firestoreAdd('tetrisRuns', {
+              appId: this.appId,
+              score: this.score,
+              lines: this.lines,
+              level: this.level,
+              durationMs,
+            });
+            await this.client.firestoreUpdate('tetrisProfiles', this.appId, {
+              appId: this.appId,
+              bestScore: this.bestScore,
+              totalRuns: this.scoreRuns.length + 1,
+              showGhost: this.showGhost,
+            });
+            await this.loadScores();
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async loadProfile() {
+          if (!this.client || !this.user?.uid) return;
+          this.error = '';
+          try {
+            const profile = await this.client.firestoreGet('tetrisProfiles', this.appId);
+            if (profile && typeof profile === 'object') {
+              this.bestScore = Number.isFinite(profile.bestScore) ? Number(profile.bestScore) : 0;
+              this.showGhost = typeof profile.showGhost === 'boolean' ? profile.showGhost : true;
+            }
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async persistProfile() {
+          if (!this.client || !this.user?.uid) return;
+          this.error = '';
+          try {
+            await this.client.firestoreUpdate('tetrisProfiles', this.appId, {
+              appId: this.appId,
+              bestScore: this.bestScore,
+              showGhost: this.showGhost,
+            });
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          }
+        },
+
+        async loadScores() {
+          if (!this.client || !this.user?.uid) return;
+          this.scoresLoading = true;
+          this.error = '';
+          try {
+            const rows = await this.client.firestoreQuery('tetrisRuns', {});
+            const filtered = Array.isArray(rows) ? rows.filter((row) => row && row.appId === this.appId) : [];
+            filtered.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            this.scoreRuns = filtered.slice(0, 40).map((row) => ({
+              id: row.id,
+              score: Number.isFinite(row.score) ? Number(row.score) : 0,
+              lines: Number.isFinite(row.lines) ? Number(row.lines) : 0,
+              level: Number.isFinite(row.level) ? Number(row.level) : 1,
+              durationMs: Number.isFinite(row.durationMs) ? Number(row.durationMs) : 0,
+              createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
+            }));
+          } catch (error) {
+            this.error = error && error.message ? error.message : String(error);
+          } finally {
+            this.scoresLoading = false;
+          }
+        },
+
+        formatDuration(durationMs) {
+          const seconds = Math.floor(Math.max(0, durationMs) / 1000);
+          const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+          const secs = (seconds % 60).toString().padStart(2, '0');
+          return `${mins}:${secs}`;
+        },
+
+        formatDate(value) {
+          if (!value) return '-';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return '-';
+          return new Intl.DateTimeFormat(this.language === 'hy' ? 'hy-AM' : 'en-US', {
+            year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
+          }).format(date);
+        },
+      };
+    }
+
+    window.addEventListener('beforeunload', () => {
+      const host = document.documentElement;
+      if (host && host.__x && typeof host.__x.$data?.destroy === 'function') {
+        host.__x.$data.destroy();
+      }
+    });
+  </script>
+</body>
+
+</html>

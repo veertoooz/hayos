@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" data-theme="black" x-data="profileApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+  </style>
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+
+<body class="h-full min-h-dvh bg-base-200">
+  <main class="min-h-dvh p-3 sm:p-4" style="padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);" x-cloak>
+    <div class="mx-auto w-full max-w-md space-y-3">
+      <header class="navbar bg-base-100 rounded-box shadow-sm border border-base-300 px-3 min-h-0">
+        <div class="flex-1">
+          <h1 class="text-base font-semibold">Profile</h1>
+        </div>
+        <div class="flex-none">
+          <span class="badge badge-outline badge-sm" x-text="language === 'hy' ? 'Հայ' : 'EN'"></span>
+        </div>
+      </header>
+
+      <section class="card bg-base-100 border border-base-300 shadow-sm">
+        <div class="card-body p-4 gap-4">
+          <div class="flex items-center gap-3">
+            <div class="avatar">
+              <div class="w-20 rounded-full ring ring-base-300 ring-offset-base-100 ring-offset-2">
+                <img :src="avatarPreview" alt="Avatar" loading="lazy" @error="handleAvatarImageError" />
+              </div>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold truncate" x-text="username || 'No username yet'"></p>
+              <p class="text-xs opacity-70 truncate" x-text="user?.email || user?.uid || '-' "></p>
+            </div>
+          </div>
+
+          <div class="alert alert-info py-2" x-show="loading" x-cloak>
+            <span class="loading loading-spinner loading-xs"></span>
+            <span class="text-sm">Loading profile...</span>
+          </div>
+
+          <div class="alert alert-success py-2" x-show="successMessage" x-cloak>
+            <span class="text-sm" x-text="successMessage"></span>
+          </div>
+
+          <div class="alert alert-error py-2" x-show="errorMessage" x-cloak>
+            <span class="text-sm" x-text="errorMessage"></span>
+          </div>
+
+          <div class="alert alert-warning py-2" x-show="debugEnabled && debugLastTrace" x-cloak>
+            <span class="text-xs break-all font-mono" x-text="debugLastTrace"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card bg-base-100 border border-base-300 shadow-sm">
+        <div class="card-body p-4 gap-3">
+          <h2 class="card-title text-base">Username</h2>
+
+          <div class="space-y-2">
+            <label class="form-control w-full">
+              <div class="label pb-1">
+                <span class="label-text">Username</span>
+              </div>
+              <input
+                type="text"
+                class="input input-bordered w-full"
+                placeholder="username"
+                maxlength="30"
+                x-model="username"
+                @input="clearFeedback()"
+                @keydown.enter.prevent="saveUsername()"
+                autocomplete="nickname"
+              />
+              <div class="label pt-1">
+                <span class="label-text-alt">3-30 chars, letters, numbers, . _ -</span>
+              </div>
+            </label>
+
+            <button
+              type="button"
+              class="btn btn-primary w-full"
+              :class="{ 'btn-disabled': isSavingUsername }"
+              @click="saveUsername()"
+              :disabled="isSavingUsername || loading">
+              <span class="loading loading-spinner loading-xs" x-show="isSavingUsername" x-cloak></span>
+              <span x-text="isSavingUsername ? 'Saving...' : 'Save Username'"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card bg-base-100 border border-base-300 shadow-sm">
+        <div class="card-body p-4 gap-3">
+          <h2 class="card-title text-base">Avatar</h2>
+
+          <div class="space-y-2">
+            <label class="form-control w-full">
+              <div class="label pb-1">
+                <span class="label-text">Avatar image</span>
+              </div>
+              <input
+                type="file"
+                class="file-input file-input-bordered w-full"
+                accept="image/*"
+                @change="onAvatarFileChange($event)"
+              />
+              <div class="label pt-1" x-show="avatarFileName" x-cloak>
+                <span class="label-text-alt truncate" x-text="avatarFileName"></span>
+              </div>
+              <div class="label pt-1">
+                <span class="label-text-alt">Auto-optimized before upload (max 1024px, compressed).</span>
+              </div>
+            </label>
+
+            <progress
+              class="progress progress-primary w-full"
+              x-show="isSavingAvatar || avatarUploadProgress > 0"
+              x-bind:value="avatarUploadProgress"
+              max="100"
+              x-cloak></progress>
+
+            <button
+              type="button"
+              class="btn btn-secondary w-full"
+              :class="{ 'btn-disabled': isSavingAvatar }"
+              @click="saveAvatar()"
+              :disabled="isSavingAvatar || loading">
+              <span class="loading loading-spinner loading-xs" x-show="isSavingAvatar" x-cloak></span>
+              <span x-text="isSavingAvatar ? 'Uploading...' : 'Upload Avatar'"></span>
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-outline btn-error w-full"
+              :disabled="isSavingAvatar || loading"
+              @click="removeAvatar()">
+              Remove Avatar
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card bg-base-100 border border-base-300 shadow-sm">
+        <div class="card-body p-4 gap-3">
+          <h2 class="card-title text-base">Visibility</h2>
+
+          <label class="form-control w-full">
+            <div class="label pb-1">
+              <span class="label-text">Who can find your profile</span>
+            </div>
+            <select class="select select-bordered w-full" x-model="profileVisibility" @change="clearFeedback()">
+              <option value="public">Public</option>
+              <option value="followers">Followers</option>
+              <option value="private">Private</option>
+            </select>
+            <div class="label pt-1">
+              <span class="label-text-alt">Set to Public if you want everyone to find you in Boo.</span>
+            </div>
+          </label>
+
+          <button
+            type="button"
+            class="btn btn-accent w-full"
+            :class="{ 'btn-disabled': isSavingVisibility }"
+            @click="saveVisibility()"
+            :disabled="isSavingVisibility || loading">
+            <span class="loading loading-spinner loading-xs" x-show="isSavingVisibility" x-cloak></span>
+            <span x-text="isSavingVisibility ? 'Saving...' : 'Save Visibility'"></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="card bg-base-100 border border-base-300 shadow-sm">
+        <div class="card-body p-4">
+          <button class="btn btn-outline btn-error w-full" :disabled="isLoggingOut || loading" @click="openLogoutModal()">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <span>Log out</span>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal" :class="{ 'modal-open': logoutModalOpen }" x-cloak>
+      <div class="modal-box">
+        <h3 class="font-semibold text-lg">Log out?</h3>
+        <p class="py-2 text-sm opacity-80">You will be signed out from your account on this device.</p>
+        <div class="modal-action">
+          <button class="btn" :disabled="isLoggingOut" @click="logoutModalOpen = false">Cancel</button>
+          <button class="btn btn-error" :disabled="isLoggingOut" @click="logout()">
+            <span class="loading loading-spinner loading-xs" x-show="isLoggingOut" x-cloak></span>
+            <span x-text="isLoggingOut ? 'Logging out...' : 'Log out'"></span>
+          </button>
+        </div>
+      </div>
+      <label class="modal-backdrop" @click="logoutModalOpen = false">Close</label>
+    </div>
+  </main>
+
+  <script>
+    function profileApp() {
+      return {
+        appId: 'profile',
+        client: null,
+        user: null,
+        profile: null,
+        loading: true,
+        language: 'en',
+        username: '',
+        avatarUrl: '',
+        avatarFallback: '',
+        successMessage: '',
+        errorMessage: '',
+        errorKind: 'none',
+        profileState: 'idle',
+        isSavingUsername: false,
+        isSavingAvatar: false,
+        isSavingVisibility: false,
+        isLoggingOut: false,
+        logoutModalOpen: false,
+        pendingAvatarFile: null,
+        pendingAvatarObjectUrl: '',
+        avatarFileName: '',
+        avatarUploadProgress: 0,
+        avatarMaxSourceBytes: 8 * 1024 * 1024,
+        avatarMaxUploadBytes: 5 * 1024 * 1024,
+        avatarTargetMaxDimension: 1024,
+        avatarAllowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        profileVisibility: 'followers',
+        detachProfileUpdateListener: null,
+        detachDebugTraceListener: null,
+        debugEnabled: false,
+        debugLastTrace: '',
+
+        normalizeVisibility(value) {
+          if (value === 'public' || value === 'followers' || value === 'private') {
+            return value;
+          }
+          return 'followers';
+        },
+
+        get avatarPreview() {
+          if (this.pendingAvatarObjectUrl) return this.pendingAvatarObjectUrl;
+          return this.avatarUrl && this.avatarUrl.trim() ? this.avatarUrl.trim() : this.avatarFallback;
+        },
+
+        clearFeedback() {
+          this.successMessage = '';
+          this.errorMessage = '';
+          this.errorKind = 'none';
+        },
+
+        isDebugEnabledFromQuery() {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('debug') === '1';
+          } catch {
+            return false;
+          }
+        },
+
+        ensureClient() {
+          if (!this.client) {
+            throw new Error('Client not initialized');
+          }
+        },
+
+        handleAvatarImageError(event) {
+          if (event && event.target) {
+            event.target.src = this.avatarFallback;
+          }
+        },
+
+        onAvatarFileChange(event) {
+          this.clearFeedback();
+          const file = event?.target?.files?.[0] || null;
+          this.avatarUploadProgress = 0;
+          this.pendingAvatarFile = null;
+          this.avatarFileName = '';
+
+          if (this.pendingAvatarObjectUrl) {
+            URL.revokeObjectURL(this.pendingAvatarObjectUrl);
+            this.pendingAvatarObjectUrl = '';
+          }
+
+          if (!file) return;
+
+          const mimeType = typeof file.type === 'string' ? file.type.trim().toLowerCase() : '';
+          if (!mimeType.startsWith('image/') || !this.avatarAllowedMimeTypes.includes(mimeType)) {
+            this.setError({ message: 'VALIDATION_ERROR' }, 'Only JPG, PNG, or WEBP images are allowed.');
+            if (event?.target) event.target.value = '';
+            return;
+          }
+
+          if (file.size > this.avatarMaxSourceBytes) {
+            this.setError({ message: 'VALIDATION_ERROR' }, 'Image is too large. Max source size is 8MB.');
+            if (event?.target) event.target.value = '';
+            return;
+          }
+
+          this.pendingAvatarFile = file;
+          this.avatarFileName = file.name;
+          this.pendingAvatarObjectUrl = URL.createObjectURL(file);
+        },
+
+        bytesToBase64(bytes) {
+          let binary = '';
+          const batchSize = 0x8000;
+          for (let offset = 0; offset < bytes.length; offset += batchSize) {
+            const batch = bytes.subarray(offset, Math.min(offset + batchSize, bytes.length));
+            binary += String.fromCharCode(...batch);
+          }
+          return btoa(binary);
+        },
+
+        readFileAsDataUrl(file) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => reject(new Error('Failed to read image file.'));
+            reader.readAsDataURL(file);
+          });
+        },
+
+        loadImageFromDataUrl(dataUrl) {
+          return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error('Failed to decode image.'));
+            image.src = dataUrl;
+          });
+        },
+
+        canvasToBlob(canvas, type, quality) {
+          return new Promise((resolve) => {
+            canvas.toBlob((blob) => resolve(blob), type, quality);
+          });
+        },
+
+        async optimizeAvatarFile(file) {
+          const dataUrl = await this.readFileAsDataUrl(file);
+          if (!dataUrl) throw new Error('Invalid image file.');
+
+          const image = await this.loadImageFromDataUrl(dataUrl);
+          const sourceWidth = Number(image.naturalWidth) || Number(image.width) || 0;
+          const sourceHeight = Number(image.naturalHeight) || Number(image.height) || 0;
+          if (sourceWidth <= 0 || sourceHeight <= 0) {
+            throw new Error('Unsupported image dimensions.');
+          }
+
+          const maxDimension = this.avatarTargetMaxDimension;
+          const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+          const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+          const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Unable to optimize image.');
+          ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+          const outputTypes = ['image/webp', 'image/jpeg'];
+          const outputQualities = [0.86, 0.78, 0.7, 0.62];
+          let optimizedBlob = null;
+
+          for (const outputType of outputTypes) {
+            for (const quality of outputQualities) {
+              const blob = await this.canvasToBlob(canvas, outputType, quality);
+              if (!blob) continue;
+              optimizedBlob = blob;
+              if (blob.size <= this.avatarMaxUploadBytes) {
+                break;
+              }
+            }
+            if (optimizedBlob && optimizedBlob.size <= this.avatarMaxUploadBytes) {
+              break;
+            }
+          }
+
+          if (!optimizedBlob) {
+            throw new Error('Failed to optimize avatar image.');
+          }
+          if (optimizedBlob.size > this.avatarMaxUploadBytes) {
+            throw new Error('Optimized image is still too large. Use a smaller image.');
+          }
+
+          const extension = optimizedBlob.type === 'image/webp' ? 'webp' : 'jpg';
+          const baseName = (this.user?.uid || 'avatar').toString().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'avatar';
+          return new File([optimizedBlob], `${baseName}-avatar.${extension}`, {
+            type: optimizedBlob.type,
+            lastModified: Date.now(),
+          });
+        },
+
+        async uploadAvatarFile(file) {
+          const initData = await this.client.storageUploadInit({
+            fileName: file.name,
+            mimeType: file.type || 'image/jpeg',
+            sizeBytes: file.size,
+            visibility: 'private',
+          });
+          const sessionId = typeof initData?.sessionId === 'string' ? initData.sessionId : '';
+          if (!sessionId) {
+            throw new Error('Upload session init failed.');
+          }
+
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const chunkSize = 256 * 1024;
+          const totalChunks = Math.max(1, Math.ceil(bytes.length / chunkSize));
+
+          try {
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+              const start = chunkIndex * chunkSize;
+              const end = Math.min(start + chunkSize, bytes.length);
+              const chunkBase64 = this.bytesToBase64(bytes.subarray(start, end));
+              await this.client.storageUploadWriteChunk(sessionId, chunkBase64, chunkIndex, totalChunks);
+              this.avatarUploadProgress = Math.round(((chunkIndex + 1) / totalChunks) * 90);
+            }
+
+            const completeData = await this.client.storageUploadComplete(sessionId);
+            const fileId = typeof completeData?.fileId === 'string' ? completeData.fileId : sessionId;
+            if (!fileId) {
+              throw new Error('Upload complete response is missing fileId.');
+            }
+
+            const resolved = await this.client.storageFilesGetDownloadUrl(fileId);
+            const downloadUrl = typeof resolved?.url === 'string' ? resolved.url.trim() : '';
+            if (!downloadUrl) {
+              throw new Error('Failed to resolve uploaded avatar URL.');
+            }
+            this.avatarUploadProgress = 100;
+            return downloadUrl;
+          } catch (error) {
+            try {
+              await this.client.storageUploadCancel(sessionId);
+            } catch {
+              // Ignore cancel failure and keep original upload error.
+            }
+            throw error;
+          }
+        },
+
+        usernameIsValid(value) {
+          const normalized = (value || '').trim();
+          if (normalized.length < 3 || normalized.length > 30) return false;
+          return /^[a-zA-Z0-9._-]+$/.test(normalized);
+        },
+
+        resolveAvatarFallback() {
+          const seed = (this.username || this.user?.email || this.user?.uid || 'User').trim();
+          const initial = seed.charAt(0).toUpperCase() || 'U';
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="100%" height="100%" fill="#2a323c"/><text x="50%" y="50%" fill="#ffffff" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="112">${initial}</text></svg>`;
+          this.avatarFallback = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        },
+
+        buildUpdatePayload(overrides = {}) {
+          const username = (overrides.username ?? overrides.displayName ?? this.username ?? this.profile?.username ?? this.profile?.displayName ?? '').trim();
+          const photoUrlRaw = (overrides.photoUrl ?? overrides.avatarUrl ?? this.avatarUrl ?? this.profile?.photoUrl ?? this.profile?.avatarUrl ?? '').trim();
+          const defaultVisibility = this.normalizeVisibility(
+            overrides.defaultVisibility ?? this.profileVisibility ?? this.profile?.defaultVisibility ?? 'followers',
+          );
+          const usernameVisibility = this.normalizeVisibility(
+            overrides.usernameVisibility ?? this.profile?.usernameVisibility ?? defaultVisibility,
+          );
+          const photoVisibility = this.normalizeVisibility(
+            overrides.photoVisibility ?? this.profile?.photoVisibility ?? defaultVisibility,
+          );
+
+          return {
+            username,
+            displayName: username,
+            bio: typeof this.profile?.bio === 'string' ? this.profile.bio : '',
+            photoUrl: photoUrlRaw.length > 0 ? photoUrlRaw : null,
+            avatarUrl: photoUrlRaw.length > 0 ? photoUrlRaw : null,
+            defaultVisibility,
+            usernameVisibility,
+            photoVisibility,
+            schemaVersion: 2,
+          };
+        },
+
+        clearPendingAvatarSelection() {
+          this.pendingAvatarFile = null;
+          this.avatarFileName = '';
+          if (this.pendingAvatarObjectUrl) {
+            URL.revokeObjectURL(this.pendingAvatarObjectUrl);
+            this.pendingAvatarObjectUrl = '';
+          }
+        },
+
+        async persistAvatarUrl(avatarUrl) {
+          const payload = this.buildUpdatePayload({ photoUrl: avatarUrl, avatarUrl });
+          const nextProfile = await this.client.socialProfileUpdate(payload);
+          this.profile = nextProfile;
+          const resolvedAvatarUrl = (
+            typeof nextProfile?.photoUrl === 'string' && nextProfile.photoUrl.trim()
+          ) || (
+            typeof nextProfile?.avatarUrl === 'string' && nextProfile.avatarUrl.trim()
+          ) || (
+            typeof avatarUrl === 'string' ? avatarUrl.trim() : ''
+          );
+          this.avatarUrl = resolvedAvatarUrl;
+          return resolvedAvatarUrl;
+        },
+
+        normalizeError(error, fallback) {
+          const text = typeof error?.message === 'string' ? error.message : String(error || '');
+          const raw = String(text || '').trim();
+          const upper = raw.toUpperCase();
+          if (upper.includes('NOT AUTHENTICATED')) {
+            return { kind: 'auth', message: 'Authentication failed. Please sign in again.' };
+          }
+          if (upper.includes('PERMISSION_DENIED')) {
+            return { kind: 'permission', message: 'Permission denied.' };
+          }
+          if (upper.includes('USERNAME_TAKEN') || upper.includes('CONFLICT_ALREADY_EXISTS')) {
+            return { kind: 'conflict', message: 'Username is already taken.' };
+          }
+          if (upper.includes('VALIDATION_ERROR')) {
+            return { kind: 'validation', message: fallback || 'Validation failed. Check your input values.' };
+          }
+          if (upper.includes('NOT_FOUND')) {
+            return { kind: 'not_found', message: 'Profile not found.' };
+          }
+          if (upper.includes('REQUEST TIMEOUT') || upper.includes('NETWORK') || upper.includes('FAILED TO FETCH')) {
+            return { kind: 'network', message: 'Network error. Please retry.' };
+          }
+          return { kind: 'unknown', message: raw || fallback };
+        },
+
+        setError(error, fallback) {
+          const normalized = this.normalizeError(error, fallback);
+          this.errorKind = normalized.kind;
+          this.errorMessage = normalized.message;
+        },
+
+        async init() {
+          this.loading = true;
+          this.profileState = 'loading';
+          this.clearFeedback();
+          if (typeof this.detachProfileUpdateListener === 'function') {
+            this.detachProfileUpdateListener();
+            this.detachProfileUpdateListener = null;
+          }
+          if (typeof this.detachDebugTraceListener === 'function') {
+            this.detachDebugTraceListener();
+            this.detachDebugTraceListener = null;
+          }
+          this.debugEnabled = this.isDebugEnabledFromQuery();
+          this.debugLastTrace = '';
+
+          try {
+            await loadHayOSClient();
+            if (typeof HayOSClient !== 'function') {
+              throw new Error('HayOSClient unavailable');
+            }
+            this.client = new HayOSClient(this.appId);
+
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth?.user || null;
+            if (!this.user) {
+              throw new Error('Not authenticated');
+            }
+
+            this.language = await this.client.getLanguage();
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((nextLanguage) => {
+              this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+            this.detachProfileUpdateListener = this.client.onSocialProfileUpdated((payload) => {
+              const changedUid = typeof payload?.uid === 'string' ? payload.uid.trim() : '';
+              if (!changedUid || changedUid !== this.user?.uid) return;
+              this.loadProfile();
+            });
+            if (this.debugEnabled) {
+              this.detachDebugTraceListener = this.client.onDebugTrace((payload) => {
+                const stage = typeof payload?.stage === 'string' ? payload.stage : 'trace';
+                const action = typeof payload?.action === 'string' ? payload.action : '';
+                const error = typeof payload?.error === 'string' ? payload.error : '';
+                this.debugLastTrace = `${stage}${action ? `:${action}` : ''}${error ? ` ${error}` : ''}`;
+              });
+            }
+
+            await this.loadProfile();
+            this.profileState = 'ready';
+          } catch (error) {
+            this.setError(error, 'Failed to initialize profile app.');
+            this.profileState = 'error';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadProfile() {
+          this.clearFeedback();
+          this.profileState = 'loading';
+          this.ensureClient();
+          const currentUser = this.user || await this.client.getCurrentUser();
+          if (!currentUser) {
+            throw new Error('Not authenticated');
+          }
+          this.user = currentUser;
+
+          try {
+            this.profile = await this.client.socialProfileGet();
+          } catch (error) {
+            this.profile = null;
+            const mapped = this.normalizeError(error, '').message;
+            if (mapped && mapped !== 'Profile not found.') {
+              this.setError(error, mapped);
+              this.profileState = 'error';
+            }
+          }
+
+          this.username = (this.profile?.username || this.profile?.displayName || '').trim();
+          this.avatarUrl = (this.profile?.photoUrl || this.profile?.avatarUrl || '').trim();
+          this.profileVisibility = this.normalizeVisibility(this.profile?.defaultVisibility);
+          this.resolveAvatarFallback();
+          if (!this.errorMessage) {
+            this.profileState = 'ready';
+          }
+        },
+
+        async saveUsername() {
+          if (this.loading || this.isSavingUsername) return;
+          this.clearFeedback();
+          this.ensureClient();
+
+          const normalized = (this.username || '').trim();
+          if (!this.usernameIsValid(normalized)) {
+            this.setError({ message: 'VALIDATION_ERROR' }, 'Username must be 3-30 characters and contain only letters, numbers, . _ -');
+            return;
+          }
+
+          this.isSavingUsername = true;
+          try {
+            const payload = this.buildUpdatePayload({ username: normalized, displayName: normalized });
+            const nextProfile = await this.client.socialProfileUpdate(payload);
+            this.profile = nextProfile;
+            this.username = nextProfile?.username || nextProfile?.displayName || normalized;
+            this.resolveAvatarFallback();
+            this.successMessage = 'Username updated successfully.';
+          } catch (error) {
+            this.setError(error, 'Failed to update username.');
+          } finally {
+            this.isSavingUsername = false;
+          }
+        },
+
+        async saveAvatar() {
+          if (this.loading || this.isSavingAvatar) return;
+          this.clearFeedback();
+          this.ensureClient();
+
+          if (!this.pendingAvatarFile) {
+            this.setError({ message: 'VALIDATION_ERROR' }, 'Choose an image first.');
+            return;
+          }
+
+          this.isSavingAvatar = true;
+          this.avatarUploadProgress = 1;
+          try {
+            this.avatarUploadProgress = 5;
+            const optimizedFile = await this.optimizeAvatarFile(this.pendingAvatarFile);
+            this.avatarUploadProgress = 12;
+            const uploadedAvatarUrl = await this.uploadAvatarFile(optimizedFile);
+            await this.persistAvatarUrl(uploadedAvatarUrl);
+            this.clearPendingAvatarSelection();
+            this.successMessage = 'Avatar updated successfully.';
+          } catch (error) {
+            this.setError(error, 'Failed to upload avatar.');
+          } finally {
+            this.isSavingAvatar = false;
+            this.avatarUploadProgress = 0;
+          }
+        },
+
+        async removeAvatar() {
+          if (this.loading || this.isSavingAvatar) return;
+          this.clearFeedback();
+          this.ensureClient();
+
+          this.isSavingAvatar = true;
+          this.avatarUploadProgress = 0;
+          try {
+            await this.persistAvatarUrl('');
+            this.clearPendingAvatarSelection();
+            this.successMessage = 'Avatar removed successfully.';
+          } catch (error) {
+            this.setError(error, 'Failed to remove avatar.');
+          } finally {
+            this.isSavingAvatar = false;
+          }
+        },
+
+        async saveVisibility() {
+          if (this.loading || this.isSavingVisibility) return;
+          this.clearFeedback();
+          this.ensureClient();
+
+          this.isSavingVisibility = true;
+          try {
+            const payload = this.buildUpdatePayload({ defaultVisibility: this.profileVisibility });
+            const nextProfile = await this.client.socialProfileUpdate(payload);
+            this.profile = nextProfile;
+            this.profileVisibility = this.normalizeVisibility(nextProfile?.defaultVisibility);
+            this.successMessage = 'Visibility updated successfully.';
+          } catch (error) {
+            this.setError(error, 'Failed to update visibility.');
+          } finally {
+            this.isSavingVisibility = false;
+          }
+        },
+
+        openLogoutModal() {
+          this.clearFeedback();
+          this.logoutModalOpen = true;
+        },
+
+        async logout() {
+          if (this.isLoggingOut) return;
+          this.clearFeedback();
+          this.ensureClient();
+          this.isLoggingOut = true;
+
+          try {
+            await this.client.signOut();
+            this.logoutModalOpen = false;
+            this.successMessage = 'Logged out successfully.';
+            setTimeout(() => {
+              window.location.reload();
+            }, 600);
+          } catch (error) {
+            this.setError(error, 'Failed to log out.');
+          } finally {
+            this.isLoggingOut = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

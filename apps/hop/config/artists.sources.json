@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "ytDlpVersion": "2025.01.15",
+  "syncCadenceDays": 7,
+  "artists": [
+    {
+      "artistId": "misho",
+      "channelUrl": "",
+      "name": {
+        "hy": "Միշո",
+        "en": "Misho"
+      }
+    },
+    {
+      "artistId": "mets-hayq",
+      "channelUrl": "",
+      "name": {
+        "hy": "Մեծ Հայք",
+        "en": "Mets Hayq"
+      }
+    },
+    {
+      "artistId": "haytg",
+      "channelUrl": "",
+      "name": {
+        "hy": "Հայ Տղ",
+        "en": "Hay Tg"
+      }
+    },
+    {
+      "artistId": "noro",
+      "channelUrl": "",
+      "name": {
+        "hy": "Նորո",
+        "en": "Noro"
+      }
+    }
+  ]
+}

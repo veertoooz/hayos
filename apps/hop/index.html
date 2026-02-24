@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="hy" class="h-full bg-transparent" data-theme="black" x-data="hopApp()" x-init="init()">
+
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint bootstrap failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Հոպ</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <script src="../shared/contract.js"></script>
+
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    .shell {
+      width: min(100vw, 460px);
+      height: 100dvh;
+      margin: 0 auto;
+    }
+
+    .ios-surface {
+      border-radius: 1.25rem;
+      border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+      background: color-mix(in oklab, currentColor 6%, transparent);
+      box-shadow: 0 10px 24px color-mix(in oklab, currentColor 10%, transparent);
+    }
+
+    .section-kicker {
+      font-size: 0.72rem;
+      line-height: 1rem;
+      letter-spacing: 0.03em;
+      opacity: 0.72;
+      font-weight: 600;
+    }
+
+    .primary-heading {
+      font-size: 1.18rem;
+      line-height: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .secondary-copy {
+      font-size: 0.94rem;
+      line-height: 1.4rem;
+      opacity: 0.84;
+    }
+
+    .ios-stack-1 {
+      gap: 0.5rem;
+    }
+
+    .ios-stack-2 {
+      gap: 0.75rem;
+    }
+
+    .ios-stack-3 {
+      gap: 1rem;
+    }
+
+    .ios-tap {
+      min-height: 2.75rem;
+    }
+
+    .ios-caption {
+      font-size: 0.78rem;
+      line-height: 1.05rem;
+      opacity: 0.7;
+    }
+
+    .meta-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .chip-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    .chip-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .track-hero {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 0.9rem;
+      align-items: center;
+    }
+
+    .track-art {
+      width: 72px;
+      height: 72px;
+      border-radius: 1rem;
+      display: grid;
+      place-items: center;
+      font-size: 1.5rem;
+      border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+      background: color-mix(in oklab, currentColor 8%, transparent);
+    }
+
+    .lyrics-sheet {
+      border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+      border-radius: 1rem;
+      padding: 0.9rem;
+      background: color-mix(in oklab, currentColor 4%, transparent);
+    }
+
+    .ios-control {
+      border-radius: 0.95rem;
+    }
+
+    .ios-input {
+      border-radius: 0.95rem;
+      min-height: 2.9rem;
+    }
+
+    .ios-pill {
+      border-radius: 999px;
+    }
+
+    .ios-pressed:active {
+      transform: scale(0.985);
+    }
+
+    .ios-disabled:disabled {
+      opacity: 0.46;
+      pointer-events: none;
+    }
+
+    .press-lift {
+      transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .press-lift:active {
+      transform: translateY(0.5px) scale(0.985);
+    }
+
+    .surface-hover {
+      transition: box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .surface-hover:active {
+      box-shadow: 0 6px 16px color-mix(in oklab, currentColor 10%, transparent);
+    }
+
+    .safe-top {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+    }
+
+    .safe-bottom {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+
+    .inner-scroll {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    .truncate-tight {
+      min-width: 0;
+    }
+
+    *:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+    }
+
+    .btn:focus-visible,
+    .input:focus-within {
+      box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 24%, transparent);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .motion-safe\:transition,
+      .motion-safe\:duration-200,
+      .motion-safe\:duration-300 {
+        transition: none !important;
+      }
+    }
+
+    .nav-active {
+      background: color-mix(in oklab, currentColor 12%, transparent);
+      border-radius: 0.9rem;
+    }
+
+    @media (max-width: 360px) {
+      .track-hero {
+        grid-template-columns: 56px 1fr;
+        gap: 0.7rem;
+      }
+
+      .track-art {
+        width: 56px;
+        height: 56px;
+        font-size: 1.2rem;
+        border-radius: 0.8rem;
+      }
+
+      .ios-tap {
+        min-height: 2.55rem;
+      }
+
+      .primary-heading {
+        font-size: 1.05rem;
+        line-height: 1.3rem;
+      }
+    }
+  </style>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+
+    function loadHayOSClient() {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost ? 'http://localhost:5173/hayos-client.js' : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+</head>
+
+<body class="h-full bg-base-100 text-base-content">
+  <div class="shell bg-base-100 border-x border-base-300 flex flex-col" x-cloak>
+    <header class="safe-top px-4 pb-4 border-b border-base-300 bg-base-100/95 backdrop-blur sticky top-0 z-30">
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm btn-square ios-tap ios-pill ios-control ios-pressed press-lift motion-safe:transition motion-safe:duration-200" x-show="canGoBack()" @click="goBack()" :aria-label="t('back')">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <div class="truncate-tight flex-1">
+          <h1 class="text-base font-semibold truncate" x-text="pageTitle()"></h1>
+          <p class="ios-caption truncate" x-text="pageSubtitle()"></p>
+        </div>
+        <span class="badge badge-outline text-[11px]" x-text="status"></span>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-hidden relative">
+
+      <div class="absolute inset-0 inner-scroll overflow-y-auto px-4 py-4" x-show="currentView === 'artists'" x-transition:enter="motion-safe:transition motion-safe:duration-300" :x-transition:enter-start="transitionEnterStartClass()" x-transition:enter-end="opacity-100 translate-x-0" x-transition:leave="motion-safe:transition motion-safe:duration-200" x-transition:leave-start="opacity-100 translate-x-0" :x-transition:leave-end="transitionLeaveEndClass()">
+        <div class="space-y-3">
+          <div class="alert alert-info text-sm" x-show="isDataLoading">
+            <span x-text="t('dataLoading')"></span>
+          </div>
+          <div class="alert alert-warning text-sm" x-show="dataError">
+            <span x-text="t('dataLoadFailed')"></span>
+          </div>
+          <label class="input input-bordered ios-input ios-control w-full">
+            <i class="fa-solid fa-magnifying-glass opacity-70"></i>
+            <input type="search" :placeholder="t('searchArtist')" x-model.trim="artistQuery" />
+          </label>
+          <template x-for="artist in filteredArtists()" :key="artist.id">
+            <article class="card ios-surface surface-hover shadow-sm">
+              <div class="card-body p-4 ios-stack-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="truncate-tight">
+                    <h3 class="font-semibold truncate" x-text="artistNameText(artist)"></h3>
+                    <p class="ios-caption break-words" x-text="artistBioText(artist)"></p>
+                    <div class="meta-chip-row mt-2">
+                      <span class="badge badge-outline badge-sm" x-text="'🎵 ' + artist.tracks.length"></span>
+                      <span class="badge badge-outline badge-sm" x-text="'🎧 ' + t('artistBadge')"></span>
+                    </div>
+                  </div>
+                  <span class="badge badge-outline shrink-0" x-text="artist.tracks.length + ' ' + t('tracksCountSuffix')"></span>
+                </div>
+                <div class="flex gap-2 overflow-x-auto inner-scroll pb-1">
+                  <template x-for="track in artist.tracks" :key="track.id">
+                    <button class="btn btn-sm btn-ghost ios-tap ios-pill ios-control ios-pressed press-lift shrink-0 motion-safe:transition motion-safe:duration-200" @click="openTrack(track.id)">
+                      <i class="fa-solid fa-music"></i>
+                      <span class="truncate max-w-32" x-text="trackTitleText(track)"></span>
+                    </button>
+                  </template>
+                </div>
+                <button class="btn btn-primary btn-sm ios-tap ios-control ios-pressed press-lift w-full justify-between motion-safe:transition motion-safe:duration-200" @click="openArtistTracks(artist.id)">
+                  <span x-text="t('openTracksPage')"></span>
+                  <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+              </div>
+            </article>
+          </template>
+          <div class="card ios-surface shadow-sm" x-show="filteredArtists().length === 0">
+            <div class="card-body p-4 text-sm opacity-70" x-text="t('artistNotFound')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="absolute inset-0 inner-scroll overflow-y-auto px-4 py-4" x-show="currentView === 'tracks'" x-transition:enter="motion-safe:transition motion-safe:duration-300" :x-transition:enter-start="transitionEnterStartClass()" x-transition:enter-end="opacity-100 translate-x-0" x-transition:leave="motion-safe:transition motion-safe:duration-200" x-transition:leave-start="opacity-100 translate-x-0" :x-transition:leave-end="transitionLeaveEndClass()">
+        <section class="card ios-surface surface-hover shadow-sm">
+          <div class="card-body p-4 ios-stack-2">
+            <div class="alert alert-info text-sm" x-show="isDataLoading">
+              <span x-text="t('dataLoading')"></span>
+            </div>
+            <div class="alert alert-warning text-sm" x-show="dataError">
+              <span x-text="t('dataLoadFailed')"></span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-base font-semibold" x-text="tracksTitle()"></h2>
+              <button class="btn btn-ghost btn-xs" x-show="selectedArtistId" @click="clearArtistFilter()" x-text="t('clear')"></button>
+            </div>
+            <label class="input input-bordered ios-input ios-control w-full mt-2">
+              <i class="fa-solid fa-magnifying-glass opacity-70"></i>
+              <input type="search" :placeholder="t('searchTrack')" x-model.trim="trackQuery" />
+            </label>
+            <div class="space-y-2 mt-1">
+              <template x-for="track in filteredTracks()" :key="track.id">
+                <button class="btn btn-block ios-tap ios-control ios-pressed justify-between gap-2 motion-safe:transition motion-safe:duration-200" @click="openTrack(track.id)">
+                  <div class="truncate-tight text-left flex items-center gap-2">
+                    <i class="fa-solid fa-circle-play"></i>
+                    <div class="truncate-tight">
+                    <p class="truncate font-medium" x-text="trackTitleText(track)"></p>
+                    <p class="ios-caption truncate" x-text="'🎙️ ' + trackArtistText(track)"></p>
+                    </div>
+                  </div>
+                  <i class="fa-solid fa-chevron-right text-xs opacity-60 shrink-0"></i>
+                </button>
+              </template>
+              <div class="text-sm opacity-70 py-2" x-show="filteredTracks().length === 0" x-text="t('trackNotFound')"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="absolute inset-0 inner-scroll overflow-y-auto px-4 py-4" x-show="currentView === 'track' && currentTrack" x-transition:enter="motion-safe:transition motion-safe:duration-300" :x-transition:enter-start="transitionEnterStartClass()" x-transition:enter-end="opacity-100 translate-x-0" x-transition:leave="motion-safe:transition motion-safe:duration-200" x-transition:leave-start="opacity-100 translate-x-0" :x-transition:leave-end="transitionLeaveEndClass()">
+        <article class="space-y-4">
+          <section class="card ios-surface surface-hover shadow-sm">
+            <div class="card-body p-4 ios-stack-2">
+              <div class="track-hero">
+                <div class="track-art">🎵</div>
+                <div class="truncate-tight">
+                  <p class="ios-caption truncate" x-text="'🎙️ ' + trackArtistText(currentTrack)"></p>
+                  <h2 class="text-lg font-semibold truncate" x-text="trackTitleText(currentTrack)"></h2>
+                  <p class="ios-caption mt-1" x-text="t('nowPlaying')"></p>
+                </div>
+              </div>
+              <div class="mt-2 flex gap-2 chip-scroll pb-1">
+                <span class="badge badge-outline" x-show="currentTrack?.year" x-text="'📆 ' + currentTrack?.year"></span>
+                <span class="badge badge-outline" x-show="currentTrack?.duration" x-text="'⏱️ ' + currentTrack?.duration"></span>
+                <span class="badge badge-outline" x-show="currentTrack?.mood" x-text="'🎚️ ' + localizedText(currentTrack?.mood)"></span>
+              </div>
+              <div class="mt-2 flex gap-2 overflow-x-auto inner-scroll pb-1">
+                <button class="btn btn-sm btn-outline ios-tap ios-pill ios-control ios-pressed ios-disabled press-lift shrink-0" @click="openPrevTrack()" :disabled="!hasPrevTrack()">
+                  <i class="fa-solid fa-backward-step"></i>
+                  <span x-text="t('prev')"></span>
+                </button>
+                <button class="btn btn-sm btn-outline ios-tap ios-pill ios-control ios-pressed ios-disabled press-lift shrink-0" @click="openNextTrack()" :disabled="!hasNextTrack()">
+                  <i class="fa-solid fa-forward-step"></i>
+                  <span x-text="t('next')"></span>
+                </button>
+                <button class="btn btn-sm btn-outline ios-tap ios-pill ios-control ios-pressed press-lift shrink-0" @click="copyCurrentLyrics()">
+                  <i class="fa-regular fa-copy"></i>
+                  <span x-text="t('copyLyrics')"></span>
+                </button>
+                <button class="btn btn-sm btn-outline ios-tap ios-pill ios-control ios-pressed press-lift shrink-0" @click="copyTrackShareText()">
+                  <i class="fa-solid fa-share-nodes"></i>
+                  <span x-text="t('share')"></span>
+                </button>
+              </div>
+              <div class="aspect-video rounded-box overflow-hidden border border-base-300 mt-2 bg-base-100">
+                <iframe
+                  class="w-full h-full"
+                  :src="youtubeEmbedUrl(currentTrack?.youtubeId)"
+                  :title="t('youtubePlayer')"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                  allowfullscreen>
+                </iframe>
+              </div>
+            </div>
+          </section>
+
+          <section class="card ios-surface surface-hover shadow-sm">
+            <div class="card-body p-4 ios-stack-2">
+              <h3 class="font-semibold" x-text="t('lyricsTitle')"></h3>
+              <div class="lyrics-sheet">
+                <pre class="text-sm whitespace-pre-wrap break-words font-sans leading-7" x-text="lyricsText(currentTrack)"></pre>
+              </div>
+            </div>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <nav class="safe-bottom border-t border-base-300 bg-base-100/95 backdrop-blur px-2 py-2">
+      <div class="grid grid-cols-2 gap-1">
+        <button class="btn btn-ghost btn-sm" :class="currentView === 'artists' ? 'nav-active' : ''" @click="setRootView('artists')">
+          <i class="fa-solid fa-microphone-lines"></i>
+          <span x-text="t('artists')"></span>
+        </button>
+        <button class="btn btn-ghost btn-sm" :class="currentView === 'tracks' ? 'nav-active' : ''" @click="setRootView('tracks')">
+          <i class="fa-solid fa-music"></i>
+          <span x-text="t('tracks')"></span>
+        </button>
+      </div>
+    </nav>
+    <div class="toast toast-top toast-center z-40 px-2" x-show="flashMessage" x-transition.opacity.duration.200ms>
+      <div class="alert alert-info py-2 px-3 text-sm ios-pill border border-base-300 shadow max-w-[92vw]">
+        <span x-text="flashMessage"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function hopApp() {
+      const HOP_SCHEMA_VERSION = 1;
+      const HOP_DATA_POLICY = {
+        mode: 'generated-first-fallback-only',
+        primary: 'generated-file',
+        secondary: 'backend',
+        fallback: 'local-seed',
+      };
+      const HOP_SCHEMA_CONTRACT = {
+        artists: {
+          required: ['id', 'name', 'bio', 'tracks'],
+        },
+        tracks: {
+          required: ['id', 'artistId', 'title', 'youtubeId'],
+          optional: ['duration', 'year', 'lyrics', 'mood', 'inactive', 'videoUrl', 'publishedAt'],
+        },
+      };
+      const localSeedArtists = [
+        {
+          id: 'misho',
+          name: { hy: 'Միշո', en: 'Misho' },
+          bio: { hy: 'Հայկական ռեփ դպրոցի առաջատար անուններից՝ քաղաքային սուր flow-ով։', en: 'One of the key names in Armenian rap, known for sharp urban flow.' },
+          tracks: [
+            {
+              id: 'misho-hay-es',
+              title: { hy: 'Օրինակելի', en: 'Orinakeli' },
+              youtubeId: 'fLexgOxsZu0',
+              year: '2014',
+              duration: '3:38',
+              mood: { hy: 'Street Rap', en: 'Street Rap' },
+              lyrics: { hy: 'Ես քաղաքից եմ, բառը ռիթմի վրա է,\nձայնը փողոցից է, քայլը՝ հիփ հոփի։\nՍա իմ անունն է, իմ պատմությունն է։', en: 'I am from the city, my words ride the rhythm,\nthe voice is from the streets, the step is hip-hop.\nThis is my name, this is my story.' }
+            },
+            {
+              id: 'misho-ankap',
+              title: { hy: 'Անիմաստ ա', en: 'Animast A' },
+              youtubeId: 'hT_nvWreIhg',
+              year: '2024',
+              duration: '3:06',
+              mood: { hy: 'Alternative Rap', en: 'Alternative Rap' },
+              lyrics: { hy: 'Անկապ օրերի մեջ գտնում եմ բիթը,\nգիշերվա մեջ գծում եմ ուղին։\nԲառը մնում է, քանի դեռ շունչ կա։', en: 'In messy days I still find the beat,\nin the night I draw my own path.\nThe word remains while there is breath.' }
+            },
+            {
+              id: 'misho-ereko',
+              title: { hy: 'Թթվածին', en: 'Ttvacin' },
+              youtubeId: 'YVkUvmDQ3HY',
+              year: '2023',
+              duration: '2:54',
+              mood: { hy: 'Urban', en: 'Urban' },
+              lyrics: { hy: 'Երեկոն իջնում է բակ,\nիսկ ձայնը մնում է բաց։\nՀոգնած օրերը մարում են բիթի տակ։', en: 'Evening drops into the yard,\nbut the voice stays open.\nTired days fade under the beat.' }
+            }
+          ]
+        },
+        {
+          id: 'mets-hayq',
+          name: { hy: 'Մեծ Հայք', en: 'Mets Hayq' },
+          bio: { hy: 'Boom bap մոտեցում, ծանր հնչողություն և պատմողական տողեր։', en: 'Boom bap direction with heavy sound and story-driven lines.' },
+          tracks: [
+            {
+              id: 'hayq-verev',
+              title: { hy: 'Քեֆ արա', en: 'Qef Ara' },
+              youtubeId: '2Vv-BfVoq4g',
+              year: '2017',
+              duration: '3:26',
+              mood: { hy: 'Boom Bap', en: 'Boom Bap' },
+              lyrics: { hy: 'Վերև հասնելը դժվար է, բայց ես գնում եմ,\nքայլ առ քայլ, բառ առ բառ,\nերբ ռիթմը միանում է սրտիս։', en: 'Getting higher is hard, but I keep moving,\nstep by step, word by word,\nwhen the rhythm connects to my heart.' }
+            },
+            {
+              id: 'hayq-qaxaq',
+              title: { hy: 'Քամի փչի 2', en: 'Qami Pchi 2' },
+              youtubeId: 'JGwWNGJdvx8',
+              year: '2016',
+              duration: '4:01',
+              mood: { hy: 'Crew Anthem', en: 'Crew Anthem' },
+              lyrics: { hy: 'Քաղաքը խոսում է լույսերով,\nմեր բակը՝ բասով,\nհայկական հիփ հոփը՝ նոր շնչով։', en: 'The city speaks in lights,\nour yard speaks in bass,\nArmenian hip-hop breathes again.' }
+            },
+            {
+              id: 'hayq-uxi',
+              title: { hy: 'Ես քեզ հետ', en: 'Yes Qez Het' },
+              youtubeId: 'lp-EO5I60KA',
+              year: '2023',
+              duration: '3:05',
+              mood: { hy: 'Melodic Rap', en: 'Melodic Rap' },
+              lyrics: { hy: 'Ուղին երկար է, բայց մերն է,\nբառը ծանր է, բայց ճշմարիտ։\nԵրաժշտությունը տուն է դարձնում ճանապարհը։', en: 'The road is long, but it is ours,\nthe word is heavy, but true.\nMusic turns the road into home.' }
+            }
+          ]
+        },
+        {
+          id: 'haytg',
+          name: { hy: 'Հայ Տղ', en: 'Hay Tg' },
+          bio: { hy: 'Ժամանակակից trap/hip-hop խառնուրդ՝ պարզ hook-երով։', en: 'Modern trap/hip-hop blend with direct hooks.' },
+          tracks: [
+            {
+              id: 'haytg-ser',
+              title: { hy: 'Պատկեր', en: 'Patker' },
+              youtubeId: '09R8_2nJtjg',
+              year: '2022',
+              duration: '3:14',
+              mood: { hy: 'Trap', en: 'Trap' },
+              lyrics: { hy: 'Սերը ու բիթը մի լեզու ունեն,\nմարդիկ գալիս-գնում են, երգը մնում։\nԱսեմ բարձր՝ սա մեր ձայնն է։', en: 'Love and beat speak one language,\npeople come and go, the song remains.\nSay it loud, this is our voice.' }
+            },
+            {
+              id: 'haytg-erku',
+              title: { hy: 'Հայեր', en: 'Hayer' },
+              youtubeId: 'RgKAFK5djSk',
+              year: '2021',
+              duration: '2:49',
+              mood: { hy: 'Anthem', en: 'Anthem' },
+              lyrics: { hy: 'Երկու աշխարհ՝ օրը և գիշերը,\nերկու ռիթմ՝ սիրտն ու փողոցը,\nմեկ պատմություն՝ իմ երգի մեջ։', en: 'Two worlds, day and night,\ntwo rhythms, heart and street,\none story inside my song.' }
+            },
+            {
+              id: 'haytg-eshxat',
+              title: { hy: 'Քեզ հետ', en: 'Qez Het' },
+              youtubeId: '60ItHLz5WEA',
+              year: '2020',
+              duration: '3:21',
+              mood: { hy: 'Modern Rap', en: 'Modern Rap' },
+              lyrics: { hy: 'Աշխատանքի ձայնը ռիթմ է,\nքրտինքը՝ մեր ստորագրությունը։\nՄենք գրում ենք երգը ամեն օր։', en: 'The sound of work is rhythm,\nsweat is our signature.\nWe write this song every day.' }
+            }
+          ]
+        },
+        {
+          id: 'noro',
+          name: { hy: 'Նորո', en: 'Noro' },
+          bio: { hy: 'Melodic rap մոտեցում և introspective բառապաշար։', en: 'Melodic rap approach with introspective lyric style.' },
+          tracks: [
+            {
+              id: 'noro-lusamut',
+              title: { hy: 'Լուսամուտ', en: 'Lusamut' },
+              youtubeId: 'CevxZvSJLk8',
+              year: '2024',
+              duration: '2:58',
+              mood: { hy: 'Melodic', en: 'Melodic' },
+              lyrics: { hy: 'Լուսամուտից քաղաքն է նայում,\nիսկ սենյակում բառերն են շարվում։\nԵրգը դառնում է օրվա օրագիր։', en: 'The city looks through the window,\nwhile words line up in the room.\nThe song becomes the diary of the day.' }
+            },
+            {
+              id: 'noro-tund',
+              title: { hy: 'Տուն', en: 'Tun' },
+              youtubeId: 'pRpeEdMmmQ0',
+              year: '2024',
+              duration: '3:11',
+              mood: { hy: 'Introspective', en: 'Introspective' },
+              lyrics: { hy: 'Տունը միշտ հետս է,\nթեև փողոցում եմ։\nԲիթի վրա գտնում եմ իմ հասցեն։', en: 'Home is always with me,\neven when I am outside.\nOn the beat I find my address.' }
+            }
+          ]
+        }
+      ];
+
+      return {
+        appId: 'hop',
+        status: '',
+        error: '',
+        user: null,
+        client: null,
+        language: 'hy',
+        osTheme: '',
+        schemaVersion: HOP_SCHEMA_VERSION,
+        dataPolicy: HOP_DATA_POLICY,
+        schemaContract: HOP_SCHEMA_CONTRACT,
+        artists: [],
+        tracks: [],
+        activeDataSource: 'none',
+        currentTrack: null,
+        selectedArtistId: '',
+        artistQuery: '',
+        trackQuery: '',
+        recentTrackIds: [],
+        flashMessage: '',
+        flashTimer: null,
+        isDataLoading: false,
+        dataError: '',
+        dataLoadAttempts: [],
+        transitionDirection: 'forward',
+        viewStack: ['artists'],
+
+        get currentView() {
+          return this.viewStack[this.viewStack.length - 1];
+        },
+
+        pageTitle() {
+          if (this.currentView === 'artists') return this.t('artists');
+          if (this.currentView === 'tracks') return this.t('tracks');
+          if (this.currentView === 'track') return this.currentTrack ? this.trackTitleText(this.currentTrack) : this.t('track');
+          return this.t('appName');
+        },
+
+        pageSubtitle() {
+          if (this.currentView === 'artists') return this.t('allArtists');
+          if (this.currentView === 'tracks') return this.selectedArtistId ? this.t('selectedArtistTracks') : this.t('allTracks');
+          return this.currentTrack ? this.trackArtistText(this.currentTrack) : this.t('track');
+        },
+
+        tracksTitle() {
+          if (!this.selectedArtistId) return this.t('allTracks');
+          const artist = this.artists.find((item) => item.id === this.selectedArtistId);
+          return artist ? `${this.artistNameText(artist)} • ${this.t('tracks')}` : this.t('tracks');
+        },
+
+        visibleTracks() {
+          const activeTracks = this.tracks.filter((item) => item && item.inactive !== true);
+          if (!this.selectedArtistId) return activeTracks;
+          return activeTracks.filter((item) => item.artistId === this.selectedArtistId);
+        },
+
+        filteredArtists() {
+          const query = this.artistQuery.toLowerCase();
+          if (!query) return this.artists;
+          return this.artists.filter((item) =>
+            this.searchBlob(item.name).includes(query) || this.searchBlob(item.bio).includes(query)
+          );
+        },
+
+        filteredTracks() {
+          const query = this.trackQuery.toLowerCase();
+          const source = this.visibleTracks();
+          if (!query) return source;
+          return source.filter((item) =>
+            this.searchBlob(item.title).includes(query) || this.searchBlob(item.artistName).includes(query)
+          );
+        },
+
+        currentTrackIndex() {
+          if (!this.currentTrack) return -1;
+          return this.tracks.findIndex((item) => item.id === this.currentTrack.id);
+        },
+
+        hasPrevTrack() {
+          return this.currentTrackIndex() > 0;
+        },
+
+        hasNextTrack() {
+          const idx = this.currentTrackIndex();
+          return idx > -1 && idx < this.tracks.length - 1;
+        },
+
+        openPrevTrack() {
+          const idx = this.currentTrackIndex();
+          if (idx <= 0) return;
+          this.openTrack(this.tracks[idx - 1].id);
+        },
+
+        openNextTrack() {
+          const idx = this.currentTrackIndex();
+          if (idx < 0 || idx >= this.tracks.length - 1) return;
+          this.openTrack(this.tracks[idx + 1].id);
+        },
+
+        recentTrackList() {
+          return this.recentTrackIds
+            .map((id) => this.tracks.find((track) => track.id === id))
+            .filter(Boolean)
+            .slice(0, 4);
+        },
+
+        localizedText(value) {
+          if (!value) return '';
+          if (typeof value === 'string') return value;
+          const lang = this.language === 'en' ? 'en' : 'hy';
+          return value[lang] || value.hy || value.en || '';
+        },
+
+        searchBlob(value) {
+          if (!value) return '';
+          if (typeof value === 'string') return value.toLowerCase();
+          const hy = typeof value.hy === 'string' ? value.hy : '';
+          const en = typeof value.en === 'string' ? value.en : '';
+          return `${hy} ${en}`.toLowerCase();
+        },
+
+        artistNameText(artist) {
+          return this.localizedText(artist?.name);
+        },
+
+        artistBioText(artist) {
+          return this.localizedText(artist?.bio);
+        },
+
+        trackTitleText(track) {
+          return this.localizedText(track?.title);
+        },
+
+        trackArtistText(track) {
+          return this.localizedText(track?.artistName);
+        },
+
+        lyricsText(track) {
+          return this.localizedText(track?.lyrics);
+        },
+
+        normalizeLocalized(value) {
+          if (typeof value === 'string') {
+            return { hy: value, en: value };
+          }
+          if (value && typeof value === 'object') {
+            const hy = typeof value.hy === 'string' && value.hy.trim() ? value.hy.trim() : '';
+            const en = typeof value.en === 'string' && value.en.trim() ? value.en.trim() : '';
+            if (hy || en) return { hy: hy || en, en: en || hy };
+          }
+          return { hy: '', en: '' };
+        },
+
+        hasLocalizedText(value) {
+          if (!value || typeof value !== 'object') return false;
+          const hy = typeof value.hy === 'string' ? value.hy.trim() : '';
+          const en = typeof value.en === 'string' ? value.en.trim() : '';
+          return Boolean(hy || en);
+        },
+
+        warnSchemaIssue(scope, reason, payload) {
+          try {
+            console.warn('[hop-schema]', { scope, reason, payload });
+          } catch {
+            // ignore logging failures
+          }
+        },
+
+        normalizeIsoDate(value) {
+          if (typeof value !== 'string') return '';
+          const trimmed = value.trim();
+          if (!trimmed) return '';
+          const time = Date.parse(trimmed);
+          if (!Number.isFinite(time)) return '';
+          return new Date(time).toISOString();
+        },
+
+        normalizeTrackDoc(raw) {
+          if (!raw || typeof raw !== 'object') return null;
+          const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+          const artistId = typeof raw.artistId === 'string' && raw.artistId.trim() ? raw.artistId.trim() : '';
+          const youtubeId = typeof raw.youtubeId === 'string' ? raw.youtubeId.trim() : '';
+          const title = this.normalizeLocalized(raw.title);
+          if (!id || !artistId || !youtubeId || !this.hasLocalizedText(title)) return null;
+          return {
+            id,
+            artistId,
+            title,
+            lyrics: this.normalizeLocalized(raw.lyrics),
+            mood: this.normalizeLocalized(raw.mood),
+            youtubeId,
+            videoUrl: typeof raw.videoUrl === 'string' && raw.videoUrl.trim()
+              ? raw.videoUrl.trim()
+              : (youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : ''),
+            publishedAt: this.normalizeIsoDate(raw.publishedAt),
+            year: typeof raw.year === 'string' ? raw.year.trim() : '',
+            duration: typeof raw.duration === 'string' ? raw.duration.trim() : '',
+            sortOrder: Number.isFinite(raw.sortOrder) ? Number(raw.sortOrder) : 0,
+            isActive: raw.isActive !== false,
+            inactive: raw.inactive === true,
+          };
+        },
+
+        normalizeArtistDoc(raw) {
+          if (!raw || typeof raw !== 'object') return null;
+          const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+          const name = this.normalizeLocalized(raw.name);
+          const bio = this.normalizeLocalized(raw.bio);
+          if (!id || !this.hasLocalizedText(name)) return null;
+          return {
+            id,
+            name,
+            bio: this.hasLocalizedText(bio) ? bio : { hy: '', en: '' },
+            sortOrder: Number.isFinite(raw.sortOrder) ? Number(raw.sortOrder) : 0,
+            isActive: raw.isActive !== false,
+          };
+        },
+
+        loadHopDataFromLocalSeed() {
+          const ok = this.applyArtistsDataset(localSeedArtists);
+          if (ok) this.activeDataSource = 'local-seed';
+          return ok;
+        },
+
+        applyArtistsDataset(artistsInput) {
+          const sourceArtists = Array.isArray(artistsInput) ? artistsInput : [];
+          const artistRows = sourceArtists
+            .map((item, index) => {
+              const normalized = this.normalizeArtistDoc({ ...item, sortOrder: item?.sortOrder ?? ((index + 1) * 10) });
+              if (!normalized) {
+                this.warnSchemaIssue('artist', 'invalid-required-fields', { id: item?.id || '', index });
+                return null;
+              }
+              return normalized;
+            })
+            .filter((item) => item && item.isActive);
+
+          const trackRows = sourceArtists.flatMap((artist) => {
+            const artistId = typeof artist?.id === 'string' ? artist.id.trim() : '';
+            const tracks = Array.isArray(artist?.tracks) ? artist.tracks : [];
+            return tracks
+              .map((track, index) => {
+                const normalized = this.normalizeTrackDoc({
+                  ...track,
+                  artistId: track?.artistId || artistId,
+                  sortOrder: track?.sortOrder ?? ((index + 1) * 10),
+                });
+                if (!normalized) {
+                  this.warnSchemaIssue('track', 'invalid-required-fields', {
+                    artistId: artistId || '(unknown)',
+                    trackId: track?.id || '',
+                    youtubeId: track?.youtubeId || '',
+                    index,
+                  });
+                  return null;
+                }
+                return normalized;
+              })
+              .filter((item) => item && item.isActive && item.inactive !== true);
+          });
+
+          if (!artistRows.length || !trackRows.length) return false;
+          artistRows.sort((a, b) => (a.sortOrder - b.sortOrder) || this.localizedText(a.name).localeCompare(this.localizedText(b.name)));
+          trackRows.sort((a, b) => (a.sortOrder - b.sortOrder) || this.localizedText(a.title).localeCompare(this.localizedText(b.title)));
+
+          const tracksByArtist = new Map();
+          trackRows.forEach((track) => {
+            if (!tracksByArtist.has(track.artistId)) tracksByArtist.set(track.artistId, []);
+            tracksByArtist.get(track.artistId).push(track);
+          });
+
+          const nextArtists = artistRows
+            .map((artist) => ({
+              id: artist.id,
+              name: artist.name,
+              bio: artist.bio,
+              tracks: tracksByArtist.get(artist.id) || [],
+            }))
+            .filter((artist) => artist.tracks.length > 0);
+
+          const nextTracks = this.buildTracksFromArtists(nextArtists);
+
+          this.artists = nextArtists;
+          this.tracks = nextTracks;
+          if (this.currentTrack) {
+            const found = nextTracks.find((item) => item.id === this.currentTrack.id);
+            this.currentTrack = found || null;
+          }
+          return true;
+        },
+
+        buildTracksFromArtists(artistsInput) {
+          const artistsSafe = Array.isArray(artistsInput) ? artistsInput : [];
+          return artistsSafe.flatMap((artist) =>
+            (Array.isArray(artist?.tracks) ? artist.tracks : [])
+              .filter((track) => track && track.inactive !== true)
+              .map((track) => ({
+                ...track,
+                artistName: artist.name,
+              }))
+          );
+        },
+
+        async loadHopDataFromGeneratedFile() {
+          this.isDataLoading = true;
+          this.dataError = '';
+          try {
+            const cacheBust = Date.now();
+            const sourceUrl = `/apps/hop/data/artists.generated.json?v=${cacheBust}`;
+            const resp = await fetch(sourceUrl, { cache: 'no-store' });
+            if (!resp.ok) {
+              this.dataLoadAttempts.push(`generated-file:http-${resp.status}`);
+              return false;
+            }
+            const payload = await resp.json();
+            const artistsRaw = Array.isArray(payload) ? payload : (Array.isArray(payload?.artists) ? payload.artists : []);
+            const ok = this.applyArtistsDataset(artistsRaw);
+            if (ok) this.activeDataSource = 'generated-file';
+            if (!ok) this.dataLoadAttempts.push('generated-file:invalid-shape');
+            return ok;
+          } catch (err) {
+            this.dataLoadAttempts.push('generated-file:exception');
+            this.dataError = err?.message || String(err);
+            return false;
+          } finally {
+            this.isDataLoading = false;
+          }
+        },
+
+        async loadHopDataFromBackend() {
+          if (!this.client || typeof this.client.firestoreQuery !== 'function') return false;
+          this.isDataLoading = true;
+          try {
+            const [artistsRaw, tracksRaw] = await Promise.all([
+              this.client.firestoreQuery('hopArtists', {}),
+              this.client.firestoreQuery('hopTracks', {}),
+            ]);
+            const artistsRows = (Array.isArray(artistsRaw) ? artistsRaw : [])
+              .map((item) => this.normalizeArtistDoc(item))
+              .filter((item) => item && item.isActive);
+            const tracksRows = (Array.isArray(tracksRaw) ? tracksRaw : [])
+              .map((item) => this.normalizeTrackDoc(item))
+              .filter((item) => item && item.isActive && item.inactive !== true);
+            if (!artistsRows.length || !tracksRows.length) return false;
+
+            const tracksByArtist = new Map();
+            tracksRows.forEach((track) => {
+              if (!tracksByArtist.has(track.artistId)) tracksByArtist.set(track.artistId, []);
+              tracksByArtist.get(track.artistId).push(track);
+            });
+            const nested = artistsRows.map((artist) => ({
+              ...artist,
+              tracks: tracksByArtist.get(artist.id) || [],
+            }));
+            const ok = this.applyArtistsDataset(nested);
+            if (ok) this.activeDataSource = 'backend';
+            if (!ok) this.dataLoadAttempts.push('backend:invalid-shape');
+            return ok;
+          } catch (err) {
+            this.dataLoadAttempts.push('backend:exception');
+            this.dataError = err?.message || String(err);
+            return false;
+          } finally {
+            this.isDataLoading = false;
+          }
+        },
+
+        async loadHopDataByPolicy() {
+          this.dataLoadAttempts = [];
+          this.dataError = '';
+          const mode = this.dataPolicy?.mode || 'generated-first-fallback-only';
+          if (mode !== 'generated-first-fallback-only') {
+            const ok = this.loadHopDataFromLocalSeed();
+            if (!ok) this.dataError = this.t('dataLoadAllFailed');
+            return ok;
+          }
+          const loadedFromGenerated = await this.loadHopDataFromGeneratedFile();
+          if (loadedFromGenerated) return true;
+          const loadedFromBackend = await this.loadHopDataFromBackend();
+          if (loadedFromBackend) return true;
+          const loadedFromSeed = this.loadHopDataFromLocalSeed();
+          if (loadedFromSeed) {
+            this.dataError = this.t('dataLoadFallbackUsed');
+            console.warn('hop data fallback', { attempts: this.dataLoadAttempts, activeDataSource: this.activeDataSource });
+            return true;
+          }
+          this.dataError = this.t('dataLoadAllFailed');
+          console.error('hop data load failed', { attempts: this.dataLoadAttempts });
+          return false;
+        },
+
+        canGoBack() {
+          return this.viewStack.length > 1;
+        },
+
+        pushView(view) {
+          this.transitionDirection = 'forward';
+          this.viewStack.push(view);
+          this.persistUiState();
+        },
+
+        setRootView(view) {
+          this.transitionDirection = 'back';
+          this.viewStack = [view];
+          if (view !== 'tracks') this.selectedArtistId = '';
+          if (view !== 'artists') this.artistQuery = '';
+          if (view !== 'tracks') this.trackQuery = '';
+          this.persistUiState();
+        },
+
+        goBack() {
+          if (this.viewStack.length > 1) {
+            this.transitionDirection = 'back';
+            this.viewStack.pop();
+            this.persistUiState();
+          }
+        },
+
+        transitionEnterStartClass() {
+          return this.transitionDirection === 'back'
+            ? 'opacity-0 -translate-x-3'
+            : 'opacity-0 translate-x-3';
+        },
+
+        transitionLeaveEndClass() {
+          return this.transitionDirection === 'back'
+            ? 'opacity-0 translate-x-3'
+            : 'opacity-0 -translate-x-3';
+        },
+
+        openArtistTracks(artistId) {
+          this.selectedArtistId = artistId;
+          this.persistUiState();
+          if (this.currentView === 'tracks') return;
+          this.pushView('tracks');
+        },
+
+        clearArtistFilter() {
+          this.selectedArtistId = '';
+          this.trackQuery = '';
+          this.persistUiState();
+        },
+
+        openTrack(trackId) {
+          const track = this.tracks.find((item) => item.id === trackId);
+          if (!track) return;
+          this.currentTrack = track;
+          this.recentTrackIds = [trackId, ...this.recentTrackIds.filter((id) => id !== trackId)].slice(0, 8);
+          this.persistUiState();
+          if (this.currentView === 'track') return;
+          this.pushView('track');
+        },
+
+        youtubeEmbedUrl(youtubeId) {
+          if (!youtubeId) return '';
+          const safeId = String(youtubeId).trim().replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!safeId) return '';
+          return `https://www.youtube-nocookie.com/embed/${safeId}`;
+        },
+
+        async copyCurrentLyrics() {
+          const text = this.lyricsText(this.currentTrack);
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            this.showFlash(this.t('lyricsCopied'));
+          } catch {
+            this.showFlash(this.t('copyFailed'));
+          }
+        },
+
+        showFlash(message) {
+          this.flashMessage = message;
+          window.clearTimeout(this.flashTimer);
+          this.flashTimer = window.setTimeout(() => {
+            this.flashMessage = '';
+          }, 1400);
+        },
+
+        async copyTrackShareText() {
+          if (!this.currentTrack) return;
+          const shareText = `${this.trackArtistText(this.currentTrack)} — ${this.trackTitleText(this.currentTrack)}`;
+          try {
+            await navigator.clipboard.writeText(shareText);
+            this.showFlash(this.t('trackCopied'));
+          } catch {
+            this.showFlash(this.t('shareFailed'));
+          }
+        },
+
+        t(key) {
+          const dict = {
+            hy: {
+              appName: 'Հոպ',
+              subtitle: 'Հայկական Հիփ Հոփ',
+              back: 'Հետ',
+              artists: 'Արտիստներ',
+              tracks: 'Երգեր',
+              track: 'Երգ',
+              allArtists: 'Բոլոր արտիստները',
+              selectedArtistTracks: 'Ընտրված արտիստի երգեր',
+              allTracks: 'Բոլոր երգերը',
+              tracksCountSuffix: 'երգ',
+              artistBadge: 'արտիստ',
+              searchArtist: 'Որոնել արտիստ',
+              searchTrack: 'Որոնել երգ',
+              openTracksPage: 'Բացել երգերը',
+              artistNotFound: 'Արտիստ չի գտնվել։',
+              trackNotFound: 'Երգ չի գտնվել։',
+              clear: 'Մաքրել',
+              prev: 'Նախորդ',
+              next: 'Հաջորդ',
+              copyLyrics: 'Պատճենել բառերը',
+              share: 'Կիսվել',
+              nowPlaying: 'Հիմա հնչում է',
+              youtubePlayer: 'YouTube նվագարկիչ',
+              lyricsTitle: 'Երգի բառերը',
+              lyricsCopied: 'Բառերը պատճենված են',
+              copyFailed: 'Պատճենումը ձախողվեց',
+              trackCopied: 'Երգի ինֆոն պատճենված է',
+              shareFailed: 'Կիսման պատճենումը ձախողվեց',
+              dataLoading: 'Տվյալները բեռնվում են...',
+              dataLoadFailed: 'Չհաջողվեց բեռնել backend տվյալները (օգտագործվում է local fallback)',
+              dataLoadFallbackUsed: 'Գեներացված տվյալները չբեռնվեցին, գործարկվում է local fallback',
+              dataLoadAllFailed: 'Տվյալները բեռնել չհաջողվեց',
+              statusInitializing: 'Նախապատրաստում...',
+              statusCheckingAuth: 'Ստուգում...',
+              statusReady: 'Պատրաստ է',
+            },
+            en: {
+              appName: 'Hop',
+              subtitle: 'Armenian Hip Hop',
+              back: 'Back',
+              artists: 'Artists',
+              tracks: 'Tracks',
+              track: 'Track',
+              allArtists: 'All artists',
+              selectedArtistTracks: 'Selected artist tracks',
+              allTracks: 'All tracks',
+              tracksCountSuffix: 'tracks',
+              artistBadge: 'artist',
+              searchArtist: 'Search artist',
+              searchTrack: 'Search track',
+              openTracksPage: 'Open tracks',
+              artistNotFound: 'No artist found.',
+              trackNotFound: 'No track found.',
+              clear: 'Clear',
+              prev: 'Previous',
+              next: 'Next',
+              copyLyrics: 'Copy lyrics',
+              share: 'Share',
+              nowPlaying: 'Now playing',
+              youtubePlayer: 'YouTube player',
+              lyricsTitle: 'Lyrics',
+              lyricsCopied: 'Lyrics copied',
+              copyFailed: 'Copy failed',
+              trackCopied: 'Track info copied',
+              shareFailed: 'Share copy failed',
+              dataLoading: 'Loading data...',
+              dataLoadFailed: 'Failed to load backend data (using local fallback)',
+              dataLoadFallbackUsed: 'Generated data unavailable, using local fallback',
+              dataLoadAllFailed: 'Failed to load data',
+              statusInitializing: 'Initializing...',
+              statusCheckingAuth: 'Checking auth...',
+              statusReady: 'Ready',
+            },
+          };
+          const lang = this.language === 'en' ? 'en' : 'hy';
+          return dict[lang][key] || key;
+        },
+
+        syncDocumentLocale() {
+          document.documentElement.lang = this.language === 'en' ? 'en' : 'hy';
+          document.title = this.t('appName');
+        },
+
+        persistUiState() {
+          try {
+            const state = {
+              viewStack: this.viewStack,
+              selectedArtistId: this.selectedArtistId,
+              currentTrackId: this.currentTrack?.id || '',
+              recentTrackIds: this.recentTrackIds,
+            };
+            window.sessionStorage.setItem('hop.ui.state', JSON.stringify(state));
+          } catch {
+            // ignore
+          }
+          void this.persistHopStateToBackend();
+        },
+
+        restoreUiState() {
+          try {
+            const raw = window.sessionStorage.getItem('hop.ui.state');
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.viewStack) && parsed.viewStack.length) {
+              this.viewStack = parsed.viewStack.filter((v) => ['artists', 'tracks', 'track'].includes(v));
+              if (!this.viewStack.length) this.viewStack = ['artists'];
+            }
+            if (typeof parsed.selectedArtistId === 'string') this.selectedArtistId = parsed.selectedArtistId;
+            if (Array.isArray(parsed.recentTrackIds)) this.recentTrackIds = parsed.recentTrackIds.slice(0, 8);
+            if (parsed.currentTrackId) {
+              const found = this.tracks.find((item) => item.id === parsed.currentTrackId);
+              if (found) this.currentTrack = found;
+            }
+          } catch {
+            // ignore
+          }
+        },
+
+        async persistHopStateToBackend() {
+          if (!this.client || typeof this.client.firestoreUpdate !== 'function') return;
+          try {
+            await this.client.firestoreUpdate('appState', this.appId, {
+              appId: this.appId,
+              selectedArtistId: this.selectedArtistId || '',
+              currentTrackId: this.currentTrack?.id || '',
+              recentTrackIds: Array.isArray(this.recentTrackIds) ? this.recentTrackIds.slice(0, 8) : [],
+              updatedAt: new Date().toISOString(),
+            });
+          } catch {
+            // silent fallback to local-only state
+          }
+        },
+
+        async restoreHopStateFromBackend() {
+          if (!this.client || typeof this.client.firestoreGet !== 'function') return;
+          try {
+            const row = await this.client.firestoreGet('appState', this.appId);
+            if (!row || typeof row !== 'object') return;
+            if (typeof row.selectedArtistId === 'string') this.selectedArtistId = row.selectedArtistId;
+            if (Array.isArray(row.recentTrackIds)) this.recentTrackIds = row.recentTrackIds.slice(0, 8);
+            if (typeof row.currentTrackId === 'string' && row.currentTrackId) {
+              const found = this.tracks.find((item) => item.id === row.currentTrackId);
+              if (found) this.currentTrack = found;
+            }
+          } catch {
+            // silent fallback to session state
+          }
+        },
+
+        async init() {
+          let dataLoaded = false;
+          try {
+            this.restoreUiState();
+            this.status = this.t('statusInitializing');
+            dataLoaded = await this.loadHopDataByPolicy();
+            this.status = this.t('statusCheckingAuth');
+            try {
+              await loadHayOSClient();
+              this.client = window.HayOSClient ? new window.HayOSClient({ appId: this.appId }) : null;
+
+              if (this.client && typeof this.client.ready === 'function') await this.client.ready();
+              if (this.client && typeof this.client.authEnsure === 'function') {
+                await this.client.authEnsure({ interactive: false });
+              }
+              if (this.client && typeof this.client.authGetCurrentUser === 'function') {
+                this.user = await this.client.authGetCurrentUser();
+              }
+              if (this.client && typeof this.client.settingsGet === 'function') {
+                const settings = await this.client.settingsGet();
+                this.language = settings?.language === 'hy' ? 'hy' : 'en';
+                this.osTheme = settings?.theme || '';
+              }
+              await this.restoreHopStateFromBackend();
+            } catch (authErr) {
+              this.error = authErr?.message || String(authErr);
+            }
+            this.syncDocumentLocale();
+
+            this.status = this.t('statusReady');
+            this.persistUiState();
+          } catch (err) {
+            this.error = err?.message || String(err);
+            if (!dataLoaded) {
+              this.loadHopDataFromLocalSeed();
+            }
+            this.status = this.t('statusReady');
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>
