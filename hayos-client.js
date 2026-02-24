@@ -56,7 +56,7 @@
     }
   
     if (window.HayOSClient) {
-      console.warn('HayOSClient is already loaded');
+      // no-op: avoid duplicate-load console noise
       return;
     }
   
@@ -77,6 +77,7 @@
         this.authStateListeners = [];
         this.languageListeners = [];
         this.socialProfileListeners = [];
+        this.friendsChangedListeners = [];
         this.debugTraceListeners = [];
         this.hostContextListeners = [];
         this.systemSettingsBootstrapEnabled = isSystemSettingsBootstrapEnabled();
@@ -85,7 +86,7 @@
         // Start listening for messages from parent (HayOS shell)
         window.addEventListener('message', this._messageHandler);
         
-        console.log(`HayOSClient initialized for app: ${appId}`);
+        // initialization successful
       }
       _normalizeLanguage(language, fallback = DEFAULT_SYSTEM_SETTINGS.language) {
         const normalized = typeof language === 'string' ? language.trim().toLowerCase() : '';
@@ -214,7 +215,62 @@
           // ignore debug event failures
         }
       }
-  // Add after the setTheme method in public/hayos-client.js
+
+      _isAuthOrPermissionSyncError(response) {
+        if (!response || response.ok) return false;
+        const errorText = typeof response.error === 'string' ? response.error.toLowerCase() : '';
+        return errorText.includes('missing or insufficient permissions')
+          || errorText.includes('not authenticated')
+          || errorText.includes('auth context is missing');
+      }
+
+      async _waitForAuthenticatedSession(options = {}) {
+        const retries = Number.isFinite(options.retries) ? Math.max(1, Math.floor(options.retries)) : 3;
+        const delayMs = Number.isFinite(options.delayMs) ? Math.max(40, Math.floor(options.delayMs)) : 140;
+        let lastError = null;
+
+        for (let attempt = 0; attempt < retries; attempt += 1) {
+          try {
+            const user = await this.getCurrentUser();
+            if (!user || typeof user.uid !== 'string' || user.uid.trim().length === 0) {
+              throw new Error('Not authenticated');
+            }
+            const idToken = await this.getIdToken(attempt > 0);
+            if (!idToken) {
+              throw new Error('Failed to get ID token');
+            }
+            return { user, idToken };
+          } catch (error) {
+            lastError = error;
+            if (attempt >= retries - 1) break;
+            await new Promise((resolve) => window.setTimeout(resolve, delayMs * (attempt + 1)));
+          }
+        }
+
+        if (lastError instanceof Error) throw lastError;
+        throw new Error('Not authenticated');
+      }
+
+      async _sendFirestoreRequestWithAuthRetry(action, expectedAction, fallbackError) {
+        await this._waitForAuthenticatedSession({ retries: 3, delayMs: 120 });
+
+        let response = await this._sendRequest(action);
+        if (this._isAuthOrPermissionSyncError(response)) {
+          this._emitDebug({
+            stage: 'firestore.auth_retry',
+            action: action && action.kind ? action.kind : '',
+            error: response && response.error ? response.error : '',
+          });
+          await this.getIdToken(true).catch(() => null);
+          await new Promise((resolve) => window.setTimeout(resolve, 180));
+          response = await this._sendRequest(action);
+        }
+
+        if (!response.ok || response.action !== expectedAction) {
+          throw new Error(response.error || fallbackError);
+        }
+        return response;
+      }
 
 /**
  * Firestore: get document(s)
@@ -223,14 +279,11 @@
  * @returns {Promise<any>}
  */
 async firestoreGet(collection, documentId) {
-    const response = await this._sendRequest({
+    const response = await this._sendFirestoreRequestWithAuthRetry({
       kind: 'firestore.get',
       collection,
       documentId
-    });
-    if (!response.ok || response.action !== 'firestore.get') {
-      throw new Error(response.error || 'Failed to get document');
-    }
+    }, 'firestore.get', 'Failed to get document');
     return response.data;
   }
   
@@ -241,14 +294,11 @@ async firestoreGet(collection, documentId) {
    * @returns {Promise<string>} Document ID
    */
   async firestoreAdd(collection, data) {
-    const response = await this._sendRequest({
+    const response = await this._sendFirestoreRequestWithAuthRetry({
       kind: 'firestore.add',
       collection,
       data
-    });
-    if (!response.ok || response.action !== 'firestore.add') {
-      throw new Error(response.error || 'Failed to add document');
-    }
+    }, 'firestore.add', 'Failed to add document');
     return response.id;
   }
   
@@ -260,15 +310,12 @@ async firestoreGet(collection, documentId) {
    * @returns {Promise<void>}
    */
   async firestoreUpdate(collection, documentId, data) {
-    const response = await this._sendRequest({
+    await this._sendFirestoreRequestWithAuthRetry({
       kind: 'firestore.update',
       collection,
       documentId,
       data
-    });
-    if (!response.ok || response.action !== 'firestore.update') {
-      throw new Error(response.error || 'Failed to update document');
-    }
+    }, 'firestore.update', 'Failed to update document');
   }
   
   /**
@@ -278,14 +325,11 @@ async firestoreGet(collection, documentId) {
    * @returns {Promise<void>}
    */
   async firestoreDelete(collection, documentId) {
-    const response = await this._sendRequest({
+    await this._sendFirestoreRequestWithAuthRetry({
       kind: 'firestore.delete',
       collection,
       documentId
-    });
-    if (!response.ok || response.action !== 'firestore.delete') {
-      throw new Error(response.error || 'Failed to delete document');
-    }
+    }, 'firestore.delete', 'Failed to delete document');
   }
   
   /**
@@ -295,14 +339,11 @@ async firestoreGet(collection, documentId) {
    * @returns {Promise<Array>}
    */
   async firestoreQuery(collection, queryParams) {
-    const response = await this._sendRequest({
+    const response = await this._sendFirestoreRequestWithAuthRetry({
       kind: 'firestore.query',
       collection,
       queryParams
-    });
-    if (!response.ok || response.action !== 'firestore.query') {
-      throw new Error(response.error || 'Failed to query documents');
-    }
+    }, 'firestore.query', 'Failed to query documents');
     return response.data;
   }
       /**
@@ -400,6 +441,25 @@ async firestoreGet(collection, documentId) {
             } catch (error) {
               console.error('Error in social profile listener:', error);
             }
+          });
+          return;
+        }
+
+        if (
+          data.type === 'hayos:systemEvent' &&
+          data.event === 'friends.changed' &&
+          data.payload &&
+          typeof data.payload === 'object'
+        ) {
+          const payload = data.payload;
+          const normalized = {
+            reason: typeof payload.reason === 'string' ? payload.reason : 'unknown',
+            actorUid: typeof payload.actorUid === 'string' ? payload.actorUid.trim() : '',
+            peerUid: typeof payload.peerUid === 'string' ? payload.peerUid.trim() : '',
+            at: typeof payload.at === 'string' ? payload.at : new Date().toISOString(),
+          };
+          this.friendsChangedListeners.forEach((listener) => {
+            listener(normalized);
           });
           return;
         }
@@ -701,6 +761,19 @@ async firestoreGet(collection, documentId) {
         };
       }
 
+      onFriendsChanged(callback) {
+        if (typeof callback !== 'function') {
+          throw new Error('Callback must be a function');
+        }
+        this.friendsChangedListeners.push(callback);
+        return () => {
+          const index = this.friendsChangedListeners.indexOf(callback);
+          if (index > -1) {
+            this.friendsChangedListeners.splice(index, 1);
+          }
+        };
+      }
+
       onDebugTrace(callback) {
         if (typeof callback !== 'function') {
           throw new Error('Callback must be a function');
@@ -946,6 +1019,99 @@ async firestoreGet(collection, documentId) {
         return Array.isArray(response.data) ? response.data : [];
       }
 
+      async friendsRequestSend(targetUid) {
+        const response = await this._sendRequest({ kind: 'friends.request.send', targetUid });
+        if (!response.ok || response.action !== 'friends.request.send') {
+          throw new Error(response.error || 'Failed to send friend request');
+        }
+        return response.data;
+      }
+
+      async friendsRequestAccept(peerUid) {
+        const response = await this._sendRequest({ kind: 'friends.request.accept', peerUid });
+        if (!response.ok || response.action !== 'friends.request.accept') {
+          throw new Error(response.error || 'Failed to accept friend request');
+        }
+        return response.data;
+      }
+
+      async friendsRequestReject(peerUid) {
+        const response = await this._sendRequest({ kind: 'friends.request.reject', peerUid });
+        if (!response.ok || response.action !== 'friends.request.reject') {
+          throw new Error(response.error || 'Failed to reject friend request');
+        }
+        return response.data;
+      }
+
+      async friendsRequestCancel(peerUid) {
+        const response = await this._sendRequest({ kind: 'friends.request.cancel', peerUid });
+        if (!response.ok || response.action !== 'friends.request.cancel') {
+          throw new Error(response.error || 'Failed to cancel friend request');
+        }
+        return response.data;
+      }
+
+      async friendsRemove(peerUid) {
+        const response = await this._sendRequest({ kind: 'friends.remove', peerUid });
+        if (!response.ok || response.action !== 'friends.remove') {
+          throw new Error(response.error || 'Failed to remove friend');
+        }
+        return response.data;
+      }
+
+      async friendsList(scope) {
+        const response = await this._sendRequest({ kind: 'friends.list', scope });
+        if (!response.ok || response.action !== 'friends.list') {
+          throw new Error(response.error || 'Failed to list friends');
+        }
+        return response.data;
+      }
+
+      async friendsRequestsList(params) {
+        const response = await this._sendRequest({
+          kind: 'friends.requests.list',
+          direction: params && params.direction,
+          status: params && params.status,
+        });
+        if (!response.ok || response.action !== 'friends.requests.list') {
+          throw new Error(response.error || 'Failed to list friend requests');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async friendsAreFriends(peerUid) {
+        const response = await this._sendRequest({ kind: 'friends.areFriends', peerUid });
+        if (!response.ok || response.action !== 'friends.areFriends') {
+          throw new Error(response.error || 'Failed to resolve friend relation');
+        }
+        const payload = response.data && typeof response.data === 'object' ? response.data : {};
+        return payload.areFriends === true;
+      }
+
+      async friendsBlockCreate(targetUid) {
+        const response = await this._sendRequest({ kind: 'friends.block.create', targetUid });
+        if (!response.ok || response.action !== 'friends.block.create') {
+          throw new Error(response.error || 'Failed to block user');
+        }
+        return response.data;
+      }
+
+      async friendsBlockDelete(targetUid) {
+        const response = await this._sendRequest({ kind: 'friends.block.delete', targetUid });
+        if (!response.ok || response.action !== 'friends.block.delete') {
+          throw new Error(response.error || 'Failed to unblock user');
+        }
+        return response.data;
+      }
+
+      async friendsBlockList() {
+        const response = await this._sendRequest({ kind: 'friends.block.list' });
+        if (!response.ok || response.action !== 'friends.block.list') {
+          throw new Error(response.error || 'Failed to list blocked users');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
       async teeezerqBlackHoleList() {
         const response = await this._sendRequest({ kind: 'teeezerq.blackHole.list' });
         if (!response.ok || response.action !== 'teeezerq.blackHole.list') {
@@ -965,6 +1131,7 @@ async firestoreGet(collection, documentId) {
             planetName: typeof item.planetName === 'string' ? item.planetName : '',
             description: typeof item.description === 'string' ? item.description : '',
             visibility,
+            relationship: typeof item.relationship === 'string' ? item.relationship : '',
           };
         });
       }
@@ -1384,6 +1551,51 @@ async firestoreGet(collection, documentId) {
         }
         return response.data;
       }
+
+      async tetrNotesList(limit) {
+        const response = await this._sendRequest({
+          kind: 'tetr.notes.list',
+          limit: typeof limit === 'number' ? Math.floor(limit) : undefined,
+        });
+        if (!response.ok || response.action !== 'tetr.notes.list') {
+          throw new Error(response.error || 'Failed to list tetr notes');
+        }
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
+      async tetrNotesCreate(payload) {
+        const response = await this._sendRequest({
+          kind: 'tetr.notes.create',
+          data: payload && typeof payload === 'object' ? payload : {},
+        });
+        if (!response.ok || response.action !== 'tetr.notes.create') {
+          throw new Error(response.error || 'Failed to create tetr note');
+        }
+        return response.data;
+      }
+
+      async tetrNotesUpdate(noteId, payload) {
+        const response = await this._sendRequest({
+          kind: 'tetr.notes.update',
+          noteId: typeof noteId === 'string' ? noteId : '',
+          data: payload && typeof payload === 'object' ? payload : {},
+        });
+        if (!response.ok || response.action !== 'tetr.notes.update') {
+          throw new Error(response.error || 'Failed to update tetr note');
+        }
+        return response.data;
+      }
+
+      async tetrNotesDelete(noteId) {
+        const response = await this._sendRequest({
+          kind: 'tetr.notes.delete',
+          noteId: typeof noteId === 'string' ? noteId : '',
+        });
+        if (!response.ok || response.action !== 'tetr.notes.delete') {
+          throw new Error(response.error || 'Failed to delete tetr note');
+        }
+        return response.data;
+      }
   
       /**
        * Ensure user is authenticated
@@ -1391,17 +1603,7 @@ async firestoreGet(collection, documentId) {
        * @throws {Error} If not authenticated
        */
       async ensureAuthenticated() {
-        const user = await this.getCurrentUser();
-        if (!user) {
-          throw new Error('Not authenticated');
-        }
-  
-        const idToken = await this.getIdToken();
-        if (!idToken) {
-          throw new Error('Failed to get ID token');
-        }
-  
-        return { user, idToken };
+        return this._waitForAuthenticatedSession({ retries: 3, delayMs: 160 });
       }
   
       /**
@@ -1453,6 +1655,7 @@ async firestoreGet(collection, documentId) {
         this.authStateListeners = [];
         this.languageListeners = [];
         this.socialProfileListeners = [];
+        this.friendsChangedListeners = [];
         this.debugTraceListeners = [];
         this.hostContextListeners = [];
       }
@@ -1461,5 +1664,5 @@ async firestoreGet(collection, documentId) {
     // Make available globally
     window.HayOSClient = HayOSClient;
     
-    console.log('HayOSClient loaded successfully');
+    // client loaded
   })();

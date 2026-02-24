@@ -1,0 +1,473 @@
+[
+  {
+    "id": "jlc",
+    "name": {
+      "hy": "jlc",
+      "en": "jlc"
+    },
+    "bio": {
+      "hy": "",
+      "en": ""
+    },
+    "tracks": [
+      {
+        "id": "jlc-jlc-khalifa-2023",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Khalifa (2023)",
+          "en": "JLC - Khalifa (2023)"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "ZoZtsfYJqvg",
+        "videoUrl": "https://www.youtube.com/watch?v=ZoZtsfYJqvg",
+        "publishedAt": "2025-12-16T23:21:41.000Z",
+        "year": "2025",
+        "duration": "2:26",
+        "sortOrder": 10,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-tariq-ka",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Tariq Ka // Տարիք Կա",
+          "en": "JLC - Tariq Ka // Տարիք Կա"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "FzMiusOEEIw",
+        "videoUrl": "https://www.youtube.com/watch?v=FzMiusOEEIw",
+        "publishedAt": "2025-06-26T14:00:26.000Z",
+        "year": "2025",
+        "duration": "2:05",
+        "sortOrder": 20,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-haykakan-rap-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Haykakan Rap // Հայկական Ռեպ 23+",
+          "en": "JLC - Haykakan Rap // Հայկական Ռեպ 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "v3DR8lO3uIs",
+        "videoUrl": "https://www.youtube.com/watch?v=v3DR8lO3uIs",
+        "publishedAt": "2022-02-25T16:00:20.000Z",
+        "year": "2022",
+        "duration": "2:49",
+        "sortOrder": 30,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-brni-aliqner-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Brni Aliqner // Բռնի ալիքներ 23+",
+          "en": "JLC - Brni Aliqner // Բռնի ալիքներ 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "LHfnICnkfpI",
+        "videoUrl": "https://www.youtube.com/watch?v=LHfnICnkfpI",
+        "publishedAt": "2022-02-18T16:00:15.000Z",
+        "year": "2022",
+        "duration": "2:25",
+        "sortOrder": 40,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-massovka",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Massovka // Մասսովկա",
+          "en": "JLC - Massovka // Մասսովկա"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "IT2xmB_I5zM",
+        "videoUrl": "https://www.youtube.com/watch?v=IT2xmB_I5zM",
+        "publishedAt": "2022-02-08T19:00:12.000Z",
+        "year": "2022",
+        "duration": "2:42",
+        "sortOrder": 50,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-18",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Война и Мир // 18+",
+          "en": "JLC - Война и Мир // 18+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "B8pNL4-GIEE",
+        "videoUrl": "https://www.youtube.com/watch?v=B8pNL4-GIEE",
+        "publishedAt": "2022-02-07T20:07:26.000Z",
+        "year": "2022",
+        "duration": "2:18",
+        "sortOrder": 60,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-poqruc",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Poqruc // Փոքրուց",
+          "en": "JLC - Poqruc // Փոքրուց"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "wma6lmScXB4",
+        "videoUrl": "https://www.youtube.com/watch?v=wma6lmScXB4",
+        "publishedAt": "2021-12-10T15:00:13.000Z",
+        "year": "2021",
+        "duration": "2:44",
+        "sortOrder": 70,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-hasarak",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Hasarak // Հասարակ",
+          "en": "JLC - Hasarak // Հասարակ"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "eVI99qFMk8Y",
+        "videoUrl": "https://www.youtube.com/watch?v=eVI99qFMk8Y",
+        "publishedAt": "2021-12-03T14:00:12.000Z",
+        "year": "2021",
+        "duration": "2:45",
+        "sortOrder": 80,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-feat-sh-lsi-tes-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC feat. #SH - Lsi Tes // Լսի Տես 23+",
+          "en": "JLC feat. #SH - Lsi Tes // Լսի Տես 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "FdduY8xdljg",
+        "videoUrl": "https://www.youtube.com/watch?v=FdduY8xdljg",
+        "publishedAt": "2021-10-26T15:00:15.000Z",
+        "year": "2021",
+        "duration": "2:27",
+        "sortOrder": 90,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-qaylum-em-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Qaylum Em // Քայլում եմ 23+",
+          "en": "JLC - Qaylum Em // Քայլում եմ 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "jlMvNAAdBks",
+        "videoUrl": "https://www.youtube.com/watch?v=jlMvNAAdBks",
+        "publishedAt": "2021-09-18T17:00:10.000Z",
+        "year": "2021",
+        "duration": "2:04",
+        "sortOrder": 100,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-hatik-hatik-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Hatik Hatik // Հատիկ հատիկ 23+",
+          "en": "JLC - Hatik Hatik // Հատիկ հատիկ 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "Fz0ZClUV5yE",
+        "videoUrl": "https://www.youtube.com/watch?v=Fz0ZClUV5yE",
+        "publishedAt": "2021-07-24T16:30:11.000Z",
+        "year": "2021",
+        "duration": "2:23",
+        "sortOrder": 110,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-x-cho-x-dav-cuxy-gali-qez",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC x CHO x DAV - Cuxy Gali Qez // Ծուխը գալի քեզ",
+          "en": "JLC x CHO x DAV - Cuxy Gali Qez // Ծուխը գալի քեզ"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "CQeawX3G9Rc",
+        "videoUrl": "https://www.youtube.com/watch?v=CQeawX3G9Rc",
+        "publishedAt": "2021-06-09T13:30:13.000Z",
+        "year": "2021",
+        "duration": "2:58",
+        "sortOrder": 120,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-asa-vatna-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Asa Vatna // Ասա վատնա 23+",
+          "en": "JLC - Asa Vatna // Ասա վատնա 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "6mAFCK4lE14",
+        "videoUrl": "https://www.youtube.com/watch?v=6mAFCK4lE14",
+        "publishedAt": "2021-05-22T14:00:27.000Z",
+        "year": "2021",
+        "duration": "2:42",
+        "sortOrder": 130,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-feat-dav-sut-en",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC feat. DAV - Sut En // Սուտ են",
+          "en": "JLC feat. DAV - Sut En // Սուտ են"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "sNKowukIimY",
+        "videoUrl": "https://www.youtube.com/watch?v=sNKowukIimY",
+        "publishedAt": "2021-05-09T14:00:13.000Z",
+        "year": "2021",
+        "duration": "3:21",
+        "sortOrder": 140,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-x-gev-x-unikyan-karevor",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC x Gev x Unikyan - Karevor // Կարևոր",
+          "en": "JLC x Gev x Unikyan - Karevor // Կարևոր"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "LcQ1wT5NdNM",
+        "videoUrl": "https://www.youtube.com/watch?v=LcQ1wT5NdNM",
+        "publishedAt": "2021-04-30T08:00:17.000Z",
+        "year": "2021",
+        "duration": "3:09",
+        "sortOrder": 150,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-feat-danak-indz-asa-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC feat. DANAK - Indz Asa // Ինձ Ասա 23+",
+          "en": "JLC feat. DANAK - Indz Asa // Ինձ Ասա 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "hF1fRCWt9zA",
+        "videoUrl": "https://www.youtube.com/watch?v=hF1fRCWt9zA",
+        "publishedAt": "2021-04-21T15:30:01.000Z",
+        "year": "2021",
+        "duration": "2:49",
+        "sortOrder": 160,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-mayli-music-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Mayli Music // Մայլի մյուզիք 23+",
+          "en": "JLC - Mayli Music // Մայլի մյուզիք 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "XUcoFuUxGVA",
+        "videoUrl": "https://www.youtube.com/watch?v=XUcoFuUxGVA",
+        "publishedAt": "2021-03-24T14:07:25.000Z",
+        "year": "2021",
+        "duration": "2:03",
+        "sortOrder": 170,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-chka-ponter-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Chka Ponter // Չկա Պոնտեր 23+",
+          "en": "JLC - Chka Ponter // Չկա Պոնտեր 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "Rw_r4zvTBAU",
+        "videoUrl": "https://www.youtube.com/watch?v=Rw_r4zvTBAU",
+        "publishedAt": "2021-02-22T14:01:38.000Z",
+        "year": "2021",
+        "duration": "2:30",
+        "sortOrder": 180,
+        "isActive": true,
+        "inactive": false
+      },
+      {
+        "id": "jlc-jlc-safsal-23",
+        "artistId": "jlc",
+        "title": {
+          "hy": "JLC - Safsal // Սաֆսալ 23+",
+          "en": "JLC - Safsal // Սաֆսալ 23+"
+        },
+        "lyrics": {
+          "hy": "",
+          "en": ""
+        },
+        "mood": {
+          "hy": "",
+          "en": ""
+        },
+        "youtubeId": "Uw5So3oPVrQ",
+        "videoUrl": "https://www.youtube.com/watch?v=Uw5So3oPVrQ",
+        "publishedAt": "2021-01-06T13:57:02.000Z",
+        "year": "2021",
+        "duration": "2:19",
+        "sortOrder": 190,
+        "isActive": true,
+        "inactive": false
+      }
+    ],
+    "sortOrder": 10,
+    "isActive": true
+  }
+]

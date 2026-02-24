@@ -38,6 +38,20 @@ interface HayOSTeezerQBlackHolePortal {
     planetName: string;
     description?: string;
     visibility?: 'private' | 'friends' | 'public' | null;
+    relationship?: 'friends.v1.accepted' | string;
+}
+
+interface HayOSTetrNote {
+    id: string;
+    ownerUid: string;
+    title: string;
+    content: string;
+    preview: string;
+    pinned: boolean;
+    shared: boolean;
+    status: 'active' | 'deleted';
+    createdAt: string;
+    updatedAt: string;
 }
 
 declare class HayOSClient {
@@ -72,6 +86,8 @@ declare class HayOSClient {
         id: string;
         name: string;
         iframePath: string;
+        launchIframePath?: string;
+        wallpaperIframePath?: string;
         builtin: boolean;
         wallpaperProvider?: boolean;
         moduleType?: string;
@@ -81,6 +97,8 @@ declare class HayOSClient {
         allowedHosts?: string[];
         title?: string;
         icon?: string;
+        emoji?: string;
+        emojiCombo?: string;
         order?: number;
     }>>;
     listModules(options: {
@@ -90,6 +108,8 @@ declare class HayOSClient {
         id: string;
         name: string;
         iframePath: string;
+        launchIframePath?: string;
+        wallpaperIframePath?: string;
         builtin: boolean;
         wallpaperProvider?: boolean;
         moduleType?: string;
@@ -99,6 +119,8 @@ declare class HayOSClient {
         allowedHosts?: string[];
         title?: string;
         icon?: string;
+        emoji?: string;
+        emojiCombo?: string;
         order?: number;
     }>>;
     buildHostedModuleSrc(
@@ -116,6 +138,7 @@ declare class HayOSClient {
     setLanguage(language: 'hy' | 'en'): Promise<'hy' | 'en'>;
     onLanguageChanged(callback: (language: 'hy' | 'en') => void): () => void;
     onSocialProfileUpdated(callback: (payload: { uid: string; updatedAt: string; schemaVersion: number }) => void): () => void;
+    onFriendsChanged(callback: (payload: { reason: string; actorUid: string; peerUid: string; at: string }) => void): () => void;
     onDebugTrace(callback: (payload: Record<string, unknown>) => void): () => void;
     onHostContextUpdate(callback: (context: {
         hostAppId: string;
@@ -180,6 +203,20 @@ declare class HayOSClient {
     socialFollowListFollowers(uid?: string): Promise<any[]>;
     socialFollowListFollowing(uid?: string): Promise<any[]>;
     socialFriendList(uid?: string): Promise<any[]>;
+    friendsRequestSend(targetUid: string): Promise<any>;
+    friendsRequestAccept(peerUid: string): Promise<any>;
+    friendsRequestReject(peerUid: string): Promise<any>;
+    friendsRequestCancel(peerUid: string): Promise<any>;
+    friendsRemove(peerUid: string): Promise<any>;
+    friendsList(scope?: 'friends' | 'blocked' | 'all'): Promise<any>;
+    friendsRequestsList(params?: {
+        direction?: 'inbound' | 'outbound' | 'all';
+        status?: 'pending' | 'accepted' | 'rejected' | 'canceled';
+    }): Promise<any[]>;
+    friendsAreFriends(peerUid: string): Promise<boolean>;
+    friendsBlockCreate(targetUid: string): Promise<any>;
+    friendsBlockDelete(targetUid: string): Promise<any>;
+    friendsBlockList(): Promise<any[]>;
     teeezerqBlackHoleList(): Promise<HayOSTeezerQBlackHolePortal[]>;
     planetCreate(payload: {
         name: string;
@@ -269,6 +306,20 @@ declare class HayOSClient {
     filesUploadComplete(sessionId: string, params?: {
         space?: 'local' | 'global';
     }): Promise<any>;
+    tetrNotesList(limit?: number): Promise<HayOSTetrNote[]>;
+    tetrNotesCreate(payload: {
+        title?: string;
+        content?: string;
+        pinned?: boolean;
+        shared?: boolean;
+    }): Promise<HayOSTetrNote>;
+    tetrNotesUpdate(noteId: string, payload: {
+        title?: string;
+        content?: string;
+        pinned?: boolean;
+        shared?: boolean;
+    }): Promise<HayOSTetrNote>;
+    tetrNotesDelete(noteId: string): Promise<{ success: boolean; noteId: string }>;
 
     ensureAuthenticated(): Promise<{ user: any; idToken: string }>;
 
