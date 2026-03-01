@@ -1120,9 +1120,7 @@ async firestoreGet(collection, documentId) {
         const rows = Array.isArray(response.data) ? response.data : [];
         return rows.map((row) => {
           const item = row && typeof row === 'object' ? row : {};
-          const visibility = item.visibility === 'public' || item.visibility === 'friends' || item.visibility === 'private'
-            ? item.visibility
-            : null;
+          const visibility = 'friends';
           return {
             id: typeof item.id === 'string' ? item.id : '',
             kind: 'black_hole',
@@ -1164,9 +1162,7 @@ async firestoreGet(collection, documentId) {
             id: typeof planetRaw.id === 'string' ? planetRaw.id : '',
             name: typeof planetRaw.name === 'string' ? planetRaw.name : '',
             description: typeof planetRaw.description === 'string' ? planetRaw.description : '',
-            visibility: planetRaw.visibility === 'public' || planetRaw.visibility === 'friends' || planetRaw.visibility === 'private'
-              ? planetRaw.visibility
-              : null,
+            visibility: 'friends',
             ownerUserId: typeof planetRaw.ownerUserId === 'string' ? planetRaw.ownerUserId : '',
             legacySpaceId: typeof planetRaw.legacySpaceId === 'string' ? planetRaw.legacySpaceId : null,
           }
@@ -1191,9 +1187,7 @@ async firestoreGet(collection, documentId) {
             id: typeof item.id === 'string' ? item.id : '',
             name: typeof item.name === 'string' ? item.name : '',
             description: typeof item.description === 'string' ? item.description : '',
-            visibility: item.visibility === 'public' || item.visibility === 'friends' || item.visibility === 'private'
-              ? item.visibility
-              : null,
+            visibility: 'friends',
             ownerUserId: typeof item.ownerUserId === 'string' ? item.ownerUserId : '',
             legacySpaceId: typeof item.legacySpaceId === 'string' ? item.legacySpaceId : null,
           };

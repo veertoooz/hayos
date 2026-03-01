@@ -25,7 +25,7 @@ interface HayOSPlanetSummary {
     id: string;
     name: string;
     description?: string;
-    visibility?: 'private' | 'friends' | 'public' | null;
+    visibility?: HayOSPlanetVisibility | null;
     ownerUserId?: string;
     legacySpaceId?: string | null;
 }
@@ -37,9 +37,11 @@ interface HayOSTeezerQBlackHolePortal {
     planetId: string;
     planetName: string;
     description?: string;
-    visibility?: 'private' | 'friends' | 'public' | null;
+    visibility?: HayOSPlanetVisibility | null;
     relationship?: 'friends.v1.accepted' | string;
 }
+
+type HayOSPlanetVisibility = 'friends';
 
 interface HayOSTetrNote {
     id: string;
@@ -52,6 +54,22 @@ interface HayOSTetrNote {
     status: 'active' | 'deleted';
     createdAt: string;
     updatedAt: string;
+}
+
+interface HayOSFriendsListParams {
+    scope?: 'friends' | 'blocked' | 'all';
+    limit?: number;
+}
+
+interface HayOSFriendsRequestsListParams {
+    direction?: 'inbound' | 'outbound' | 'all';
+    status?: 'pending' | 'accepted' | 'rejected' | 'canceled';
+    limit?: number;
+}
+
+interface HayOSFriendsReadParams {
+    uid: string;
+    limit?: number;
 }
 
 declare class HayOSClient {
@@ -208,11 +226,9 @@ declare class HayOSClient {
     friendsRequestReject(peerUid: string): Promise<any>;
     friendsRequestCancel(peerUid: string): Promise<any>;
     friendsRemove(peerUid: string): Promise<any>;
-    friendsList(scope?: 'friends' | 'blocked' | 'all'): Promise<any>;
-    friendsRequestsList(params?: {
-        direction?: 'inbound' | 'outbound' | 'all';
-        status?: 'pending' | 'accepted' | 'rejected' | 'canceled';
-    }): Promise<any[]>;
+    friendsList(params?: 'friends' | 'blocked' | 'all' | HayOSFriendsListParams): Promise<any>;
+    friendsRequestsList(params?: HayOSFriendsRequestsListParams): Promise<any[]>;
+    friendsRead(params: HayOSFriendsReadParams): Promise<any[]>;
     friendsAreFriends(peerUid: string): Promise<boolean>;
     friendsBlockCreate(targetUid: string): Promise<any>;
     friendsBlockDelete(targetUid: string): Promise<any>;
@@ -222,7 +238,7 @@ declare class HayOSClient {
         name: string;
         slug?: string;
         description?: string;
-        visibility?: 'private' | 'friends' | 'public';
+        visibility?: HayOSPlanetVisibility;
         legacySpaceId?: string;
     }): Promise<any>;
     planetConnect(planetId: string): Promise<any>;

@@ -140,15 +140,16 @@
     .tree-list {
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
-      padding: 0.5rem;
+      gap: 0;
+      padding: 0;
     }
 
     .tree-row {
-      min-height: 3rem;
-      border-radius: 0.85rem;
-      border: 1px solid transparent;
-      background: hsl(220 26% 18% / 0.35);
+      min-height: 2.8rem;
+      border-radius: 0;
+      border: 0;
+      border-bottom: 1px solid hsl(214 24% 70% / 0.12);
+      background: transparent;
       transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease;
     }
 
@@ -157,8 +158,9 @@
     }
 
     .tree-row:focus-visible {
-      border-color: hsl(var(--p) / 0.6);
-      background: hsl(var(--p) / 0.12);
+      outline: 2px solid hsl(var(--p) / 0.35);
+      outline-offset: -2px;
+      background: hsl(var(--p) / 0.06);
     }
 
     .tree-indent {
@@ -170,8 +172,8 @@
     }
 
     .tree-title {
-      font-size: 0.88rem;
-      font-weight: 560;
+      font-size: 0.9rem;
+      font-weight: 500;
       line-height: 1.2;
       letter-spacing: 0.01em;
     }
@@ -291,19 +293,39 @@
       scrollbar-width: thin;
     }
 
-    [data-view="list"] .view-list {
+    [data-view="planets"] .view-planets {
       transform: translateX(0);
       opacity: 1;
       pointer-events: auto;
     }
 
-    [data-view="list"] .view-editor {
+    [data-view="planets"] .view-records,
+    [data-view="planets"] .view-editor {
       transform: translateX(16%);
       opacity: 0;
       pointer-events: none;
     }
 
-    [data-view="editor"] .view-list {
+    [data-view="records"] .view-planets {
+      transform: translateX(-16%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-view="records"] .view-records {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    [data-view="records"] .view-editor {
+      transform: translateX(16%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-view="editor"] .view-planets,
+    [data-view="editor"] .view-records {
       transform: translateX(-16%);
       opacity: 0;
       pointer-events: none;
@@ -413,231 +435,111 @@
         </div>
       </section>
 
-      <section x-show="status === 'ready'" class="view-panel view-list h-full" :style="listPanelStyle()">
+      <section x-show="status === 'ready'" class="view-panel view-planets h-full">
         <div class="card h-full border border-base-300 bg-base-100 shadow-sm">
-          <div class="card-body relative h-full gap-2 p-2">
+          <div class="card-body h-full gap-2 p-2">
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <h2 class="text-xs font-semibold uppercase tracking-wide opacity-80">Knowledge Tree</h2>
-                <p class="truncate text-[0.68rem] opacity-60" x-text="treeStatsLabel()"></p>
+                <h2 class="text-xs font-semibold uppercase tracking-wide opacity-80" x-text="t('planetsTitle')"></h2>
+                <p class="truncate text-[0.68rem] opacity-60" x-text="`${planetTreeRows().length} visible`"></p>
               </div>
-              <span class="badge badge-outline badge-sm max-w-40 truncate" x-text="selectedNode() ? selectedNodeLabel() : 'No selection'"></span>
+              <button type="button" class="tap-btn focus-ring btn btn-xs btn-primary" @click="createPlanetQuick()" x-text="t('fabPlanet')"></button>
             </div>
-            <div class="flex items-center justify-between gap-2">
-              <span class="status-chip" role="status" aria-live="polite" x-text="syncStatusLabel()"></span>
-              <div class="flex items-center gap-1">
-                <button
-                  type="button"
-                  class="tap-btn focus-ring btn btn-xs btn-primary"
-                  :disabled="!canManualSave() || syncState === 'saving'"
-                  @click="saveRemoteNow()"
-                >
-                  💾 Save
-                </button>
-                <button
-                  type="button"
-                  class="tap-btn focus-ring btn btn-xs btn-ghost"
-                  x-show="syncState === 'error'"
-                  @click="retrySync()"
-                >
-                  🔄 Retry
-                </button>
-              </div>
+            <div>
+              <label class="input input-bordered input-sm flex items-center gap-2">
+                <span class="text-xs opacity-60" x-text="t('searchLabel')"></span>
+                <input type="search" class="grow" :placeholder="t('searchPlaceholder')" :aria-label="t('searchAria')" x-model.trim="planetSearch" />
+              </label>
             </div>
-
-            <div class="rounded-box border border-base-300 bg-base-200/50 p-2" x-show="reorderMode && !!selectedNode()">
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
-                  :disabled="!canMoveSelected(-1)"
-                  @click="moveSelected(-1)"
-                >
-                  ↑ Move Up
-                </button>
-                <button
-                  type="button"
-                  class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
-                  :disabled="!canMoveSelected(1)"
-                  @click="moveSelected(1)"
-                >
-                  ↓ Move Down
-                </button>
-              </div>
-            </div>
-            <div class="rounded-box border border-base-300 bg-base-200/50 p-2" x-show="!!selectedNode() && !reorderMode">
-              <div class="flex flex-wrap items-center gap-1">
-                <span class="badge badge-sm badge-outline" x-text="selectedNodeKindLabel()"></span>
-                <template x-for="mode in permissionModes" :key="mode">
-                  <button
-                    type="button"
-                    class="tap-btn focus-ring btn btn-xs"
-                    :disabled="!selectedNode()"
-                    :class="selectedPermission() === mode ? 'btn-primary' : 'btn-ghost'"
-                    @click="setSelectedPermission(mode)"
-                    x-text="permissionLabel(mode)"
-                  ></button>
-                </template>
-              </div>
-            </div>
-
-            <div
-              x-ref="treeScroller"
-              class="inner-scroll flex-1 rounded-box border border-base-300 bg-base-100 pb-24"
-              :class="inlinePopover.open ? 'pointer-events-none opacity-80' : ''"
-              @scroll.passive="treeScrollTop = $event.target.scrollTop"
-            >
-              <template x-if="visibleNodes().length === 0">
-                <div class="grid min-h-52 place-items-center p-4">
-                  <div class="w-full max-w-xs rounded-box border border-base-300 bg-base-200/40 p-4 text-center">
-                    <p class="text-sm font-medium">🌱 Tree is empty</p>
-                    <p class="mt-1 text-xs opacity-70">Add a path or note to start.</p>
-                    <div class="mt-3 grid grid-cols-1 gap-2">
-                      <button
-                        type="button"
-                        class="tap-btn focus-ring touch-target btn btn-sm btn-primary w-full"
-                        @click="openInlineCreate('path')"
-                      >
-                        📁 Create Path
-                      </button>
-                      <button
-                        type="button"
-                        class="tap-btn focus-ring touch-target btn btn-sm btn-outline w-full"
-                        @click="openInlineCreate('file')"
-                      >
-                        📝 Create Note
-                      </button>
-                    </div>
-                  </div>
+            <div class="inner-scroll flex-1 rounded-box border border-base-300 bg-base-100">
+              <template x-if="planetTreeRows().length === 0">
+                <div class="grid min-h-52 place-items-center p-4 text-center">
+                  <p class="text-sm opacity-75" x-text="planetEmptyLabel()"></p>
                 </div>
               </template>
-              <ul x-show="visibleNodes().length > 0" class="tree-list">
-                <template x-for="node in visibleNodes()" :key="node.id">
+              <ul x-show="planetTreeRows().length > 0" class="tree-list">
+                <template x-for="row in planetTreeRows()" :key="`planet-row-${row.node.id}`">
                   <li>
-                    <button
-                      type="button"
-                      class="tree-row tap-btn focus-ring w-full items-center justify-between px-2.5 py-2 text-left"
-                      :id="`node-${node.id}`"
-                      :aria-label="`Node ${node.title}, ${node.kind}, permission ${node.permission}`"
-                      :class="rowClass(node)"
-                      @click="tapNode(node)"
-                    >
-                      <span class="min-w-0 flex flex-1 items-center truncate" :style="`padding-left:${node.depth * 0.6}rem`">
-                        <span aria-hidden="true" class="mr-1.5 inline-flex" x-show="node.depth > 0">
-                          <template x-for="i in node.depth" :key="i">
+                    <div class="tree-row flex w-full items-center gap-1 px-2.5 py-2" :class="rowClass(row.node)">
+                      <button
+                        type="button"
+                        class="tap-btn focus-ring min-w-0 flex flex-1 items-center text-left"
+                        @click="tapPlanetRow(row.node)"
+                        @pointerdown="startRowPress(row.node, 'planet', $event)"
+                        @pointermove="updateRowPress($event)"
+                        @pointerup="endRowPress()"
+                        @pointerleave="endRowPress()"
+                        @pointercancel="endRowPress()"
+                        @contextmenu.prevent="openRowMenu(row.node, 'planet')"
+                      >
+                        <span class="min-w-0 flex flex-1 items-center truncate">
+                          <template x-for="level in planetIndentLevels(row.depth)" :key="`indent-${row.node.id}-${level}`">
                             <span class="tree-indent"></span>
                           </template>
+                          <span class="tree-title truncate" x-text="row.node.title"></span>
                         </span>
-                        <span class="mr-2 shrink-0" aria-hidden="true" x-text="node.kind === 'path' ? '📁' : '📝'"></span>
-                        <span class="tree-title truncate" x-text="node.title"></span>
-                      </span>
-                      <span class="ml-2 flex shrink-0 items-center gap-1.5">
-                        <span class="badge badge-xs" :class="permissionBadge(node.permission)" x-text="node.permission"></span>
-                        <span class="text-[0.68rem] opacity-65" x-text="node.kind === 'path' ? (isExpanded(node.id) ? '▾' : '▸') : 'md'"></span>
-                      </span>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        class="tap-btn focus-ring btn btn-ghost btn-xs h-7 min-h-0 w-7 p-0"
+                        :class="row.hasChildren ? '' : 'invisible pointer-events-none'"
+                        :aria-label="row.expanded ? 'Collapse node' : 'Expand node'"
+                        @click.stop="togglePlanetExpand(row.node.id)"
+                      >
+                        <span class="text-[0.72rem] opacity-60" x-text="planetExpandGlyph(row.node.id)"></span>
+                      </button>
+                    </div>
                   </li>
                 </template>
               </ul>
             </div>
+          </div>
+        </div>
+      </section>
 
-            <div class="floating-dock">
-              <div class="glass-surface rounded-2xl px-2 py-2">
-                <div class="grid grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    class="tap-btn focus-ring touch-target btn btn-sm btn-primary"
-                    aria-label="Create path"
-                    :disabled="inlinePopover.open"
-                    @pointerdown.prevent.stop
-                    @click.prevent.stop="openInlineCreate('path')"
-                  >
-                    📁
-                  </button>
-                  <button
-                    type="button"
-                    class="tap-btn focus-ring touch-target btn btn-sm btn-primary"
-                    aria-label="Create or open note"
-                    :disabled="reorderMode || inlinePopover.open"
-                    @pointerdown.prevent.stop
-                    @click.prevent.stop="selectedNode() && selectedNode().kind === 'file' ? openEditor() : openInlineCreate('file')"
-                  >
-                    <span x-text="selectedNode() && selectedNode().kind === 'file' ? '📝' : '🆕'"></span>
-                  </button>
-                  <button
-                    type="button"
-                    class="tap-btn focus-ring touch-target btn btn-sm btn-ghost"
-                    aria-label="Rename selected node"
-                    :disabled="!selectedNode() || reorderMode || inlinePopover.open"
-                    @pointerdown.prevent.stop
-                    @click.prevent.stop="openRenameModal()"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    type="button"
-                    class="tap-btn focus-ring touch-target btn btn-sm"
-                    :aria-label="reorderMode ? 'Finish reorder mode' : 'Delete selected node'"
-                    :aria-pressed="reorderMode ? 'true' : 'false'"
-                    :class="reorderMode ? 'btn-primary' : (canDeleteSelected() ? 'btn-error' : 'btn-ghost')"
-                    :disabled="inlinePopover.open || visibleNodes().length === 0 || (!reorderMode && !canDeleteSelected())"
-                    @pointerdown.prevent.stop
-                    @click.prevent.stop="reorderMode ? toggleReorder() : openInlineDelete()"
-                  >
-                    <span x-text="reorderMode ? '✅' : '🗑️'"></span>
-                  </button>
+      <section x-show="status === 'ready'" class="view-panel view-records h-full" :style="listPanelStyle()">
+        <div class="card h-full border border-base-300 bg-base-100 shadow-sm">
+          <div class="card-body relative h-full gap-2 p-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0 flex items-center gap-2">
+                <button type="button" class="tap-btn focus-ring btn btn-ghost btn-xs" @click="goPlanets()" x-text="t('backLabel')"></button>
+                <div class="min-w-0">
+                  <h2 class="text-xs font-semibold uppercase tracking-wide opacity-80" x-text="t('recordsTitle')"></h2>
+                  <p class="truncate text-[0.68rem] opacity-60" x-text="activePlanetLabel()"></p>
                 </div>
+              </div>
+              <div class="min-w-0">
+                <p class="truncate text-[0.68rem] opacity-60" x-text="`${activePlanetRecords().length} records`"></p>
               </div>
             </div>
-
-            <div
-              x-show="inlinePopover.open"
-              x-transition.opacity.duration.120ms
-              class="absolute inset-x-2 bottom-28 z-30"
-              @keydown.escape.window="closeInlinePopover()"
-            >
-              <div class="card border border-base-300 bg-base-100 shadow-xl" @click.stop @pointerdown.stop>
-                <div class="card-body gap-3 p-3">
-                  <h3 class="text-sm font-semibold" x-text="inlinePopover.mode === 'delete' ? 'Delete Node' : (inlinePopover.kind === 'file' ? 'Create Markdown' : 'Create Path')"></h3>
-                  <template x-if="inlinePopover.mode === 'create'">
-                    <div class="grid gap-2">
-                      <label class="input input-bordered flex items-center gap-2">
-                        <span class="text-xs opacity-70">Title</span>
-                        <input type="text" class="grow focus-ring" placeholder="Node title" aria-label="Node title" x-model="inlinePopover.title" @keydown.enter.prevent="submitInlinePopover()" />
-                      </label>
-                      <label class="grid gap-1">
-                        <span class="text-xs opacity-70">Parent</span>
-                        <select class="select select-bordered w-full focus-ring" x-model="inlinePopover.parentId">
-                          <template x-for="pathNode in pathNodesForParentSelect()" :key="`ip-${pathNode.id}`">
-                            <option :value="pathNode.id" x-text="formatPathOption(pathNode)"></option>
-                          </template>
-                        </select>
-                      </label>
-                      <div class="row-scroll flex items-center gap-2">
-                        <span class="text-xs opacity-70 whitespace-nowrap">Type</span>
-                        <button type="button" class="btn btn-xs" :class="inlinePopover.kind === 'path' ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.kind = 'path'">Path</button>
-                        <button type="button" class="btn btn-xs" :class="inlinePopover.kind === 'file' ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.kind = 'file'">Markdown</button>
-                      </div>
-                      <div class="row-scroll flex items-center gap-2">
-                        <span class="text-xs opacity-70 whitespace-nowrap">Permission</span>
-                        <template x-for="mode in permissionModes" :key="`ipop-${mode}`">
-                          <button type="button" class="btn btn-xs" :class="inlinePopover.permission === mode ? 'btn-primary' : 'btn-ghost'" @click="inlinePopover.permission = mode" x-text="permissionLabel(mode)"></button>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
-                  <template x-if="inlinePopover.mode === 'delete'">
-                    <div class="space-y-1">
-                      <p class="text-sm font-medium" x-text="'Delete ' + (inlinePopover.title || 'node') + '?'"></p>
-                      <p class="text-sm opacity-80">This will delete the selected node and all nested children.</p>
-                    </div>
-                  </template>
-                  <div class="row-scroll flex items-center justify-end gap-2">
-                    <button type="button" class="tap-btn focus-ring btn btn-sm btn-ghost" :disabled="inlinePopover.busy" @click="closeInlinePopover()">Cancel</button>
-                    <button type="button" class="tap-btn focus-ring btn btn-sm" :class="inlinePopover.mode === 'delete' ? 'btn-error' : 'btn-primary'" :disabled="inlinePopover.busy" @click="submitInlinePopover()" x-text="inlinePopover.mode === 'delete' ? 'Delete' : 'Create'"></button>
-                  </div>
+            <div class="inner-scroll flex-1 rounded-box border border-base-300 bg-base-100">
+              <template x-if="activePlanetRecords().length === 0">
+                <div class="grid min-h-52 place-items-center p-4 text-center">
+                  <p class="text-sm opacity-75" x-text="recordsEmptyLabel()"></p>
                 </div>
-              </div>
+              </template>
+              <ul x-show="activePlanetRecords().length > 0" class="tree-list">
+                <template x-for="record in activePlanetRecords()" :key="`record-${record.id}`">
+                  <li>
+                    <button
+                      type="button"
+                      class="tree-row tap-btn focus-ring w-full items-center justify-between px-2.5 py-2 text-left"
+                      @click="openRecordFromRow(record)"
+                      @pointerdown="startRowPress(record, 'record', $event)"
+                      @pointermove="updateRowPress($event)"
+                      @pointerup="endRowPress()"
+                      @pointerleave="endRowPress()"
+                      @pointercancel="endRowPress()"
+                      @contextmenu.prevent="openRowMenu(record, 'record')"
+                    >
+                      <span class="min-w-0 flex flex-1 items-center truncate">
+                        <span class="tree-title truncate" x-text="record.title"></span>
+                      </span>
+                      <span class="text-[0.68rem] opacity-45" x-text="record.permission"></span>
+                    </button>
+                  </li>
+                </template>
+              </ul>
             </div>
           </div>
         </div>
@@ -656,9 +558,25 @@
         <div class="editor-shell h-full">
           <div class="h-full gap-3 p-0 flex flex-col">
             <div class="editor-topbar flex items-center justify-between gap-2 px-3 py-2">
-              <button type="button" class="tap-btn focus-ring btn btn-ghost btn-sm" @click="goList()">
-                Back
+              <button type="button" class="tap-btn focus-ring btn btn-ghost btn-sm" @click="goRecords()">
+                <span x-text="t('backLabel')"></span>
               </button>
+              <div class="flex items-center gap-1">
+                <button type="button" class="tap-btn focus-ring btn btn-primary btn-sm min-w-20" @click="saveEditor()">
+                  <span x-text="t('saveLabel')"></span>
+                </button>
+                <button
+                  type="button"
+                  class="tap-btn focus-ring btn btn-ghost btn-sm"
+                  @click="toggleEditorMore()"
+                  :aria-expanded="editorMoreOpen ? 'true' : 'false'"
+                >
+                  ⋯
+                </button>
+              </div>
+            </div>
+
+            <div x-show="editorMoreOpen" class="grid gap-2 px-3 pt-2">
               <div class="join">
                 <button
                   type="button"
@@ -677,9 +595,6 @@
                   Preview
                 </button>
               </div>
-            </div>
-
-            <div class="grid gap-2 px-3 pt-2">
               <label class="input input-bordered flex items-center gap-2">
                 <span class="text-xs opacity-70">Title</span>
                 <input
@@ -735,9 +650,6 @@
             </div>
 
             <div class="row-scroll flex items-center gap-2 px-3 pb-3">
-              <button type="button" class="tap-btn focus-ring btn btn-primary btn-sm min-w-24" @click="saveEditor()">
-                Save
-              </button>
               <button type="button" class="tap-btn focus-ring btn btn-ghost btn-sm min-w-24" @click="resetEditor()">
                 Reset
               </button>
@@ -749,95 +661,66 @@
     </main>
 
     <div
-      x-show="modal.open"
+      x-show="status === 'ready' && view !== 'editor'"
       x-transition.opacity.duration.120ms
-      class="absolute inset-0 z-50 grid place-items-center bg-base-content/35 p-4"
-      @pointerdown.self="closeModalByBackdrop()"
+      class="absolute bottom-[calc(env(safe-area-inset-bottom)+0.9rem)] right-4 z-40"
     >
-      <div
-        class="modal-box card w-full max-w-md max-h-[calc(100dvh-6rem)] overflow-y-auto border border-base-300 bg-base-100 shadow-xl"
-        @pointerdown.stop
-        @click.stop
-      >
-        <div class="card-body gap-3 p-4">
-          <h3 class="text-sm font-semibold" x-text="modalTitle()"></h3>
+      <button
+        type="button"
+        class="tap-btn focus-ring btn btn-primary btn-sm shadow-lg"
+        @click="onPrimaryFab()"
+        x-text="primaryFabLabel()"
+      ></button>
+    </div>
 
-          <template x-if="modal.mode === 'rename' || modal.mode === 'move'">
-            <div class="grid gap-2">
-              <template x-if="modal.mode === 'rename'">
-                <label class="input input-bordered flex items-center gap-2">
-                  <span class="text-xs opacity-70">Title</span>
-                  <input
-                    type="text"
-                    class="grow focus-ring"
-                    placeholder="Node title"
-                    aria-label="Node title"
-                    x-model="modal.title"
-                  />
-                </label>
-              </template>
-              <template x-if="modal.mode === 'move'">
-                <div class="rounded-box border border-base-300 bg-base-200/50 p-2 text-xs">
-                  <span class="opacity-60">Selected</span>
-                  <p class="mt-1 truncate font-medium" x-text="modal.title || 'Node'"></p>
-                </div>
-              </template>
-              <template x-if="modal.mode === 'move'">
-                <label class="grid gap-1">
-                  <span class="text-xs opacity-70">New Parent</span>
-                  <select class="select select-bordered w-full focus-ring" x-model="modal.parentId">
-                    <template x-for="pathNode in pathNodesForParentSelect()" :key="`p-${pathNode.id}`">
-                      <option :value="pathNode.id" x-text="formatPathOption(pathNode)"></option>
-                    </template>
-                  </select>
-                </label>
-              </template>
+    <div
+      x-show="rowMenu.open"
+      x-transition.opacity.duration.120ms
+      class="absolute inset-0 z-50 bg-base-content/35"
+      @pointerdown.self="closeRowMenu()"
+      @keydown.escape.window="closeRowMenu()"
+    >
+      <div class="absolute inset-x-3 bottom-3 rounded-2xl border border-base-300 bg-base-100 p-2 shadow-xl">
+        <div class="mb-2 px-2 text-xs opacity-70 truncate" x-text="rowMenu.title || 'Actions'"></div>
+        <div class="grid gap-2">
+          <div class="grid gap-1" x-show="rowMenu.mode === ''">
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'record'" @click="openRecordFromMenu()" x-text="t('openEditor')"></button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'planet'" @click="createPlanetChildFromMenu()">+ Child Planet</button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'planet'" :disabled="!canMovePlanetFromMenu(-1)" @click="movePlanetFromMenu(-1)">↑ Move Up</button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'planet'" :disabled="!canMovePlanetFromMenu(1)" @click="movePlanetFromMenu(1)">↓ Move Down</button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'planet'" :disabled="!canIndentPlanetFromMenu()" @click="indentPlanetFromMenu()">→ Indent</button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" x-show="rowMenu.kind === 'planet'" :disabled="!canOutdentPlanetFromMenu()" @click="outdentPlanetFromMenu()">← Outdent</button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" @click.stop.prevent="renameFromMenu()" x-text="t('renameLabel')"></button>
+            <button type="button" class="btn btn-sm btn-error justify-start" @click.stop.prevent="deleteFromMenu()" x-text="t('deleteLabel')"></button>
+            <button type="button" class="btn btn-sm btn-ghost justify-start" @click="closeRowMenu()" x-text="t('cancelLabel')"></button>
+          </div>
+
+          <div class="grid gap-2" x-show="rowMenu.mode === 'rename'">
+            <label class="input input-bordered input-sm flex items-center gap-2">
+              <span class="text-xs opacity-70" x-text="t('renameLabel')"></span>
+              <input
+                type="text"
+                class="grow"
+                aria-label="Rename node"
+                x-ref="rowMenuRenameInput"
+                x-model="rowMenu.renameDraft"
+                @keydown.enter.prevent="submitRenameFromMenu()"
+                @keydown.escape.prevent.stop="cancelRowMenuMode()"
+              />
+            </label>
+            <div class="flex items-center justify-end gap-2">
+              <button type="button" class="btn btn-sm btn-ghost" @click="cancelRowMenuMode()" x-text="t('cancelLabel')"></button>
+              <button type="button" class="btn btn-sm btn-primary" @click="submitRenameFromMenu()" x-text="t('saveLabel')"></button>
             </div>
-          </template>
+          </div>
 
-          <template x-if="modal.mode === 'actions'">
-            <div class="grid gap-2">
-              <button
-                type="button"
-                class="tap-btn focus-ring touch-target btn btn-sm btn-ghost justify-start"
-                :disabled="!canRenameSelected()"
-                @click="chooseAction('rename')"
-              >
-                Rename
-                <span class="ml-auto text-[0.68rem] opacity-65">Title only</span>
-              </button>
-              <button
-                type="button"
-                class="tap-btn focus-ring touch-target btn btn-sm btn-ghost justify-start"
-                :disabled="!canMoveSelectedNode()"
-                @click="chooseAction('move')"
-              >
-                Move To
-                <span class="ml-auto text-[0.68rem] opacity-65">Change parent</span>
-              </button>
-              <button
-                type="button"
-                class="tap-btn focus-ring touch-target btn btn-sm btn-error justify-start"
-                :disabled="!canDeleteSelected()"
-                @click.prevent.stop="chooseAction('delete')"
-              >
-                Delete
-                <span class="ml-auto text-[0.68rem] opacity-85">Permanent</span>
-              </button>
+          <div class="grid gap-2" x-show="rowMenu.mode === 'delete'">
+            <p class="text-sm font-medium break-words" x-text="'Delete ' + (rowMenu.title || 'node') + '?'"></p>
+            <p class="text-xs opacity-70">This will delete selected node and nested children.</p>
+            <div class="flex items-center justify-end gap-2">
+              <button type="button" class="btn btn-sm btn-ghost" @click="cancelRowMenuMode()" x-text="t('cancelLabel')"></button>
+              <button type="button" class="btn btn-sm btn-error" x-ref="rowMenuDeleteConfirm" @click="confirmDeleteFromMenu()" x-text="t('deleteLabel')"></button>
             </div>
-          </template>
-
-          <div class="row-scroll flex items-center justify-end gap-2">
-            <button type="button" class="tap-btn focus-ring btn btn-sm btn-ghost" :disabled="modalBusy" @click="closeModal()">Cancel</button>
-            <button
-              x-show="modal.mode !== 'actions'"
-              type="button"
-              class="tap-btn focus-ring btn btn-sm"
-              :class="'btn-primary'"
-              :disabled="modalBusy"
-              @click="submitModal()"
-              x-text="modalPrimaryLabel()"
-            ></button>
           </div>
         </div>
       </div>
@@ -907,7 +790,7 @@
       ];
 
       return {
-        view: 'list',
+        view: 'planets',
         appId: 'teeezerq',
         loading: true,
         status: 'initializing',
@@ -917,7 +800,25 @@
         language: document.documentElement.lang === 'hy' ? 'hy' : 'en',
         osTheme: document.documentElement.getAttribute('data-theme') || 'black',
         selectedId: 'root',
+        activePlanetId: '',
+        planetSearch: '',
+        rowPressTimer: null,
+        rowPressTargetId: '',
+        rowPressPointerId: null,
+        rowPressStartX: 0,
+        rowPressStartY: 0,
+        rowPressKind: '',
+        rowMenuSuppressTapId: '',
+        rowMenu: {
+          open: false,
+          id: '',
+          kind: '',
+          title: '',
+          mode: '',
+          renameDraft: '',
+        },
         editorMode: 'write',
+        editorMoreOpen: false,
         saveStateText: 'Not saved',
         reorderMode: false,
         swipe: {
@@ -928,24 +829,6 @@
           startAt: 0,
           dx: 0,
         },
-        modal: {
-          open: false,
-          mode: '',
-          kind: 'path',
-          title: '',
-          parentId: 'root',
-          permission: 'private',
-        },
-        inlinePopover: {
-          open: false,
-          mode: '',
-          kind: 'path',
-          title: '',
-          parentId: 'root',
-          permission: 'private',
-          busy: false,
-        },
-        inlinePopoverOpenedAt: 0,
         editor: {
           id: '',
           title: '',
@@ -956,10 +839,12 @@
         draftPersistTimer: null,
         treeScrollTop: 0,
         hasUnsavedChanges: false,
-        modalOpenedAt: 0,
-        modalBackdropArmed: false,
-        modalArmTimer: null,
-        modalBusy: false,
+        derivedVersion: 0,
+        activePlanetRecordsCache: {
+          version: -1,
+          planetId: '',
+          rows: [],
+        },
         isHydratingRemote: false,
         syncState: 'idle',
         syncError: '',
@@ -968,6 +853,23 @@
         i18n: {
           en: {
             appTitle: 'Teeezerq',
+            planetsTitle: 'Planets',
+            recordsTitle: 'Records',
+            searchLabel: 'Search',
+            searchPlaceholder: 'Find planet...',
+            searchAria: 'Search planets',
+            backLabel: 'Back',
+            saveLabel: 'Save',
+            fabPlanet: '+ Planet',
+            fabRecord: '+ Record',
+            noPlanets: 'No planets yet.',
+            noPlanetMatches: 'No matching planets.',
+            noRecordsInPlanet: 'No records in this planet.',
+            selectPlanetFirst: 'Select a planet first.',
+            openEditor: 'Open editor',
+            renameLabel: 'Rename',
+            deleteLabel: 'Delete',
+            cancelLabel: 'Cancel',
             statusInitializing: 'Initializing',
             statusAuthCheck: 'Checking authentication',
             statusReady: 'Ready',
@@ -979,6 +881,23 @@
           },
           hy: {
             appTitle: 'Teeezerq',
+            planetsTitle: 'Մոլորակներ',
+            recordsTitle: 'Գրառումներ',
+            searchLabel: 'Որոնում',
+            searchPlaceholder: 'Գտնել մոլորակ...',
+            searchAria: 'Մոլորակների որոնում',
+            backLabel: 'Հետ',
+            saveLabel: 'Պահել',
+            fabPlanet: '+ Մոլորակ',
+            fabRecord: '+ Գրառում',
+            noPlanets: 'Մոլորակներ դեռ չկան։',
+            noPlanetMatches: 'Համընկնող մոլորակ չկա։',
+            noRecordsInPlanet: 'Այս մոլորակում գրառումներ չկան։',
+            selectPlanetFirst: 'Նախ ընտրիր մոլորակ։',
+            openEditor: 'Բացել editor-ը',
+            renameLabel: 'Վերանվանել',
+            deleteLabel: 'Ջնջել',
+            cancelLabel: 'Չեղարկել',
             statusInitializing: 'Սկսվում է',
             statusAuthCheck: 'Ստուգվում է մուտքը',
             statusReady: 'Պատրաստ է',
@@ -1005,9 +924,16 @@
         canManualSave() {
           return !!(this.user && this.hasFirestoreGateway() && this.hasUnsavedChanges);
         },
+        invalidateDerivedCaches() {
+          this.derivedVersion += 1;
+          this.activePlanetRecordsCache.version = -1;
+          this.activePlanetRecordsCache.rows = [];
+          this.activePlanetRecordsCache.planetId = '';
+        },
         markDirty() {
           this.hasUnsavedChanges = true;
           this.saveStateText = 'Not saved';
+          this.invalidateDerivedCaches();
           if (this.user && this.hasFirestoreGateway() && !this.isHydratingRemote && this.syncState !== 'saving') {
             this.syncState = 'pending';
           }
@@ -1023,10 +949,9 @@
         applySnapshot(snapshot) {
           const parsed = snapshot && typeof snapshot === 'object' ? snapshot : null;
           this.tree = this.normalizeTree(parsed?.tree);
+          this.invalidateDerivedCaches();
           const activeTree = this.tree.filter((item) => !item.deletedAt);
-          if (parsed && parsed.expanded && typeof parsed.expanded === 'object') {
-            this.expanded = parsed.expanded;
-          }
+          this.expanded = this.normalizeExpandedMap(parsed?.expanded, activeTree);
           if (parsed && typeof parsed.selectedId === 'string') {
             this.selectedId = parsed.selectedId;
           }
@@ -1047,11 +972,16 @@
             };
             this.editorMode = parsed.editorDraft.editorMode === 'preview' ? 'preview' : 'write';
           }
+          if (parsed && typeof parsed.activePlanetId === 'string') {
+            this.activePlanetId = parsed.activePlanetId;
+          }
           if (parsed && parsed.view === 'editor' && this.editor.id) {
             const file = activeTree.find((item) => item.id === this.editor.id && item.kind === 'file');
-            this.view = file ? 'editor' : 'list';
+            this.view = file ? 'editor' : 'records';
+          } else if (parsed && (parsed.view === 'records' || parsed.view === 'list')) {
+            this.view = 'records';
           } else {
-            this.view = 'list';
+            this.view = 'planets';
           }
           if (!activeTree.some((item) => item.id === this.selectedId)) {
             this.selectedId = activeTree.find((item) => item.parentId === null)?.id || 'root';
@@ -1059,6 +989,10 @@
           if (this.lastOpenedFileId && !activeTree.some((item) => item.id === this.lastOpenedFileId)) {
             this.lastOpenedFileId = '';
           }
+          this.sanitizeNavigationState();
+        },
+        toBackendViewMode(view) {
+          return view === 'editor' ? 'editor' : 'list';
         },
         toBackendStatePayload() {
           return {
@@ -1069,7 +1003,8 @@
             expanded: this.expanded,
             selectedId: this.selectedId,
             reorderMode: this.reorderMode,
-            view: this.view,
+            view: this.toBackendViewMode(this.view),
+            activePlanetId: this.activePlanetId,
             lastOpenedFileId: this.lastOpenedFileId,
             editorDraft: {
               id: this.editor.id,
@@ -1150,6 +1085,53 @@
           });
           return this.normalizeTree(Array.from(mergedById.values()));
         },
+        normalizeExpandedMap(rawExpanded, tree) {
+          const source = rawExpanded && typeof rawExpanded === 'object' ? rawExpanded : {};
+          const nodes = Array.isArray(tree) ? tree : this.tree;
+          const activePathIds = new Set(
+            nodes
+              .filter((item) => item && item.kind === 'path' && !item.deletedAt)
+              .map((item) => item.id),
+          );
+          const expanded = {};
+          Object.keys(source).forEach((key) => {
+            if (!activePathIds.has(key)) return;
+            expanded[key] = source[key] === true;
+          });
+          const root = nodes.find((item) => item && item.kind === 'path' && item.parentId === null && !item.deletedAt)
+            || nodes.find((item) => item && item.kind === 'path' && !item.deletedAt)
+            || null;
+          if (root && typeof expanded[root.id] !== 'boolean') {
+            expanded[root.id] = true;
+          }
+          return expanded;
+        },
+        pickExistingNodeId(candidates, tree, fallback = '') {
+          const nodes = Array.isArray(tree) ? tree : [];
+          const activeIds = new Set(
+            nodes
+              .filter((item) => item && !item.deletedAt)
+              .map((item) => item.id),
+          );
+          for (let i = 0; i < candidates.length; i += 1) {
+            const candidate = typeof candidates[i] === 'string' ? candidates[i].trim() : '';
+            if (candidate && activeIds.has(candidate)) return candidate;
+          }
+          return fallback;
+        },
+        pickExistingPlanetId(candidates, tree, fallback = '') {
+          const nodes = Array.isArray(tree) ? tree : [];
+          const activePlanetIds = new Set(
+            nodes
+              .filter((item) => item && item.kind === 'path' && !item.deletedAt)
+              .map((item) => item.id),
+          );
+          for (let i = 0; i < candidates.length; i += 1) {
+            const candidate = typeof candidates[i] === 'string' ? candidates[i].trim() : '';
+            if (candidate && activePlanetIds.has(candidate)) return candidate;
+          }
+          return fallback;
+        },
         mergeSnapshots(localSnapshot, remoteSnapshot) {
           const local = localSnapshot && typeof localSnapshot === 'object' ? localSnapshot : null;
           const remote = remoteSnapshot && typeof remoteSnapshot === 'object' ? remoteSnapshot : null;
@@ -1157,19 +1139,34 @@
           if (!remote) return local;
           if (!local) return remote;
           const mergedTree = this.mergeTree(local.tree, remote.tree);
-          const mergedExpanded = {
-            ...(remote.expanded && typeof remote.expanded === 'object' ? remote.expanded : {}),
-            ...(local.expanded && typeof local.expanded === 'object' ? local.expanded : {}),
-          };
-          const rootId = mergedTree.find((item) => item.parentId === null)?.id || 'root';
-          const localSelected = typeof local.selectedId === 'string' ? local.selectedId : '';
-          const remoteSelected = typeof remote.selectedId === 'string' ? remote.selectedId : '';
-          const selectedId = mergedTree.some((item) => item.id === localSelected)
-            ? localSelected
-            : (mergedTree.some((item) => item.id === remoteSelected) ? remoteSelected : rootId);
           const localTs = this.toTs(local.updatedAt);
           const remoteTs = this.toTs(remote.updatedAt);
           const newest = localTs >= remoteTs ? local : remote;
+          const oldest = newest === local ? remote : local;
+          const rootId = mergedTree.find((item) => item.parentId === null)?.id || 'root';
+          const rootPlanetId = this.pickExistingPlanetId([rootId], mergedTree, '');
+          const selectedId = this.pickExistingNodeId([
+            typeof newest.selectedId === 'string' ? newest.selectedId : '',
+            typeof oldest.selectedId === 'string' ? oldest.selectedId : '',
+            rootId,
+          ], mergedTree, rootId);
+          const activePlanetId = this.pickExistingPlanetId([
+            typeof newest.activePlanetId === 'string' ? newest.activePlanetId : '',
+            typeof oldest.activePlanetId === 'string' ? oldest.activePlanetId : '',
+            selectedId,
+            rootPlanetId,
+          ], mergedTree, rootPlanetId);
+          const mergedExpanded = this.normalizeExpandedMap({
+            ...(remote.expanded && typeof remote.expanded === 'object' ? remote.expanded : {}),
+            ...(local.expanded && typeof local.expanded === 'object' ? local.expanded : {}),
+          }, mergedTree);
+          const reorderMode = typeof newest.reorderMode === 'boolean'
+            ? newest.reorderMode
+            : (typeof oldest.reorderMode === 'boolean' ? oldest.reorderMode : false);
+          const lastOpenedFileId = this.pickExistingNodeId([
+            typeof newest.lastOpenedFileId === 'string' ? newest.lastOpenedFileId : '',
+            typeof oldest.lastOpenedFileId === 'string' ? oldest.lastOpenedFileId : '',
+          ], mergedTree, '');
           const merged = {
             ...newest,
             version: BACKEND_SCHEMA_VERSION,
@@ -1178,12 +1175,11 @@
             tree: mergedTree,
             expanded: mergedExpanded,
             selectedId,
-            reorderMode: typeof local.reorderMode === 'boolean' ? local.reorderMode : !!remote.reorderMode,
-            // Respect only the newest snapshot for view mode; avoid stale editor state forcing auto-open.
-            view: newest.view === 'editor' ? 'editor' : 'list',
-            lastOpenedFileId: typeof local.lastOpenedFileId === 'string' && local.lastOpenedFileId
-              ? local.lastOpenedFileId
-              : (typeof remote.lastOpenedFileId === 'string' ? remote.lastOpenedFileId : ''),
+            activePlanetId,
+            reorderMode,
+            // Keep backend payload contract compatible with existing schema validator.
+            view: this.toBackendViewMode(newest.view),
+            lastOpenedFileId,
             editorDraft: localTs >= remoteTs
               ? (local.editorDraft || remote.editorDraft || {})
               : (remote.editorDraft || local.editorDraft || {}),
@@ -1202,6 +1198,7 @@
         },
         async writeRemoteSnapshot() {
           if (!this.hasFirestoreGateway()) return;
+          this.sanitizeNavigationState();
           const localPayload = this.toBackendStatePayload();
           this.syncState = 'saving';
           this.syncError = '';
@@ -1239,6 +1236,7 @@
           try {
             const remote = await this.readRemoteSnapshot();
             if (remote && Array.isArray(remote.tree)) {
+              this.sanitizeNavigationState();
               const localPayload = this.toBackendStatePayload();
               const mergedPayload = this.mergeSnapshots(localPayload, remote) || remote;
               this.applySnapshot(mergedPayload);
@@ -1373,7 +1371,7 @@
                 if (!nextUser) {
                   this.user = null;
                   this.status = 'auth_failed';
-                  this.view = 'list';
+                  this.view = 'planets';
                   return;
                 }
                 this.user = nextUser;
@@ -1385,6 +1383,7 @@
             const parsed = this.loadLocalSnapshot();
             this.applySnapshot(parsed);
             await this.hydrateFromRemote(parsed);
+            this.applyRouteFromUrl();
             this.persistState();
           } catch (error) {
             // bootstrap failures should not crash UI; keep local mode available
@@ -1428,8 +1427,86 @@
           if (this.status === 'auth_failed') return this.t('statusAuthFailedDesc');
           return this.t('statusInitializingDesc');
         },
+        closeTransientUi() {
+          this.endRowPress();
+          this.closeRowMenu();
+          this.editorMoreOpen = false;
+        },
+        planetEmptyLabel() {
+          return (this.planetSearch || '').trim() ? this.t('noPlanetMatches') : this.t('noPlanets');
+        },
+        recordsEmptyLabel() {
+          return this.activePlanetId ? this.t('noRecordsInPlanet') : this.t('selectPlanetFirst');
+        },
+        resolvePlanetIdForNode(nodeId) {
+          let cursor = this.getNodeById(nodeId);
+          const seen = new Set();
+          while (cursor && !seen.has(cursor.id)) {
+            seen.add(cursor.id);
+            if (this.isPlanetNode(cursor)) return cursor.id;
+            if (!cursor.parentId) break;
+            cursor = this.getNodeById(cursor.parentId);
+          }
+          return '';
+        },
+        ensureExpandedChainToNode(nodeId, includeSelf = false) {
+          const expandedIds = [];
+          let cursor = this.getNodeById(nodeId);
+          const seen = new Set();
+          while (cursor && !seen.has(cursor.id)) {
+            seen.add(cursor.id);
+            if (this.isPlanetNode(cursor) && (includeSelf || cursor.id !== nodeId)) {
+              expandedIds.push(cursor.id);
+            }
+            if (!cursor.parentId) break;
+            cursor = this.getNodeById(cursor.parentId);
+          }
+          expandedIds.forEach((id) => {
+            this.expanded[id] = true;
+          });
+        },
+        sanitizeNavigationState() {
+          const root = this.tree.find((item) => item.parentId === null && this.isPlanetNode(item))
+            || this.tree.find((item) => this.isPlanetNode(item))
+            || null;
+          const hasPlanet = (planetId) => !!this.tree.find((item) => item.id === planetId && this.isPlanetNode(item));
+          const hasRecord = (recordId) => !!this.tree.find((item) => item.id === recordId && this.isRecordNode(item));
+
+          if (!hasPlanet(this.activePlanetId)) {
+            this.activePlanetId = root ? root.id : '';
+          }
+
+          if (!this.selectedId || !this.tree.some((item) => item.id === this.selectedId && !item.deletedAt)) {
+            this.selectedId = this.activePlanetId || (root ? root.id : '');
+          }
+          const selectedPlanetId = this.resolvePlanetIdForNode(this.selectedId);
+          if (!hasPlanet(this.activePlanetId) && selectedPlanetId) {
+            this.activePlanetId = selectedPlanetId;
+          }
+
+          if (this.view === 'editor') {
+            if (!hasRecord(this.editor.id || this.selectedId)) {
+              this.view = this.activePlanetId ? 'records' : 'planets';
+            } else if (!this.editor.id) {
+              this.editor.id = this.selectedId;
+            }
+          } else if (this.view === 'records') {
+            if (!this.activePlanetId) {
+              this.view = 'planets';
+            }
+          } else {
+            this.view = 'planets';
+          }
+          if (this.activePlanetId) {
+            this.ensureExpandedChainToNode(this.activePlanetId, false);
+          }
+          if (this.selectedId) {
+            this.ensureExpandedChainToNode(this.selectedId, false);
+          }
+        },
         persistState() {
           try {
+            this.sanitizeNavigationState();
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
               schemaVersion: SCHEMA_VERSION,
               tree: this.tree,
@@ -1437,6 +1514,7 @@
               selectedId: this.selectedId,
               reorderMode: this.reorderMode,
               view: this.view,
+              activePlanetId: this.activePlanetId,
               lastOpenedFileId: this.lastOpenedFileId,
               editorDraft: {
                 id: this.editor.id,
@@ -1446,8 +1524,70 @@
                 editorMode: this.editorMode,
               },
             }));
+            this.syncRouteToUrl();
           } catch {
             // ignore persist failures
+          }
+        },
+        applyRouteFromUrl() {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const view = (params.get('view') || '').trim().toLowerCase();
+            const planetId = (params.get('planetId') || '').trim();
+            const recordId = (params.get('recordId') || '').trim();
+
+            if (planetId) {
+              const planet = this.tree.find((item) => item.id === planetId && item.kind === 'path' && !item.deletedAt);
+              if (planet) {
+                this.activePlanetId = planet.id;
+                this.selectedId = planet.id;
+                this.ensureExpandedChainToNode(planet.id, false);
+              }
+            }
+
+            if (recordId) {
+              const record = this.tree.find((item) => item.id === recordId && item.kind === 'file' && !item.deletedAt);
+              if (record) {
+                this.selectedId = record.id;
+                this.lastOpenedFileId = record.id;
+                const parentPlanetId = this.resolvePlanetIdForNode(record.id);
+                if (parentPlanetId) {
+                  this.activePlanetId = parentPlanetId;
+                }
+                this.ensureExpandedChainToNode(record.id, false);
+              }
+            }
+
+            if (view === 'editor' && recordId) {
+              const record = this.tree.find((item) => item.id === recordId && item.kind === 'file' && !item.deletedAt);
+              if (record) {
+                this.openRecordFromList(record);
+                return;
+              }
+            }
+            if (view === 'records') {
+              this.view = 'records';
+            } else if (view === 'planets') {
+              this.view = 'planets';
+            }
+            this.sanitizeNavigationState();
+          } catch {
+            // ignore URL route parse failures
+          }
+        },
+        syncRouteToUrl() {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            params.set('view', this.view || 'planets');
+            if (this.activePlanetId) params.set('planetId', this.activePlanetId);
+            else params.delete('planetId');
+            if (this.view === 'editor' && this.editor.id) params.set('recordId', this.editor.id);
+            else params.delete('recordId');
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+            window.history.replaceState({}, '', nextUrl);
+          } catch {
+            // ignore URL sync failures
           }
         },
         onEditorChanged() {
@@ -1463,8 +1603,11 @@
           this.editorMode = mode === 'preview' ? 'preview' : 'write';
           this.persistState();
         },
+        toggleEditorMore() {
+          this.editorMoreOpen = !this.editorMoreOpen;
+        },
         openEditor() {
-          this.closeInlinePopover();
+          this.closeTransientUi();
           const node = this.tree.find((item) => item.id === this.selectedId);
           if (!node || node.kind !== 'file') return;
           if (this.$refs.treeScroller) {
@@ -1475,12 +1618,14 @@
           this.editor.body = node.body || '';
           this.editor.permission = node.permission || 'private';
           this.editorMode = 'write';
+          this.editorMoreOpen = false;
           this.lastOpenedFileId = node.id;
           this.view = 'editor';
           this.persistState();
         },
-        goList() {
-          this.view = 'list';
+        goRecords() {
+          this.closeTransientUi();
+          this.view = 'records';
           this.persistState();
           this.$nextTick(() => {
             if (this.$refs.treeScroller) {
@@ -1491,6 +1636,553 @@
               target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             }
           });
+        },
+        goList() {
+          this.goRecords();
+        },
+        isPlanetNode(node) {
+          return !!(node && node.kind === 'path' && !node.deletedAt);
+        },
+        isRecordNode(node) {
+          return !!(node && node.kind === 'file' && !node.deletedAt);
+        },
+        getNodeById(nodeId) {
+          if (!nodeId) return null;
+          return this.tree.find((item) => item.id === nodeId) || null;
+        },
+        currentPlanetNode() {
+          const candidate = this.getNodeById(this.activePlanetId || this.selectedId);
+          if (this.isPlanetNode(candidate)) return candidate;
+          return this.planetRootNode();
+        },
+        planetNodes() {
+          const root = this.planetRootNode();
+          return this.tree.filter((item) => this.isPlanetNode(item) && (!root || item.id !== root.id));
+        },
+        planetRootNode() {
+          const root = this.tree.find((item) => this.isPlanetNode(item) && item.parentId === null);
+          if (root) return root;
+          return this.tree.find((item) => this.isPlanetNode(item)) || null;
+        },
+        planetChildNodes(parentId) {
+          return this.childrenOf(parentId).filter((item) => this.isPlanetNode(item));
+        },
+        planetIndentLevels(depth) {
+          const safeDepth = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
+          return Array.from({ length: safeDepth }, (_, index) => index);
+        },
+        planetExpandGlyph(nodeId) {
+          return this.isExpanded(nodeId) ? '▾' : '▸';
+        },
+        togglePlanetExpand(nodeId) {
+          if (!nodeId) return;
+          if (this.planetChildNodes(nodeId).length === 0) return;
+          this.expanded[nodeId] = !this.isExpanded(nodeId);
+          this.persistState();
+        },
+        planetTreeRows() {
+          const root = this.planetRootNode();
+          if (!root) return [];
+          const q = (this.planetSearch || '').trim().toLowerCase();
+          const walk = (node, depth) => {
+            const children = this.planetChildNodes(node.id);
+            const childRows = [];
+            let descendantMatch = false;
+            for (let i = 0; i < children.length; i += 1) {
+              const childResult = walk(children[i], depth + 1);
+              if (!childResult.include) continue;
+              descendantMatch = true;
+              childRows.push(...childResult.rows);
+            }
+            const selfTitle = typeof node.title === 'string' ? node.title.toLowerCase() : '';
+            const selfMatch = !q || selfTitle.includes(q);
+            const includeNode = !q || selfMatch || descendantMatch;
+            if (!includeNode) {
+              return { include: false, rows: [] };
+            }
+            const rows = [{
+              node,
+              depth,
+              hasChildren: children.length > 0,
+              expanded: this.isExpanded(node.id),
+            }];
+            const showChildren = q.length > 0 || this.isExpanded(node.id);
+            if (showChildren) {
+              rows.push(...childRows);
+            }
+            return { include: true, rows };
+          };
+          return walk(root, 0).rows;
+        },
+        resolvePlanetCreateParentId() {
+          const root = this.planetRootNode();
+          if (!root) return '';
+          const selected = this.selectedNode();
+          if (this.isPlanetNode(selected)) return selected.id;
+          if (this.isRecordNode(selected) && typeof selected.parentId === 'string' && selected.parentId.trim()) {
+            const parent = this.getNodeById(selected.parentId.trim());
+            if (this.isPlanetNode(parent)) return parent.id;
+          }
+          return root.id;
+        },
+        createPlanetQuick() {
+          const root = this.planetRootNode();
+          if (!root) return;
+          const parentId = this.resolvePlanetCreateParentId() || root.id;
+          const parent = this.getNodeById(parentId);
+          if (!this.isPlanetNode(parent)) return;
+          const ts = nowIso();
+          const id = this.newId('planet');
+          const count = this.planetChildNodes(parent.id).length + 1;
+          const title = `Planet ${count}`;
+          this.tree.push({
+            id,
+            parentId: parent.id,
+            title,
+            kind: 'path',
+            permission: 'private',
+            order: this.nextOrderFor(parent.id),
+            createdAt: ts,
+            updatedAt: ts,
+          });
+          this.expanded[parent.id] = true;
+          this.tree = this.resequenceOrders(this.tree);
+          this.selectedId = id;
+          this.activePlanetId = id;
+          this.view = 'records';
+          this.markDirty();
+          this.persistState();
+        },
+        createRecordQuick() {
+          const parent = this.currentPlanetNode();
+          if (!parent) return;
+          const ts = nowIso();
+          const id = this.newId('record');
+          const siblings = this.childrenOf(parent.id).filter((item) => this.isRecordNode(item));
+          const title = `Record ${siblings.length + 1}`;
+          this.tree.push({
+            id,
+            parentId: parent.id,
+            title,
+            kind: 'file',
+            permission: 'private',
+            body: '',
+            order: this.nextOrderFor(parent.id),
+            createdAt: ts,
+            updatedAt: ts,
+          });
+          this.tree = this.resequenceOrders(this.tree);
+          this.selectedId = id;
+          this.markDirty();
+          this.persistState();
+          const created = this.tree.find((item) => item.id === id);
+          if (created) this.openRecordFromList(created);
+        },
+        primaryFabLabel() {
+          return this.view === 'planets' ? this.t('fabPlanet') : this.t('fabRecord');
+        },
+        onPrimaryFab() {
+          if (this.view === 'planets') {
+            this.createPlanetQuick();
+            return;
+          }
+          if (this.view === 'records') {
+            this.createRecordQuick();
+          }
+        },
+        openPlanet(planet) {
+          if (!this.isPlanetNode(planet)) return;
+          this.closeTransientUi();
+          this.activePlanetId = planet.id;
+          this.selectedId = planet.id;
+          this.view = 'records';
+          this.persistState();
+        },
+        openPlanetFromRow(planet) {
+          this.tapPlanetRow(planet);
+        },
+        tapPlanetRow(planet) {
+          if (!planet) return;
+          if (this.rowMenuSuppressTapId && this.rowMenuSuppressTapId === planet.id) {
+            this.rowMenuSuppressTapId = '';
+            return;
+          }
+          const shouldOpen = this.view === 'planets'
+            && this.selectedId === planet.id
+            && this.activePlanetId === planet.id;
+          this.selectedId = planet.id;
+          this.activePlanetId = planet.id;
+          if (shouldOpen) {
+            this.openPlanet(planet);
+            return;
+          }
+          this.persistState();
+        },
+        goPlanets() {
+          this.closeTransientUi();
+          this.view = 'planets';
+          this.persistState();
+        },
+        activePlanetLabel() {
+          const node = this.currentPlanetNode();
+          return node ? node.title : 'All records';
+        },
+        activePlanetRecords() {
+          const root = this.currentPlanetNode();
+          if (!root) return [];
+          const cacheHit = (
+            this.activePlanetRecordsCache.version === this.derivedVersion
+            && this.activePlanetRecordsCache.planetId === root.id
+          );
+          if (cacheHit) {
+            return this.activePlanetRecordsCache.rows;
+          }
+          const descendantIds = new Set([root.id]);
+          let grew = true;
+          while (grew) {
+            grew = false;
+            this.tree.forEach((node) => {
+              if (!node.deletedAt && node.parentId && descendantIds.has(node.parentId) && !descendantIds.has(node.id)) {
+                descendantIds.add(node.id);
+                grew = true;
+              }
+            });
+          }
+          const rows = this.tree
+            .filter((node) => this.isRecordNode(node) && node.parentId && descendantIds.has(node.parentId))
+            .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+          this.activePlanetRecordsCache.version = this.derivedVersion;
+          this.activePlanetRecordsCache.planetId = root.id;
+          this.activePlanetRecordsCache.rows = rows;
+          return rows;
+        },
+        openRecordFromList(record) {
+          if (!this.isRecordNode(record)) return;
+          this.closeTransientUi();
+          this.selectedId = record.id;
+          const parentPlanetId = this.resolvePlanetIdForNode(record.id);
+          if (parentPlanetId) {
+            this.activePlanetId = parentPlanetId;
+          }
+          this.ensureExpandedChainToNode(record.id, false);
+          this.openEditor();
+        },
+        openRecordFromRow(record) {
+          if (!record) return;
+          if (this.rowMenuSuppressTapId && this.rowMenuSuppressTapId === record.id) {
+            this.rowMenuSuppressTapId = '';
+            return;
+          }
+          this.openRecordFromList(record);
+        },
+        startRowPress(node, kind, event) {
+          this.endRowPress();
+          if (!node || !node.id) return;
+          if (event && event.button && event.button !== 0) return;
+          this.rowPressTargetId = node.id;
+          this.rowPressKind = kind === 'planet' ? 'planet' : 'record';
+          this.rowPressPointerId = Number.isFinite(event?.pointerId) ? event.pointerId : null;
+          this.rowPressStartX = Number.isFinite(event?.clientX) ? event.clientX : 0;
+          this.rowPressStartY = Number.isFinite(event?.clientY) ? event.clientY : 0;
+          this.rowPressTimer = setTimeout(() => {
+            this.rowMenuSuppressTapId = node.id;
+            this.openRowMenu(node, this.rowPressKind || kind);
+          }, 420);
+        },
+        updateRowPress(event) {
+          if (!this.rowPressTimer) return;
+          if (this.rowPressPointerId !== null && Number.isFinite(event?.pointerId) && event.pointerId !== this.rowPressPointerId) {
+            return;
+          }
+          const x = Number.isFinite(event?.clientX) ? event.clientX : this.rowPressStartX;
+          const y = Number.isFinite(event?.clientY) ? event.clientY : this.rowPressStartY;
+          const dx = Math.abs(x - this.rowPressStartX);
+          const dy = Math.abs(y - this.rowPressStartY);
+          if (dx > 10 || dy > 10) {
+            this.endRowPress();
+          }
+        },
+        endRowPress() {
+          if (this.rowPressTimer) {
+            clearTimeout(this.rowPressTimer);
+            this.rowPressTimer = null;
+          }
+          this.rowPressPointerId = null;
+          this.rowPressStartX = 0;
+          this.rowPressStartY = 0;
+          this.rowPressKind = '';
+        },
+        openRowMenu(node, kind) {
+          if (!node || !node.id) return;
+          this.endRowPress();
+          this.selectedId = node.id;
+          this.rowMenu = {
+            open: true,
+            id: node.id,
+            kind: kind === 'planet' ? 'planet' : 'record',
+            title: node.title || '',
+            mode: '',
+            renameDraft: node.title || '',
+          };
+          this.persistState();
+        },
+        closeRowMenu() {
+          this.rowMenu.open = false;
+          this.rowMenu.id = '';
+          this.rowMenu.kind = '';
+          this.rowMenu.title = '';
+          this.rowMenu.mode = '';
+          this.rowMenu.renameDraft = '';
+        },
+        openRecordFromMenu() {
+          const node = this.tree.find((item) => item.id === this.rowMenu.id && item.kind === 'file');
+          if (!node) {
+            this.closeRowMenu();
+            return;
+          }
+          this.closeRowMenu();
+          this.openRecordFromList(node);
+        },
+        rowMenuPlanetNode() {
+          const node = this.getNodeById(this.rowMenu.id);
+          return this.isPlanetNode(node) ? node : null;
+        },
+        planetSiblingNodes(node) {
+          if (!this.isPlanetNode(node)) return [];
+          return this.planetChildNodes(node.parentId || null);
+        },
+        canMovePlanetNode(nodeId, direction) {
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node)) return false;
+          const siblings = this.planetSiblingNodes(node);
+          const currentIndex = siblings.findIndex((item) => item.id === node.id);
+          const nextIndex = currentIndex + direction;
+          return currentIndex >= 0 && nextIndex >= 0 && nextIndex < siblings.length;
+        },
+        movePlanetNode(nodeId, direction) {
+          if (!this.canMovePlanetNode(nodeId, direction)) return false;
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node)) return false;
+          const siblings = this.planetSiblingNodes(node);
+          const orderedIds = siblings.map((item) => item.id);
+          const fromIndex = orderedIds.indexOf(node.id);
+          const toIndex = fromIndex + direction;
+          const movedId = orderedIds.splice(fromIndex, 1)[0];
+          orderedIds.splice(toIndex, 0, movedId);
+          const parentId = node.parentId || null;
+          const siblingRank = new Map(orderedIds.map((id, index) => [id, index]));
+          const movedAt = nowIso();
+          this.tree = this.tree.map((item) => {
+            if (!this.isPlanetNode(item)) return item;
+            if ((item.parentId || null) !== parentId) return item;
+            const rank = siblingRank.get(item.id);
+            if (!Number.isFinite(rank)) return item;
+            return {
+              ...item,
+              order: (rank + 1) * 10,
+              updatedAt: item.id === node.id ? movedAt : item.updatedAt,
+            };
+          });
+          this.markDirty();
+          this.persistState();
+          return true;
+        },
+        canIndentPlanetNode(nodeId) {
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node)) return false;
+          if (!node.parentId) return false;
+          const siblings = this.planetSiblingNodes(node);
+          const index = siblings.findIndex((item) => item.id === node.id);
+          return index > 0;
+        },
+        indentPlanetNode(nodeId) {
+          if (!this.canIndentPlanetNode(nodeId)) return false;
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node)) return false;
+          const siblings = this.planetSiblingNodes(node);
+          const index = siblings.findIndex((item) => item.id === node.id);
+          const newParent = index > 0 ? siblings[index - 1] : null;
+          if (!this.isPlanetNode(newParent)) return false;
+          const idx = this.tree.findIndex((item) => item.id === node.id);
+          if (idx < 0) return false;
+          this.tree[idx] = {
+            ...this.tree[idx],
+            parentId: newParent.id,
+            order: this.nextOrderFor(newParent.id),
+            updatedAt: nowIso(),
+          };
+          this.expanded[newParent.id] = true;
+          this.tree = this.resequenceOrders(this.tree);
+          this.markDirty();
+          this.persistState();
+          return true;
+        },
+        canOutdentPlanetNode(nodeId) {
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node) || !node.parentId) return false;
+          const parent = this.getNodeById(node.parentId);
+          if (!this.isPlanetNode(parent)) return false;
+          return typeof parent.parentId === 'string' && parent.parentId.trim().length > 0;
+        },
+        outdentPlanetNode(nodeId) {
+          if (!this.canOutdentPlanetNode(nodeId)) return false;
+          const node = this.getNodeById(nodeId);
+          if (!this.isPlanetNode(node) || !node.parentId) return false;
+          const parent = this.getNodeById(node.parentId);
+          if (!this.isPlanetNode(parent) || !parent.parentId) return false;
+          const idx = this.tree.findIndex((item) => item.id === node.id);
+          if (idx < 0) return false;
+          this.tree[idx] = {
+            ...this.tree[idx],
+            parentId: parent.parentId,
+            order: this.nextOrderFor(parent.parentId),
+            updatedAt: nowIso(),
+          };
+          this.tree = this.resequenceOrders(this.tree);
+          this.markDirty();
+          this.persistState();
+          return true;
+        },
+        canMovePlanetFromMenu(direction) {
+          return this.canMovePlanetNode(this.rowMenu.id, direction);
+        },
+        canIndentPlanetFromMenu() {
+          return this.canIndentPlanetNode(this.rowMenu.id);
+        },
+        canOutdentPlanetFromMenu() {
+          return this.canOutdentPlanetNode(this.rowMenu.id);
+        },
+        createPlanetChildFromMenu() {
+          const node = this.rowMenuPlanetNode();
+          if (!node) return;
+          this.selectedId = node.id;
+          this.activePlanetId = node.id;
+          this.closeRowMenu();
+          this.createPlanetQuick();
+        },
+        movePlanetFromMenu(direction) {
+          const node = this.rowMenuPlanetNode();
+          if (!node) return;
+          this.selectedId = node.id;
+          this.activePlanetId = node.id;
+          const moved = this.movePlanetNode(node.id, direction);
+          if (moved) this.closeRowMenu();
+        },
+        indentPlanetFromMenu() {
+          const node = this.rowMenuPlanetNode();
+          if (!node) return;
+          this.selectedId = node.id;
+          this.activePlanetId = node.id;
+          const moved = this.indentPlanetNode(node.id);
+          if (moved) this.closeRowMenu();
+        },
+        outdentPlanetFromMenu() {
+          const node = this.rowMenuPlanetNode();
+          if (!node) return;
+          this.selectedId = node.id;
+          this.activePlanetId = node.id;
+          const moved = this.outdentPlanetNode(node.id);
+          if (moved) this.closeRowMenu();
+        },
+        renameFromMenu() {
+          if (!this.rowMenu.id) return;
+          this.selectedId = this.rowMenu.id;
+          const node = this.getNodeById(this.rowMenu.id);
+          if (!node || node.deletedAt) {
+            this.closeRowMenu();
+            return;
+          }
+          this.rowMenu.title = node.title || '';
+          this.rowMenu.renameDraft = node.title || '';
+          this.rowMenu.mode = 'rename';
+          this.$nextTick(() => {
+            const input = this.$refs.rowMenuRenameInput;
+            if (!input) return;
+            input.focus();
+            if (typeof input.select === 'function') input.select();
+          });
+        },
+        deleteFromMenu() {
+          if (!this.rowMenu.id) return;
+          this.selectedId = this.rowMenu.id;
+          const node = this.getNodeById(this.rowMenu.id);
+          if (!node || node.deletedAt || node.parentId === null) {
+            this.closeRowMenu();
+            return;
+          }
+          this.rowMenu.title = node.title || '';
+          this.rowMenu.mode = 'delete';
+          this.$nextTick(() => {
+            const button = this.$refs.rowMenuDeleteConfirm;
+            if (button && typeof button.focus === 'function') button.focus();
+          });
+        },
+        cancelRowMenuMode() {
+          if (!this.rowMenu.open) return;
+          const node = this.getNodeById(this.rowMenu.id);
+          this.rowMenu.mode = '';
+          this.rowMenu.renameDraft = node && !node.deletedAt ? (node.title || '') : '';
+        },
+        submitRenameFromMenu() {
+          if (!this.rowMenu.id) return;
+          const title = (this.rowMenu.renameDraft || '').trim();
+          if (!title) return;
+          const idx = this.tree.findIndex((item) => item.id === this.rowMenu.id && !item.deletedAt);
+          if (idx < 0) {
+            this.closeRowMenu();
+            return;
+          }
+          const now = nowIso();
+          this.tree[idx] = { ...this.tree[idx], title, updatedAt: now };
+          this.rowMenu.title = title;
+          if (this.editor.id === this.rowMenu.id) {
+            this.editor.title = title;
+          }
+          this.markDirty();
+          this.persistState();
+          this.closeRowMenu();
+        },
+        confirmDeleteFromMenu() {
+          if (!this.rowMenu.id) return;
+          const start = this.getNodeById(this.rowMenu.id);
+          if (!start || start.deletedAt || start.parentId === null) {
+            this.closeRowMenu();
+            return;
+          }
+          const toRemove = new Set([start.id]);
+          const deletedAt = nowIso();
+          let changed = true;
+          while (changed) {
+            changed = false;
+            this.tree.forEach((item) => {
+              if (item.parentId && toRemove.has(item.parentId) && !toRemove.has(item.id)) {
+                toRemove.add(item.id);
+                changed = true;
+              }
+            });
+          }
+          this.tree = this.tree.map((item) => (
+            toRemove.has(item.id)
+              ? { ...item, deletedAt, updatedAt: deletedAt }
+              : item
+          ));
+          Object.keys(this.expanded).forEach((key) => {
+            if (toRemove.has(key)) delete this.expanded[key];
+          });
+          if (toRemove.has(this.editor.id)) {
+            this.editor.id = '';
+            this.editor.title = '';
+            this.editor.body = '';
+            this.editor.permission = 'private';
+            this.view = 'records';
+          }
+          const activeTree = this.tree.filter((item) => !item.deletedAt);
+          const fallback = activeTree.find((item) => item.parentId === null)?.id || '';
+          const currentSelected = this.tree.find((item) => item.id === this.selectedId);
+          this.selectedId = currentSelected && !currentSelected.deletedAt ? this.selectedId : fallback;
+          this.markDirty();
+          this.persistState();
+          this.closeRowMenu();
         },
         childrenOf(parentId) {
           return this.tree
@@ -1594,274 +2286,6 @@
         selectedNode() {
           return this.tree.find((item) => item.id === this.selectedId && !item.deletedAt) || null;
         },
-        pathNodesForParentSelect() {
-          if (this.modal.mode !== 'move') {
-            return this.tree.filter((item) => item.kind === 'path' && !item.deletedAt);
-          }
-          const selectedId = this.selectedId;
-          return this.tree.filter((item) => {
-            if (item.kind !== 'path') return false;
-            if (item.deletedAt) return false;
-            if (item.id === selectedId) return false;
-            if (this.isDescendantOf(item.id, selectedId)) return false;
-            return true;
-          });
-        },
-        formatPathOption(node) {
-          if (!node) return '';
-          let depth = 0;
-          let cursor = node;
-          const seen = new Set();
-          while (cursor && cursor.parentId && !seen.has(cursor.id)) {
-            seen.add(cursor.id);
-            depth += 1;
-            cursor = this.tree.find((item) => item.id === cursor.parentId);
-          }
-          return `${'. '.repeat(Math.max(0, depth + 1))}${node.title}`;
-        },
-        modalTitle() {
-          if (this.modal.mode === 'rename') return 'Rename Node';
-          if (this.modal.mode === 'move') return 'Move Node';
-          if (this.modal.mode === 'actions') return 'Node Actions';
-          return 'Edit Node';
-        },
-        modalPrimaryLabel() {
-          if (this.modal.mode === 'rename') return 'Rename';
-          if (this.modal.mode === 'move') return 'Move';
-          return 'Save';
-        },
-        defaultParentForCreate() {
-          const selected = this.selectedNode();
-          if (!selected) return this.tree.find((item) => item.parentId === null)?.id || 'root';
-          if (selected.kind === 'path') return selected.id;
-          return selected.parentId || this.tree.find((item) => item.parentId === null)?.id || 'root';
-        },
-        canRenameSelected() {
-          return !!this.selectedNode();
-        },
-        canDeleteSelected() {
-          const selected = this.selectedNode();
-          return !!selected && selected.parentId !== null;
-        },
-        canMoveSelectedNode() {
-          const selected = this.selectedNode();
-          return !!selected && selected.parentId !== null;
-        },
-        isDescendantOf(id, ancestorId) {
-          if (!id || !ancestorId) return false;
-          let cursor = this.tree.find((item) => item.id === id);
-          const seen = new Set();
-          while (cursor && cursor.parentId && !seen.has(cursor.id)) {
-            if (cursor.parentId === ancestorId) return true;
-            seen.add(cursor.id);
-            cursor = this.tree.find((item) => item.id === cursor.parentId);
-          }
-          return false;
-        },
-        armModalBackdrop() {
-          this.modalBusy = false;
-          this.modalBackdropArmed = false;
-          if (this.modalArmTimer) {
-            clearTimeout(this.modalArmTimer);
-            this.modalArmTimer = null;
-          }
-          this.modalArmTimer = setTimeout(() => {
-            this.modalBackdropArmed = true;
-            this.modalArmTimer = null;
-          }, 240);
-        },
-        openCreateModal(kind) {
-          this.openInlineCreate(kind);
-        },
-        openInlineCreate(kind) {
-          this.forceCloseModal();
-          this.inlinePopoverOpenedAt = Date.now();
-          this.inlinePopover.open = true;
-          this.inlinePopover.mode = 'create';
-          this.inlinePopover.kind = kind === 'file' ? 'file' : 'path';
-          this.inlinePopover.title = '';
-          this.inlinePopover.parentId = this.defaultParentForCreate();
-          this.inlinePopover.permission = 'private';
-          this.inlinePopover.busy = false;
-          this.$nextTick(() => {
-            const input = document.querySelector('input[aria-label="Node title"]');
-            if (input) input.focus();
-          });
-        },
-        openInlineDelete() {
-          if (!this.canDeleteSelected()) return;
-          this.forceCloseModal();
-          this.inlinePopoverOpenedAt = Date.now();
-          this.inlinePopover.open = true;
-          this.inlinePopover.mode = 'delete';
-          this.inlinePopover.kind = this.selectedNode()?.kind || 'path';
-          this.inlinePopover.title = this.selectedNode()?.title || '';
-          this.inlinePopover.parentId = '';
-          this.inlinePopover.permission = this.selectedNode()?.permission || 'private';
-          this.inlinePopover.busy = false;
-        },
-        closeInlinePopover() {
-          this.inlinePopover.open = false;
-          this.inlinePopover.mode = '';
-          this.inlinePopover.title = '';
-          this.inlinePopover.parentId = this.defaultParentForCreate();
-          this.inlinePopover.busy = false;
-        },
-        closeInlinePopoverFromSelection() {
-          if (!this.inlinePopover.open) return;
-          if (Date.now() - this.inlinePopoverOpenedAt < 220) return;
-          this.closeInlinePopover();
-        },
-        submitInlinePopover() {
-          if (!this.inlinePopover.open || this.inlinePopover.busy) return;
-          this.inlinePopover.busy = true;
-          try {
-            if (this.inlinePopover.mode === 'create') {
-              const title = (this.inlinePopover.title || '').trim();
-              if (!title) return;
-              const rawParentId = this.inlinePopover.parentId || this.defaultParentForCreate();
-              const parent = this.tree.find((item) => item.id === rawParentId && item.kind === 'path');
-              const parentId = parent ? parent.id : this.defaultParentForCreate();
-              const ts = nowIso();
-              const node = {
-                id: this.newId(this.inlinePopover.kind === 'file' ? 'md' : 'path'),
-                parentId,
-                title,
-                kind: this.inlinePopover.kind,
-                permission: this.inlinePopover.permission || 'private',
-                body: this.inlinePopover.kind === 'file' ? '' : '',
-                order: this.nextOrderFor(parentId),
-                createdAt: ts,
-                updatedAt: ts,
-              };
-              this.tree = [...this.tree, node];
-              this.expanded[parentId] = true;
-              this.selectedId = node.id;
-              this.markDirty();
-              this.persistState();
-              this.closeInlinePopover();
-              return;
-            }
-            if (this.inlinePopover.mode === 'delete') {
-              if (!this.canDeleteSelected()) return;
-              const startId = this.selectedId;
-              const toRemove = new Set([startId]);
-              const deletedAt = nowIso();
-              let changed = true;
-              while (changed) {
-                changed = false;
-                this.tree.forEach((item) => {
-                  if (item.parentId && toRemove.has(item.parentId) && !toRemove.has(item.id)) {
-                    toRemove.add(item.id);
-                    changed = true;
-                  }
-                });
-              }
-              this.tree = this.tree.map((item) => {
-                if (!toRemove.has(item.id)) return item;
-                return {
-                  ...item,
-                  deletedAt,
-                  updatedAt: deletedAt,
-                };
-              });
-              Object.keys(this.expanded).forEach((key) => {
-                if (toRemove.has(key)) delete this.expanded[key];
-              });
-              if (toRemove.has(this.editor.id)) {
-                this.editor.id = '';
-                this.editor.title = '';
-                this.editor.body = '';
-                this.editor.permission = 'private';
-                this.view = 'list';
-              }
-              const activeTree = this.tree.filter((item) => !item.deletedAt);
-              const fallback = activeTree.find((item) => item.parentId === null)?.id || '';
-              const currentSelected = this.tree.find((item) => item.id === this.selectedId);
-              this.selectedId = currentSelected && !currentSelected.deletedAt ? this.selectedId : fallback;
-              this.markDirty();
-              this.persistState();
-              this.closeInlinePopover();
-            }
-          } finally {
-            this.inlinePopover.busy = false;
-          }
-        },
-        openDeleteModal() {
-          this.openInlineDelete();
-        },
-        openRenameModal() {
-          this.closeInlinePopover();
-          const selected = this.selectedNode();
-          if (!selected) return;
-          this.modal.open = true;
-          this.modalOpenedAt = Date.now();
-          this.armModalBackdrop();
-          this.modal.mode = 'rename';
-          this.modal.kind = selected.kind;
-          this.modal.title = selected.title || '';
-          this.modal.parentId = selected.parentId || '';
-          this.modal.permission = selected.permission || 'private';
-        },
-        openMoveModal() {
-          this.closeInlinePopover();
-          const selected = this.selectedNode();
-          if (!selected || !this.canMoveSelectedNode()) return;
-          this.modal.open = true;
-          this.modalOpenedAt = Date.now();
-          this.armModalBackdrop();
-          this.modal.mode = 'move';
-          this.modal.kind = selected.kind;
-          this.modal.title = selected.title || '';
-          this.modal.parentId = selected.parentId || this.defaultParentForCreate();
-          this.modal.permission = selected.permission || 'private';
-        },
-        openActionsModal() {
-          this.closeInlinePopover();
-          if (!this.selectedNode()) return;
-          this.modal.open = true;
-          this.modalOpenedAt = Date.now();
-          this.armModalBackdrop();
-          this.modal.mode = 'actions';
-          this.modal.kind = this.selectedNode()?.kind || 'path';
-          this.modal.title = this.selectedNode()?.title || '';
-        },
-        chooseAction(action) {
-          this.closeModal();
-          if (action === 'rename') {
-            this.openRenameModal();
-            return;
-          }
-          if (action === 'move') {
-            this.openMoveModal();
-            return;
-          }
-          if (action === 'delete') {
-            this.$nextTick(() => {
-              this.openDeleteModal();
-            });
-          }
-        },
-        closeModalByBackdrop() {
-          if (!this.modal.open) return;
-          if (this.modalBusy) return;
-          if (!this.modalBackdropArmed) return;
-          if (Date.now() - this.modalOpenedAt < 220) return;
-          this.closeModal();
-        },
-        closeModal() {
-          if (this.modalBusy) return;
-          this.forceCloseModal();
-        },
-        forceCloseModal() {
-          if (this.modalArmTimer) {
-            clearTimeout(this.modalArmTimer);
-            this.modalArmTimer = null;
-          }
-          this.modalBusy = false;
-          this.modalBackdropArmed = false;
-          this.modal.open = false;
-        },
         nextOrderFor(parentId) {
           const siblings = this.childrenOf(parentId);
           if (!siblings.length) return 10;
@@ -1871,126 +2295,6 @@
           const base = `${prefix}-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
           if (!this.tree.some((item) => item.id === base)) return base;
           return `${base}-${Math.random().toString(36).slice(2, 5)}`;
-        },
-        submitModal() {
-          if (this.modalBusy) return;
-          this.modalBusy = true;
-          try {
-          if (this.modal.mode === 'rename') {
-            const title = (this.modal.title || '').trim();
-            if (!title) return;
-            const idx = this.tree.findIndex((item) => item.id === this.selectedId);
-            if (idx < 0) return;
-            this.tree[idx] = { ...this.tree[idx], title, updatedAt: nowIso() };
-            if (this.editor.id === this.selectedId) {
-              this.editor.title = title;
-            }
-            this.markDirty();
-            this.persistState();
-            this.forceCloseModal();
-            return;
-          }
-          if (this.modal.mode === 'move') {
-            const selected = this.selectedNode();
-            if (!selected) return;
-            const nextParentId = this.modal.parentId || selected.parentId;
-            const nextParent = this.tree.find((item) => item.id === nextParentId && item.kind === 'path');
-            if (!nextParent) return;
-            if (nextParent.id === selected.id) return;
-            if (this.isDescendantOf(nextParent.id, selected.id)) return;
-            const idx = this.tree.findIndex((item) => item.id === selected.id);
-            if (idx < 0) return;
-            this.tree[idx] = {
-              ...this.tree[idx],
-              parentId: nextParent.id,
-              order: this.nextOrderFor(nextParent.id),
-              updatedAt: nowIso(),
-            };
-            this.expanded[nextParent.id] = true;
-            this.tree = this.resequenceOrders(this.tree);
-            this.markDirty();
-            this.persistState();
-            this.forceCloseModal();
-            return;
-          }
-          } finally {
-            this.modalBusy = false;
-          }
-        },
-        selectedPermission() {
-          return this.selectedNode()?.permission || 'private';
-        },
-        selectedNodeKindLabel() {
-          const selected = this.selectedNode();
-          if (!selected) return 'none';
-          return selected.kind === 'file' ? '📝 note' : '📁 path';
-        },
-        toggleReorder() {
-          this.reorderMode = !this.reorderMode;
-          if (this.reorderMode) {
-            this.closeInlinePopover();
-          }
-          this.persistState();
-        },
-        setSelectedPermission(mode) {
-          const idx = this.tree.findIndex((item) => item.id === this.selectedId);
-          if (idx < 0) return;
-          this.tree[idx] = { ...this.tree[idx], permission: mode, updatedAt: nowIso() };
-          if (this.editor.id === this.selectedId) {
-            this.editor.permission = mode;
-          }
-          this.markDirty();
-          this.persistState();
-        },
-        tapNode(node) {
-          this.closeInlinePopoverFromSelection();
-          this.selectedId = node.id;
-          if (this.reorderMode) {
-            return;
-          }
-          if (node.kind === 'path') {
-            this.expanded[node.id] = !this.expanded[node.id];
-            this.persistState();
-            return;
-          }
-          // Keep file tap as selection-first; opening editor is an explicit action via dock.
-        },
-        siblingIds(parentId) {
-          return this.childrenOf(parentId).map((item) => item.id);
-        },
-        canMoveSelected(direction) {
-          const selected = this.tree.find((item) => item.id === this.selectedId);
-          if (!selected) return false;
-          const siblings = this.siblingIds(selected.parentId);
-          const currentIndex = siblings.indexOf(selected.id);
-          const targetIndex = currentIndex + direction;
-          return targetIndex >= 0 && targetIndex < siblings.length;
-        },
-        moveSelected(direction) {
-          if (!this.canMoveSelected(direction)) return;
-          const selected = this.tree.find((item) => item.id === this.selectedId);
-          if (!selected) return;
-          const siblings = this.childrenOf(selected.parentId);
-          const siblingIds = siblings.map((item) => item.id);
-          const fromLocal = siblingIds.indexOf(selected.id);
-          const toLocal = fromLocal + direction;
-          if (fromLocal < 0 || toLocal < 0 || toLocal >= siblings.length) return;
-          const movedId = siblingIds.splice(fromLocal, 1)[0];
-          siblingIds.splice(toLocal, 0, movedId);
-
-          const siblingRank = new Map(siblingIds.map((id, index) => [id, index]));
-          this.tree = this.tree.map((item) => {
-            if (item.parentId !== selected.parentId) return item;
-            const newRank = siblingRank.get(item.id);
-            if (!Number.isFinite(newRank)) return item;
-            return {
-              ...item,
-              order: (newRank + 1) * 10,
-              updatedAt: item.id === selected.id ? nowIso() : item.updatedAt,
-            };
-          });
-          this.markDirty();
-          this.persistState();
         },
         currentFilePathLabel() {
           const node = this.tree.find((item) => item.id === this.editor.id);

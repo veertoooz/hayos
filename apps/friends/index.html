@@ -147,7 +147,7 @@
     <main class="relative h-full overflow-hidden">
       <section
         class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
-        :class="view === 'list' ? 'translate-x-0 pointer-events-auto' : '-translate-x-1/4 pointer-events-none'"
+        :class="'translate-x-0 pointer-events-auto'"
       >
         <div class="flex min-h-full flex-col gap-3">
           <header class="px-1 pt-1">
@@ -186,32 +186,24 @@
                   <button
                     type="button"
                     class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
-                    :class="activeFilter === 'all' ? 'btn-neutral' : 'btn-ghost'"
-                    @click="activeFilter = 'all'"
-                    x-text="t('filterAll')"
+                    :class="activeTab === 'find' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeTab = 'find'"
+                    x-text="t('tabFind')"
                   ></button>
                   <button
                     type="button"
                     class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
-                    :class="activeFilter === 'requests' ? 'btn-neutral' : 'btn-ghost'"
-                    @click="activeFilter = 'requests'"
-                    x-text="t('filterRequests')"
+                    :class="activeTab === 'requests' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeTab = 'requests'"
+                    x-text="t('tabRequests')"
                   ></button>
                   <button
                     type="button"
                     class="btn btn-sm join-item friends-focus friends-tap whitespace-nowrap"
-                    :class="activeFilter === 'online' ? 'btn-neutral' : 'btn-ghost'"
-                    @click="activeFilter = 'online'"
-                    x-text="t('filterOnline')"
+                    :class="activeTab === 'friends' ? 'btn-neutral' : 'btn-ghost'"
+                    @click="activeTab = 'friends'"
+                    x-text="t('tabFriends')"
                   ></button>
-                </div>
-              </div>
-
-              <div class="friends-actions-scroll -mx-1 px-1">
-                <div class="flex min-w-max items-center gap-2">
-                  <button type="button" class="btn btn-primary btn-sm friends-focus friends-tap whitespace-nowrap" :disabled="actionBusy" @click="promptAddFriend()" x-text="t('addFriend')"></button>
-                  <button type="button" class="btn btn-outline btn-sm friends-focus friends-tap whitespace-nowrap" @click="activeFilter = 'requests'" x-text="t('invites')"></button>
-                  <button type="button" class="btn btn-ghost btn-sm friends-focus friends-tap whitespace-nowrap" x-text="t('sharePortal')"></button>
                 </div>
               </div>
             </div>
@@ -220,21 +212,16 @@
           <section class="card bg-base-200 shadow-sm">
             <div class="card-body p-3 pb-2">
               <div class="flex items-center justify-between gap-2">
-                <h2 class="text-sm font-medium opacity-80" x-text="isSearchQueryActive() ? t('searchResultsTitle') : t('recentFriends')"></h2>
-                <span class="badge badge-outline badge-sm" x-text="`${filteredItems.length}`"></span>
+                <h2 class="text-sm font-medium opacity-80" x-text="listSectionTitle()"></h2>
+                <span class="badge badge-outline badge-sm" x-text="`${activeTabCount()}`"></span>
               </div>
             </div>
             <div class="friends-list-scroll max-h-[46vh] px-3 pb-3">
-              <div class="space-y-2">
+              <div class="space-y-2" x-show="activeTab !== 'requests'">
                 <template x-for="item in filteredItems" :key="item.listKey">
                   <div class="card w-full border border-base-300 bg-base-100 text-left shadow-sm">
                     <div class="card-body gap-2 p-3">
-                      <button
-                        type="button"
-                        class="w-full text-left"
-                        :class="item.kind === 'friend' ? 'friends-focus friends-tap' : ''"
-                        @click="item.kind === 'friend' ? openEditor(item.id) : null"
-                      >
+                      <div class="w-full text-left">
                         <div class="flex min-w-0 items-center justify-between gap-3">
                           <div class="min-w-0 flex items-center gap-2.5">
                             <div class="avatar">
@@ -265,7 +252,7 @@
                           <p class="friends-break min-w-0" x-text="item.kind === 'search' ? searchSecondaryHint(item.peerUid) : item.planet"></p>
                           <span class="whitespace-nowrap" x-text="item.lastSeen"></span>
                         </div>
-                      </button>
+                      </div>
 
                       <div class="friends-actions-scroll -mx-1 px-1" x-show="item.kind === 'request'">
                         <div class="flex min-w-max items-center gap-2">
@@ -321,83 +308,111 @@
                   </div>
                 </template>
               </div>
-              <div class="py-6 text-center text-sm opacity-70" x-show="filteredItems.length === 0" x-text="isSearchQueryActive() ? t('emptySearch') : t('emptyFiltered')"></div>
+              <div class="space-y-4" x-show="activeTab === 'requests'">
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-semibold uppercase opacity-70" x-text="t('incomingRequests')"></h3>
+                    <span class="badge badge-outline badge-xs" x-text="`${incomingRequestItems.length}`"></span>
+                  </div>
+                  <template x-for="item in incomingRequestItems" :key="item.listKey">
+                    <div class="card w-full border border-base-300 bg-base-100 text-left shadow-sm">
+                      <div class="card-body gap-2 p-3">
+                        <div class="flex min-w-0 items-center justify-between gap-3">
+                          <div class="min-w-0 flex items-center gap-2.5">
+                            <div class="avatar">
+                              <div class="size-9 rounded-xl bg-base-200 ring-1 ring-base-300/60 overflow-hidden">
+                                <img
+                                  x-show="item.photoUrl"
+                                  :src="item.photoUrl"
+                                  :alt="item.name"
+                                  class="h-full w-full object-cover" />
+                                <span
+                                  x-show="!item.photoUrl"
+                                  class="flex h-full w-full items-center justify-center text-[11px] font-semibold"
+                                  x-text="toInitials(item.name)"></span>
+                              </div>
+                            </div>
+                            <div class="min-w-0">
+                              <h3 class="friends-break text-sm font-semibold" x-text="item.name"></h3>
+                              <p class="friends-break text-xs opacity-70" x-text="item.handle"></p>
+                            </div>
+                          </div>
+                          <span class="badge badge-warning badge-sm" x-text="t('statusRequestIn')"></span>
+                        </div>
+                        <div class="friends-actions-scroll -mx-1 px-1">
+                          <div class="flex min-w-max items-center gap-2">
+                            <button
+                              type="button"
+                              class="btn btn-xs btn-primary friends-focus friends-tap whitespace-nowrap"
+                              :disabled="isBusyPeer(item.peerUid)"
+                              @click="acceptRequest(item.peerUid)"
+                              x-text="t('accept')"
+                            ></button>
+                            <button
+                              type="button"
+                              class="btn btn-xs btn-ghost friends-focus friends-tap whitespace-nowrap"
+                              :disabled="isBusyPeer(item.peerUid)"
+                              @click="rejectRequest(item.peerUid)"
+                              x-text="t('reject')"
+                            ></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <p class="py-2 text-center text-sm opacity-70" x-show="incomingRequestItems.length === 0" x-text="t('emptyIncomingRequests')"></p>
+                </section>
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-semibold uppercase opacity-70" x-text="t('outgoingRequests')"></h3>
+                    <span class="badge badge-outline badge-xs" x-text="`${outgoingRequestItems.length}`"></span>
+                  </div>
+                  <template x-for="item in outgoingRequestItems" :key="item.listKey">
+                    <div class="card w-full border border-base-300 bg-base-100 text-left shadow-sm">
+                      <div class="card-body gap-2 p-3">
+                        <div class="flex min-w-0 items-center justify-between gap-3">
+                          <div class="min-w-0 flex items-center gap-2.5">
+                            <div class="avatar">
+                              <div class="size-9 rounded-xl bg-base-200 ring-1 ring-base-300/60 overflow-hidden">
+                                <img
+                                  x-show="item.photoUrl"
+                                  :src="item.photoUrl"
+                                  :alt="item.name"
+                                  class="h-full w-full object-cover" />
+                                <span
+                                  x-show="!item.photoUrl"
+                                  class="flex h-full w-full items-center justify-center text-[11px] font-semibold"
+                                  x-text="toInitials(item.name)"></span>
+                              </div>
+                            </div>
+                            <div class="min-w-0">
+                              <h3 class="friends-break text-sm font-semibold" x-text="item.name"></h3>
+                              <p class="friends-break text-xs opacity-70" x-text="item.handle"></p>
+                            </div>
+                          </div>
+                          <span class="badge badge-info badge-sm" x-text="t('statusRequestOut')"></span>
+                        </div>
+                        <div class="friends-actions-scroll -mx-1 px-1">
+                          <div class="flex min-w-max items-center gap-2">
+                            <button
+                              type="button"
+                              class="btn btn-xs btn-outline friends-focus friends-tap whitespace-nowrap"
+                              :disabled="isBusyPeer(item.peerUid)"
+                              @click="cancelRequest(item.peerUid)"
+                              x-text="t('cancel')"
+                            ></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <p class="py-2 text-center text-sm opacity-70" x-show="outgoingRequestItems.length === 0" x-text="t('emptyOutgoingRequests')"></p>
+                </section>
+              </div>
+              <div class="py-6 text-center text-sm opacity-70" x-show="activeTab !== 'requests' && filteredItems.length === 0" x-text="activeTab === 'find' ? (isSearchQueryActive() ? t('emptySearch') : t('findPrompt')) : t('emptyFiltered')"></div>
             </div>
           </section>
           <div class="flex-1"></div>
-        </div>
-      </section>
-
-      <section
-        class="friends-scroll friends-content absolute inset-0 transition-transform duration-300 ease-out"
-        :class="view === 'editor' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'"
-      >
-        <div class="flex min-h-full flex-col gap-3">
-          <header class="sticky top-0 z-10 -mx-3 px-3 py-1 backdrop-blur">
-            <div class="flex items-center justify-between gap-2 rounded-box bg-base-200/90 px-2 py-2">
-              <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="backToList()" x-text="t('back')"></button>
-              <h2 class="min-w-0 truncate text-sm font-semibold" x-text="selectedFriend ? selectedFriend.name : t('friendDetails')"></h2>
-              <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
-            </div>
-          </header>
-
-          <section class="card bg-base-200 shadow-sm">
-            <div class="card-body p-4">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <h3 class="friends-break text-base font-semibold" x-text="selectedFriend ? selectedFriend.name : '-'"></h3>
-                  <p class="friends-break text-sm opacity-70" x-text="selectedFriend ? selectedFriend.handle : ''"></p>
-                </div>
-                <span
-                  class="badge badge-sm whitespace-nowrap"
-                  :class="draft.status === 'online' ? 'badge-success' : 'badge-ghost'"
-                  x-text="draft.status === 'online' ? t('statusOnline') : t('statusOffline')"
-                ></span>
-              </div>
-            </div>
-          </section>
-
-          <section class="card bg-base-200 shadow-sm">
-            <div class="card-body gap-3 p-4">
-              <label class="form-control w-full">
-                <div class="label py-1">
-                  <span class="label-text text-xs opacity-80" x-text="t('labelNickname')"></span>
-                </div>
-                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.nickname" />
-              </label>
-
-              <label class="form-control w-full">
-                <div class="label py-1">
-                  <span class="label-text text-xs opacity-80" x-text="t('labelPlanet')"></span>
-                </div>
-                <input type="text" class="input input-bordered input-sm friends-focus w-full" x-model.trim="draft.planet" />
-              </label>
-
-              <label class="form-control w-full">
-                <div class="label py-1">
-                  <span class="label-text text-xs opacity-80" x-text="t('labelStatus')"></span>
-                </div>
-                <select class="select select-bordered select-sm friends-focus" x-model="draft.status">
-                  <option value="online" x-text="t('statusOnline')"></option>
-                  <option value="offline" x-text="t('statusOffline')"></option>
-                </select>
-              </label>
-
-              <label class="form-control w-full">
-                <div class="label py-1">
-                  <span class="label-text text-xs opacity-80" x-text="t('labelNote')"></span>
-                </div>
-                <textarea class="textarea textarea-bordered friends-focus h-24" maxlength="280" x-model.trim="draft.note"></textarea>
-              </label>
-
-              <div class="flex items-center justify-end gap-2 pt-1">
-                <button type="button" class="btn btn-sm btn-error btn-outline friends-focus friends-tap" :disabled="actionBusy || !selectedFriend" @click="removeSelectedFriend()" x-text="t('removeFriend')"></button>
-                <button type="button" class="btn btn-sm btn-warning btn-outline friends-focus friends-tap" :disabled="actionBusy || !selectedFriend" @click="blockSelectedFriend()" x-text="t('blockUser')"></button>
-                <button type="button" class="btn btn-sm btn-ghost friends-focus friends-tap" @click="resetDraft()" x-text="t('reset')"></button>
-                <button type="button" class="btn btn-sm btn-primary friends-focus friends-tap" @click="saveDraft()" x-text="t('save')"></button>
-              </div>
-            </div>
-          </section>
         </div>
       </section>
     </main>
@@ -414,15 +429,6 @@
         busyPeers: {},
         error: '',
         notice: { type: '', text: '' },
-        view: 'list',
-        selectedFriendId: null,
-        selectedFriend: null,
-        draft: {
-          nickname: '',
-          planet: '',
-          status: 'offline',
-          note: '',
-        },
         query: '',
         searchResults: [],
         searchLoading: false,
@@ -430,7 +436,7 @@
         searchRemoteDisabled: false,
         searchRequestToken: 0,
         searchTimerId: null,
-        activeFilter: 'all',
+        activeTab: 'find',
         friends: [],
         requests: [],
         blocks: [],
@@ -458,16 +464,21 @@
             searchPlaceholder: 'Search friends',
             searchingUsers: 'Searching users...',
             searchFallbackLocal: 'Search access is limited. Showing local results only.',
-            filterAll: 'All',
-            filterRequests: 'Requests',
-            filterOnline: 'Online',
+            tabFind: 'Find',
+            tabRequests: 'Requests',
+            tabFriends: 'Friends',
             addFriend: 'Add Friend',
-            invites: 'Invites',
-            sharePortal: 'Share Portal',
+            incomingRequests: 'Incoming',
+            outgoingRequests: 'Outgoing',
             recentFriends: 'Recent',
             searchResultsTitle: 'Search Results',
+            requestsTitle: 'Friend Requests',
+            friendsTitle: 'Friends',
             emptyFiltered: 'No friends found for the current filter.',
+            emptyIncomingRequests: 'No incoming friend requests.',
+            emptyOutgoingRequests: 'No outgoing friend requests.',
             emptySearch: 'No users found for this search.',
+            findPrompt: 'Type at least 2 characters to search users.',
             searchResultHint: 'User search result',
             statusOnline: 'Online',
             statusOffline: 'Offline',
@@ -475,24 +486,14 @@
             statusRequestOut: 'Pending',
             back: 'Back',
             save: 'Save',
-            friendDetails: 'Friend',
-            labelNickname: 'Nickname',
-            labelPlanet: 'Planet',
-            labelStatus: 'Presence',
-            labelNote: 'Private note',
-            reset: 'Reset',
             accept: 'Accept',
             reject: 'Reject',
             cancel: 'Cancel',
-            removeFriend: 'Remove Friend',
-            blockUser: 'Block',
             loadError: 'Could not load friends data.',
             reqSent: 'Friend request sent.',
             reqAccepted: 'Friend request accepted.',
             reqRejected: 'Friend request rejected.',
             reqCanceled: 'Friend request canceled.',
-            friendRemoved: 'Friend removed.',
-            userBlocked: 'User blocked.',
             friendsState: 'Friends',
             blockedState: 'Blocked',
             errBlocked: 'Action blocked by relationship policy.',
@@ -509,16 +510,21 @@
             searchPlaceholder: 'Փնտրիր ընկերներ',
             searchingUsers: 'Օգտատերերը որոնվում են...',
             searchFallbackLocal: 'Որոնման հասանելիությունը սահմանափակ է։ Ցուցադրվում են միայն տեղային արդյունքները։',
-            filterAll: 'Բոլորը',
-            filterRequests: 'Հարցումներ',
-            filterOnline: 'Առցանց',
+            tabFind: 'Փնտրել',
+            tabRequests: 'Հարցումներ',
+            tabFriends: 'Ընկերներ',
             addFriend: 'Ավելացնել',
-            invites: 'Հրավերներ',
-            sharePortal: 'Կիսվել պորտալով',
+            incomingRequests: 'Մուտքային',
+            outgoingRequests: 'Ելքային',
             recentFriends: 'Վերջինները',
             searchResultsTitle: 'Որոնման արդյունքներ',
+            requestsTitle: 'Ընկերության հարցումներ',
+            friendsTitle: 'Ընկերներ',
             emptyFiltered: 'Այս զտիչով ընկերներ չկան։',
+            emptyIncomingRequests: 'Մուտքային ընկերության հարցումներ չկան։',
+            emptyOutgoingRequests: 'Ելքային ընկերության հարցումներ չկան։',
             emptySearch: 'Այս որոնմամբ օգտատեր չգտնվեց։',
+            findPrompt: 'Օգտատեր որոնելու համար գրիր առնվազն 2 նիշ։',
             searchResultHint: 'Օգտատիրոջ որոնման արդյունք',
             statusOnline: 'Առցանց',
             statusOffline: 'Անցանց',
@@ -526,24 +532,14 @@
             statusRequestOut: 'Սպասման մեջ',
             back: 'Հետ',
             save: 'Պահել',
-            friendDetails: 'Ընկեր',
-            labelNickname: 'Մականուն',
-            labelPlanet: 'Մոլորակ',
-            labelStatus: 'Կարգավիճակ',
-            labelNote: 'Մասնավոր նշում',
-            reset: 'Զրոյացնել',
             accept: 'Ընդունել',
             reject: 'Մերժել',
             cancel: 'Չեղարկել',
-            removeFriend: 'Հեռացնել ընկերից',
-            blockUser: 'Բլոքել',
             loadError: 'Չհաջողվեց բեռնել ընկերների տվյալները։',
             reqSent: 'Ընկերության հարցումը ուղարկված է։',
             reqAccepted: 'Ընկերության հարցումը ընդունված է։',
             reqRejected: 'Ընկերության հարցումը մերժված է։',
             reqCanceled: 'Ընկերության հարցումը չեղարկված է։',
-            friendRemoved: 'Ընկերը հեռացվեց։',
-            userBlocked: 'Օգտատերը բլոքվեց։',
             friendsState: 'Ընկերներ',
             blockedState: 'Բլոքված',
             errBlocked: 'Գործողությունը արգելված է block կապի պատճառով։',
@@ -555,7 +551,8 @@
           },
         },
         get filteredItems() {
-          if (this.isSearchQueryActive() && !this.searchRemoteDisabled) {
+          if (this.activeTab === 'find') {
+            if (!this.isSearchQueryActive() || this.searchRemoteDisabled) return [];
             return this.searchResults.map((row) => {
               const identity = this.resolveIdentity(row.uid, row || {});
               return {
@@ -570,19 +567,44 @@
                 planet: identity.planet,
                 lastSeen: '',
                 badgeClass: 'badge-ghost',
-                badgeText: this.t('addFriend'),
+                badgeText: this.t('searchResultHint'),
               };
             });
           }
+          if (this.activeTab === 'friends') {
+            return this.filterItemsByQuery(this.friends);
+          }
+          return [];
+        },
+        get incomingRequestItems() {
+          return this.filterItemsByQuery(this.requests.filter((item) => item.direction === 'inbound'));
+        },
+        get outgoingRequestItems() {
+          return this.filterItemsByQuery(this.requests.filter((item) => item.direction === 'outbound'));
+        },
+        filterItemsByQuery(items) {
           const q = (this.query || '').trim().toLowerCase();
-          const source = this.activeFilter === 'requests'
-            ? this.requests
-            : this.friends.filter((friend) => (this.activeFilter === 'online' ? friend.status === 'online' : true));
+          const source = Array.isArray(items) ? items : [];
           return source.filter((item) => {
             if (!q) return true;
-            const hay = `${item.name} ${item.handle} ${item.planet}`.toLowerCase();
+            const hay = `${item.name || ''} ${item.handle || ''} ${item.planet || ''}`.toLowerCase();
             return hay.includes(q);
           });
+        },
+        activeTabCount() {
+          if (this.activeTab === 'requests') {
+            return this.incomingRequestItems.length + this.outgoingRequestItems.length;
+          }
+          return this.filteredItems.length;
+        },
+        listSectionTitle() {
+          if (this.activeTab === 'find') {
+            return this.isSearchQueryActive() ? this.t('searchResultsTitle') : this.t('tabFind');
+          }
+          if (this.activeTab === 'requests') {
+            return this.t('requestsTitle');
+          }
+          return this.t('friendsTitle');
         },
         t(key) {
           const dict = this.i18n[this.language] || this.i18n.en;
@@ -905,35 +927,6 @@
             }
           });
         },
-        async apiFriendsRemove(peerUid) {
-          if (!this.client) return null;
-          return this.traceApiCall('apiFriendsRemove', async () => {
-            try {
-            return await this.client.friendsRemove(peerUid);
-            } catch (error) {
-              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
-              this.debugLog('apiFriendsRemove:fallback', { peerUid });
-              return await this.client._sendRequest({ kind: 'social.friend.remove', peerUid }).then((res) => {
-                if (!res.ok || res.action !== 'social.friend.remove') {
-                  throw new Error((res && res.error) || 'Failed to remove friend');
-                }
-                return res.data;
-              });
-            }
-          });
-        },
-        async apiFriendsBlockCreate(targetUid) {
-          if (!this.client) return null;
-          return this.traceApiCall('apiFriendsBlockCreate', async () => {
-            try {
-              return await this.client.friendsBlockCreate(targetUid);
-            } catch (error) {
-              if (!this.shouldUseLegacyFallback(error, { allowPermissionDenied: false })) throw error;
-              this.debugLog('apiFriendsBlockCreate:fallback', { targetUid });
-              return await this.client.socialBlockCreate(targetUid);
-            }
-          });
-        },
         async apiFriendsBlockList() {
           if (!this.client) return [];
           return this.traceApiCall('apiFriendsBlockList', async () => {
@@ -1026,7 +1019,7 @@
           if (state === 'friends') return this.t('friendsState');
           if (state === 'blocked') return this.t('blockedState');
           if (state === 'pending_inbound') return this.t('accept');
-          if (state === 'pending_outbound') return this.t('cancel');
+          if (state === 'pending_outbound') return this.t('statusRequestOut');
           return this.t('addFriend');
         },
         searchPrimaryActionClass(peerUid) {
@@ -1039,7 +1032,7 @@
         },
         isSearchPrimaryDisabled(peerUid) {
           const state = this.searchRelationState(peerUid);
-          return state === 'friends' || state === 'blocked';
+          return state === 'friends' || state === 'blocked' || state === 'pending_outbound';
         },
         searchSecondaryHint(peerUid) {
           const state = this.searchRelationState(peerUid);
@@ -1203,73 +1196,6 @@
             this.actionBusy = false;
             this.setPeerBusy(peerUid, false);
           }
-        },
-        async removeSelectedFriend() {
-          if (!this.client || !this.selectedFriend) return;
-          const peerUid = this.selectedFriend.id;
-          const before = this.friends.slice();
-          this.actionBusy = true;
-          this.friends = this.friends.filter((entry) => entry.id !== peerUid);
-          try {
-            await this.apiFriendsRemove(peerUid);
-            this.setNotice('success', 'friendRemoved');
-            this.backToList();
-            await this.refreshData();
-          } catch (error) {
-            this.friends = before;
-            this.error = this.normalizeActionError(error);
-          } finally {
-            this.actionBusy = false;
-          }
-        },
-        async blockSelectedFriend() {
-          if (!this.client || !this.selectedFriend) return;
-          const peerUid = this.selectedFriend.id;
-          const before = this.friends.slice();
-          this.actionBusy = true;
-          this.friends = this.friends.filter((entry) => entry.id !== peerUid);
-          try {
-            await this.apiFriendsBlockCreate(peerUid);
-            this.setNotice('success', 'userBlocked');
-            this.backToList();
-            await this.refreshData();
-          } catch (error) {
-            this.friends = before;
-            this.error = this.normalizeActionError(error);
-          } finally {
-            this.actionBusy = false;
-          }
-        },
-        openEditor(friendId) {
-          this.selectedFriendId = friendId;
-          this.selectedFriend = this.friends.find((friend) => friend.id === friendId) || null;
-          this.hydrateDraft();
-          this.view = 'editor';
-        },
-        backToList() {
-          this.view = 'list';
-        },
-        hydrateDraft() {
-          const friend = this.selectedFriend;
-          if (!friend) return;
-          this.draft = {
-            nickname: friend.name || '',
-            planet: friend.planet || '',
-            status: friend.status === 'online' ? 'online' : 'offline',
-            note: friend.note || '',
-          };
-        },
-        resetDraft() {
-          this.hydrateDraft();
-        },
-        saveDraft() {
-          const friend = this.selectedFriend;
-          if (!friend) return;
-          friend.name = (this.draft.nickname || '').trim() || friend.name;
-          friend.planet = (this.draft.planet || '').trim() || friend.planet;
-          friend.status = this.draft.status === 'online' ? 'online' : 'offline';
-          friend.note = (this.draft.note || '').trim();
-          this.backToList();
         },
         async loadProfiles(uids) {
           const map = {};

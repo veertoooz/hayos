@@ -152,6 +152,7 @@
       const [duration, setDuration] = React.useState(0);
       const [seekValue, setSeekValue] = React.useState(0);
       const audioRef = React.useRef(null);
+      const musicFolderIdRef = React.useRef('');
 
       const t = (key) => {
         const dict = i18n[language] || i18n.en;
@@ -161,14 +162,43 @@
       const nowPlayingIndex = songs.findIndex((song) => song.id === nowPlayingId);
       const nowPlaying = nowPlayingIndex >= 0 ? songs[nowPlayingIndex] : null;
 
+      const ensureMusicFolderId = React.useCallback(async (apiClient) => {
+        if (!apiClient) return '';
+        if (musicFolderIdRef.current) return musicFolderIdRef.current;
+        const rows = await apiClient.filesList({ space: 'local', limit: 400 });
+        const list = Array.isArray(rows) ? rows : [];
+        const existing = list.find((row) =>
+          row &&
+          row.kind === 'folder' &&
+          typeof row.name === 'string' &&
+          row.name.trim().toLowerCase() === 'music'
+        );
+        if (existing && typeof existing.id === 'string' && existing.id.trim()) {
+          musicFolderIdRef.current = existing.id.trim();
+          return musicFolderIdRef.current;
+        }
+        const created = await apiClient.filesCreateFolder('Music', { space: 'local', parentId: null });
+        const folderId = created && typeof created.id === 'string' ? created.id.trim() : '';
+        if (!folderId) throw new Error('Failed to create Music folder');
+        musicFolderIdRef.current = folderId;
+        return folderId;
+      }, []);
+
       const loadSongs = React.useCallback(async (apiClient) => {
         if (!apiClient) return;
         try {
           setError('');
-          const rows = await apiClient.storageFilesList({ limit: 300 });
+          const musicFolderId = await ensureMusicFolderId(apiClient);
+          const rows = await apiClient.filesList({ space: 'local', limit: 400 });
           const all = Array.isArray(rows) ? rows : [];
           const localAudio = await Promise.all(all
-            .filter((row) => typeof row?.mimeType === 'string' && row.mimeType.startsWith('audio/'))
+            .filter((row) =>
+              row &&
+              row.kind !== 'folder' &&
+              row.parentId === musicFolderId &&
+              typeof row?.mimeType === 'string' &&
+              row.mimeType.startsWith('audio/')
+            )
             .map(async (row) => {
               const fileId = typeof row.id === 'string' ? row.id : '';
               const fileName = row.fileName || row.name || fileId;
@@ -199,7 +229,7 @@
           setError(message);
           setStatus(message);
         }
-      }, []);
+      }, [ensureMusicFolderId]);
 
       React.useEffect(() => {
         let mounted = true;
@@ -286,6 +316,7 @@
         setUploading(true);
         setStatus(t('uploading'));
         try {
+          const musicFolderId = await ensureMusicFolderId(client);
           for (const item of uploadQueue) {
             const f = item.file;
             const initData = await client.storageUploadInit({
@@ -312,7 +343,11 @@
               const chunkBase64 = btoa(binary);
               await client.storageUploadWriteChunk(sessionId, chunkBase64, chunkIndex, totalChunks);
             }
-            await client.storageUploadComplete(sessionId);
+            const completeData = await client.storageUploadComplete(sessionId);
+            const fileId = typeof completeData?.fileId === 'string' ? completeData.fileId : sessionId;
+            if (fileId) {
+              await client.filesMove(fileId, musicFolderId, { space: 'local' });
+            }
           }
           setUploadQueue([]);
           await loadSongs(client);

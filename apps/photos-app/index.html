@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-transparent" data-theme="black" x-data="photosApp()" x-init="init()">
+<head>
+  <script data-hayos-prepaint-settings>
+    (function applyHayOSPrepaintSettings() {
+      try {
+        var root = document.documentElement;
+        var params = new URLSearchParams(window.location.search);
+        var fromQueryLang = (params.get('lang') || params.get('language') || '').trim().toLowerCase();
+        var fromQueryTheme = (params.get('theme') || '').trim();
+        var stored = null;
+        try {
+          var raw = window.localStorage.getItem('hayos.settings');
+          stored = raw ? JSON.parse(raw) : null;
+        } catch {
+          stored = null;
+        }
+        var language = fromQueryLang === 'hy' || fromQueryLang === 'en'
+          ? fromQueryLang
+          : (stored && stored.language === 'hy' ? 'hy' : 'en');
+        var theme = fromQueryTheme
+          || (stored && typeof stored.theme === 'string' ? stored.theme.trim() : '')
+          || 'black';
+        root.lang = language;
+        root.setAttribute('data-theme', theme);
+      } catch {
+        // ignore prepaint failures
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="t('pageTitle')">Photos</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+
+  <script>
+    function loadHayOSClient() {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const clientUrl = isLocalhost
+        ? 'http://localhost:5173/hayos-client.js'
+        : '/hayos-client.js';
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = clientUrl;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load HayOSClient from ${clientUrl}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        plugins: [require('daisyui')],
+        daisyui: { themes: true },
+      };
+    }
+  </script>
+
+  <style>
+    .photos-bg {
+      background:
+        radial-gradient(70% 120% at 0% 0%, rgba(255, 180, 100, 0.12), transparent 58%),
+        radial-gradient(70% 120% at 100% 0%, rgba(90, 150, 255, 0.16), transparent 62%);
+    }
+
+    .photo-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  </style>
+</head>
+
+<body class="h-full">
+  <div class="photos-bg h-full flex flex-col p-3 sm:p-4" x-cloak>
+    <header class="flex items-center justify-between mb-3">
+      <div>
+        <h1 class="text-lg font-semibold" x-text="t('title')"></h1>
+        <p class="text-xs opacity-70" x-text="userLabel()"></p>
+      </div>
+      <button class="btn btn-sm btn-outline" @click="reload" :disabled="loading">
+        <i class="fa-solid fa-rotate-right"></i>
+        <span class="ml-2" x-text="t('refresh')"></span>
+      </button>
+    </header>
+
+    <div class="alert alert-error text-sm mb-3" x-show="error" x-text="error"></div>
+
+    <main class="flex-1 overflow-auto">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3" x-show="photos.length > 0">
+        <template x-for="item in photos" :key="item.id">
+          <button class="photo-card aspect-square rounded-xl overflow-hidden border border-base-300 bg-base-200" @click="openPreview(item)">
+            <img :src="item.url" :alt="item.fileName" loading="lazy" />
+          </button>
+        </template>
+      </div>
+
+      <div class="h-full flex items-center justify-center" x-show="!loading && photos.length === 0">
+        <div class="text-center opacity-70">
+          <i class="fa-regular fa-image text-3xl"></i>
+          <p class="mt-2 text-sm" x-text="t('empty')"></p>
+        </div>
+      </div>
+
+      <div class="h-full flex items-center justify-center" x-show="loading">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    </main>
+
+    <dialog class="modal" :open="Boolean(preview)">
+      <div class="modal-box max-w-3xl p-2 sm:p-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm font-medium truncate" x-text="preview ? preview.fileName : ''"></p>
+          <button class="btn btn-sm btn-ghost" @click="preview = null">✕</button>
+        </div>
+        <div class="rounded-lg overflow-hidden bg-black/80">
+          <img class="w-full max-h-[70vh] object-contain" :src="preview ? preview.url : ''" alt="preview" />
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="preview = null">
+        <button>close</button>
+      </form>
+    </dialog>
+  </div>
+
+  <script>
+    function photosApp() {
+      return {
+        appId: 'photos-app',
+        client: null,
+        user: null,
+        language: 'en',
+        loading: false,
+        error: '',
+        photos: [],
+        preview: null,
+        i18n: {
+          en: {
+            pageTitle: 'Photos',
+            title: 'Photos',
+            refresh: 'Refresh',
+            empty: 'No photos in Pictures folder yet.',
+            guest: 'Guest',
+          },
+          hy: {
+            pageTitle: 'Նկարներ',
+            title: 'Նկարներ',
+            refresh: 'Թարմացնել',
+            empty: 'Pictures պանակում նկար դեռ չկա։',
+            guest: 'Հյուր',
+          },
+        },
+
+        t(key) {
+          const dict = this.i18n[this.language] || this.i18n.en;
+          return dict[key] || this.i18n.en[key] || key;
+        },
+
+        userLabel() {
+          if (!this.user) return this.t('guest');
+          return this.user.email || this.user.displayName || this.user.uid || this.t('guest');
+        },
+
+        async resolvePicturesFolderId(items) {
+          const folder = (items || []).find((item) =>
+            item &&
+            item.kind === 'folder' &&
+            typeof item.name === 'string' &&
+            item.name.trim().toLowerCase() === 'pictures'
+          );
+          return folder && typeof folder.id === 'string' ? folder.id : null;
+        },
+
+        async reload() {
+          if (!this.client) return;
+          this.loading = true;
+          this.error = '';
+          try {
+            const rows = await this.client.filesList({ space: 'local', limit: 400 });
+            const items = Array.isArray(rows) ? rows : [];
+            const picturesFolderId = await this.resolvePicturesFolderId(items);
+
+            const imageRows = items.filter((item) => {
+              if (!item || item.kind === 'folder') return false;
+              const mime = typeof item.mimeType === 'string' ? item.mimeType.toLowerCase() : '';
+              if (!mime.startsWith('image/')) return false;
+              if (!picturesFolderId) return true;
+              return item.parentId === picturesFolderId;
+            });
+
+            const resolved = await Promise.all(imageRows.map(async (item) => {
+              const fileId = typeof item.id === 'string' ? item.id : '';
+              if (!fileId) return null;
+              try {
+                const dl = await this.client.storageFilesGetDownloadUrl(fileId);
+                const url = dl && typeof dl.url === 'string' ? dl.url : '';
+                if (!url) return null;
+                return {
+                  id: fileId,
+                  fileName: typeof item.name === 'string' ? item.name : (item.fileName || fileId),
+                  mimeType: item.mimeType || '',
+                  updatedAt: item.updatedAt || '',
+                  url,
+                };
+              } catch {
+                return null;
+              }
+            }));
+
+            this.photos = resolved
+              .filter(Boolean)
+              .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+          } catch (error) {
+            this.error = error && error.message ? String(error.message) : String(error);
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        openPreview(item) {
+          this.preview = item || null;
+        },
+
+        async init() {
+          try {
+            await loadHayOSClient();
+            const appId = new URLSearchParams(window.location.search).get('appId') || this.appId;
+            this.client = new window.HayOSClient(appId);
+            const auth = await this.client.ensureAuthenticated();
+            this.user = auth && auth.user ? auth.user : null;
+
+            const nextLanguage = await this.client.getLanguage();
+            this.language = nextLanguage === 'hy' ? 'hy' : 'en';
+            document.documentElement.lang = this.language;
+            this.client.onLanguageChanged((lang) => {
+              this.language = lang === 'hy' ? 'hy' : 'en';
+              document.documentElement.lang = this.language;
+            });
+
+            await this.reload();
+          } catch (error) {
+            this.error = error && error.message ? String(error.message) : String(error);
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

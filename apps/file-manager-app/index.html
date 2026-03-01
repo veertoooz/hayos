@@ -35,17 +35,574 @@
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script>
+    window.__hayosStartAlpine = null;
+    window.__hayosFileManagerFactory = null;
+    window.__hayosFileManagerRegistered = false;
+    window.__hayosFileManagerReadyResolvers = [];
+    window.__hayosWaitForFileManagerFactory = function waitForFileManagerFactory() {
+      if (typeof window.__hayosFileManagerFactory === 'function') {
+        return Promise.resolve(window.__hayosFileManagerFactory);
+      }
+      return new Promise((resolve) => {
+        window.__hayosFileManagerReadyResolvers.push(resolve);
+      });
+    };
+    window.deferLoadingAlpine = function deferLoadingAlpine(startAlpine) {
+      window.__hayosStartAlpine = startAlpine;
+    };
+    function fileManagerApp() {
+      return {
+        loading: true,
+        status: '',
+        error: '',
+        language: 'en',
+        query: '',
+        user: null,
+        osTheme: null,
+        client: null,
+        storageReady: false,
+        uploadDraft: { fileName: '', mimeType: '', sizeBytes: '', visibility: 'private', file: null },
+        activeUploadSession: null,
+        uploadBusy: false,
+        selectedItem: null,
+        actionItem: null,
+        inputModal: null,
+        confirmModal: null,
+        storageQuota: null,
+        fileFilter: 'all',
+        uploadPanelOpen: false,
+        viewMode: 'list',
+        currentDirectoryId: null,
+        items: [],
+        queryTimerId: null,
+        loadRequestSeq: 0,
+        async init() {
+          if (typeof window.__hayosFileManagerFactory !== 'function') {
+            await window.__hayosWaitForFileManagerFactory();
+          }
+          if (typeof window.__hayosFileManagerFactory !== 'function') return;
+          const real = window.__hayosFileManagerFactory();
+          const realInit = real && typeof real.init === 'function' ? real.init : null;
+          Object.assign(this, real || {});
+          if (realInit) {
+            await realInit.call(this);
+          }
+        },
+        t(key) { return key; },
+        hasSearchQuery() { return false; },
+        breadcrumbs() { return []; },
+        rootSystemFolders() { return []; },
+        filteredVisibleItems() { return []; },
+        visibleItems() { return []; },
+        itemById() { return new Map(); },
+        childrenCountByParentId() { return new Map(); },
+        isSystemRootFolder() { return false; },
+        formatBytes() { return '-'; },
+        normalizeStorageStat() { return 0; },
+        formatDateShort() { return '-'; },
+        itemTypeLabel() { return '-'; },
+        itemMetaLabel() { return '-'; },
+        visibilityLabel() { return '-'; },
+        quotaUsedBytes() { return 0; },
+        quotaMaxBytes() { return 1; },
+        quotaPercent() { return 0; },
+        clearSearch() {},
+        onQueryInput() {},
+        setCurrentDirectoryId() {},
+        openBreadcrumb() {},
+        goUp() {},
+        loadItems() {},
+        openItem() {},
+        onRefresh() {},
+        onReindex() {},
+        onFilePicked() {},
+        submitUpload() {},
+        completeUpload() {},
+        openCreateFolderModal() {},
+        openRenameModal() {},
+        moveItemToRoot() {},
+        openDeleteConfirm() {},
+        submitCreateFolder() {},
+        submitRenameItem() {},
+        deleteItem() {},
+      };
+    }
+    window.fileManagerApp = fileManagerApp;
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
 
   <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
     body {
       overscroll-behavior: contain;
     }
+
+    .fm-stage {
+      background:
+        radial-gradient(95% 55% at 0% 0%, color-mix(in oklab, var(--color-primary) 20%, transparent), transparent 70%),
+        radial-gradient(95% 60% at 100% 0%, color-mix(in oklab, var(--color-info) 16%, transparent), transparent 72%),
+        linear-gradient(180deg, color-mix(in oklab, var(--color-base-200) 48%, transparent), transparent 34%);
+    }
+
+    .fm-shell {
+      background: color-mix(in oklab, var(--color-base-100) 92%, transparent);
+      border: 1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent);
+      box-shadow:
+        0 10px 30px color-mix(in oklab, var(--color-base-content) 12%, transparent),
+        inset 0 1px 0 color-mix(in oklab, white 6%, transparent);
+    }
+
+    .fm-header {
+      background:
+        linear-gradient(
+          180deg,
+          color-mix(in oklab, var(--color-base-100) 98%, transparent),
+          color-mix(in oklab, var(--color-base-100) 90%, transparent)
+        );
+      border-bottom: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+    }
+
+    .fm-title {
+      letter-spacing: 0.01em;
+      text-wrap: balance;
+    }
+
+    .fm-line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
+    }
+
+    .fm-search {
+      border-color: color-mix(in oklab, var(--color-base-content) 18%, transparent);
+      background: color-mix(in oklab, var(--color-base-100) 92%, transparent);
+      box-shadow: inset 0 1px 0 color-mix(in oklab, white 8%, transparent);
+    }
+
+    .fm-elevated {
+      border: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+      background: color-mix(in oklab, var(--color-base-200) 64%, transparent);
+      box-shadow: 0 6px 20px color-mix(in oklab, var(--color-base-content) 9%, transparent);
+    }
+
+    .fm-soft-status {
+      border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+      background: color-mix(in oklab, var(--color-base-200) 55%, transparent);
+      border-radius: 0.7rem;
+      padding: 0.35rem 0.55rem;
+    }
+
+    .fm-banner {
+      border-radius: 0.8rem;
+      border: 1px solid transparent;
+      padding: 0.5rem 0.65rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.55rem;
+      font-size: 0.75rem;
+      line-height: 1.2;
+    }
+
+    .fm-banner-error {
+      border-color: color-mix(in oklab, var(--color-error) 45%, transparent);
+      background: color-mix(in oklab, var(--color-error) 24%, transparent);
+    }
+
+    .fm-banner-info {
+      border-color: color-mix(in oklab, var(--color-info) 42%, transparent);
+      background: color-mix(in oklab, var(--color-info) 18%, transparent);
+    }
+
+    .fm-banner-warning {
+      border-color: color-mix(in oklab, var(--color-warning) 45%, transparent);
+      background: color-mix(in oklab, var(--color-warning) 20%, transparent);
+    }
+
+    .fm-empty {
+      border: 1px dashed color-mix(in oklab, var(--color-base-content) 20%, transparent);
+      background: color-mix(in oklab, var(--color-base-200) 42%, transparent);
+      border-radius: 0.9rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .fm-skeleton-row {
+      height: 3.6rem;
+      border-radius: 0.75rem;
+      border: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+      background:
+        linear-gradient(
+          110deg,
+          color-mix(in oklab, var(--color-base-200) 78%, transparent) 8%,
+          color-mix(in oklab, white 10%, transparent) 18%,
+          color-mix(in oklab, var(--color-base-200) 78%, transparent) 33%
+        );
+      background-size: 220% 100%;
+      animation: fm-shimmer 1.35s linear infinite;
+    }
+
+    @keyframes fm-shimmer {
+      to {
+        background-position-x: -220%;
+      }
+    }
+
+    .fm-filter-row {
+      scrollbar-width: thin;
+      padding-bottom: 0.15rem;
+    }
+
+    .fm-filter-row::-webkit-scrollbar {
+      height: 5px;
+    }
+
+    .fm-filter-row::-webkit-scrollbar-thumb {
+      background: color-mix(in oklab, var(--color-base-content) 20%, transparent);
+      border-radius: 999px;
+    }
+
+    .fm-action-label {
+      display: inline-block;
+      max-width: 62px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
+    }
+
+    @media (max-width: 390px) {
+      .fm-action-label {
+        max-width: 46px;
+      }
+    }
+
+    .fm-main-scroll {
+      padding-bottom: calc(7.25rem + env(safe-area-inset-bottom));
+    }
+
+    .fm-files-viewport {
+      max-height: min(46vh, 430px);
+    }
+
+    @media (max-height: 780px) {
+      .fm-files-viewport {
+        max-height: 40vh;
+      }
+    }
   </style>
 </head>
-<body class="h-full bg-base-100">
-  <div id="app" class="h-full"></div>
+<body class="h-full fm-stage bg-base-100">
+  <main id="app" class="h-full max-w-md mx-auto flex flex-col fm-shell" x-data="fileManagerApp()" x-init="init()" x-cloak>
+    <header class="sticky top-0 z-10 fm-header backdrop-blur p-3 space-y-2">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-lg font-semibold leading-tight fm-title fm-line-clamp-2" x-text="t('title')"></h1>
+          <p class="text-xs opacity-70 fm-title fm-line-clamp-2" x-text="t('subtitle')"></p>
+        </div>
+        <div class="text-right">
+          <div class="badge badge-outline text-[10px]">local</div>
+          <div class="text-[10px] opacity-70 mt-1" x-text="user && user.uid ? user.uid.slice(0, 10) : '-' "></div>
+        </div>
+      </div>
+      <label class="input input-bordered input-sm flex items-center gap-2 fm-search">
+        <i class="fa-solid fa-magnifying-glass opacity-60"></i>
+        <input class="grow" :placeholder="t('searchPlaceholder')" x-model="query" @input="onQueryInput()" />
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          x-show="hasSearchQuery()"
+          @click="clearSearch()"
+          :title="t('clearSearch')"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </label>
+    </header>
+
+    <section class="flex-1 overflow-auto p-3 fm-main-scroll space-y-3">
+      <template x-if="error">
+        <div class="fm-banner fm-banner-error">
+          <div class="flex items-center gap-2 min-w-0">
+            <i class="fa-solid fa-circle-exclamation opacity-90"></i>
+            <span class="truncate" x-text="error"></span>
+          </div>
+          <button class="btn btn-ghost btn-xs" @click="error = ''" aria-label="clear">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </template>
+      <div class="text-xs opacity-80 fm-soft-status" x-text="`${t('statusLabel')}: ${status}`"></div>
+      <template x-if="storageQuota">
+        <section class="card p-3 space-y-2 fm-elevated">
+          <h3 class="text-sm font-semibold" x-text="t('storageUsage')"></h3>
+          <div class="text-xs opacity-80" x-text="`${formatBytes(quotaUsedBytes())} / ${formatBytes(quotaMaxBytes())} (${quotaPercent()}%)`"></div>
+          <progress class="progress progress-primary w-full" :value="quotaPercent()" max="100"></progress>
+          <div class="grid grid-cols-3 gap-2 text-[11px] opacity-80">
+            <div x-text="`${t('filesCount')}: ${normalizeStorageStat(storageQuota.fileCount, 0)}`"></div>
+            <div x-text="`${t('imagesCount')}: ${normalizeStorageStat(storageQuota.imageCount, 0)}`"></div>
+            <div x-text="`${t('audioCount')}: ${normalizeStorageStat(storageQuota.audioCount, 0)}`"></div>
+          </div>
+          <div class="text-[10px] opacity-60" x-show="storageQuota.lastIndexedAt" x-text="`${t('indexedAt')}: ${storageQuota.lastIndexedAt || ''}`"></div>
+        </section>
+      </template>
+
+      <div class="flex items-center justify-between gap-2 px-1">
+        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap pb-1">
+          <template x-for="(crumb, index) in breadcrumbs()" :key="`${crumb.id || 'root'}-${index}`">
+            <button
+              class="btn btn-xs mr-1"
+              :class="index === breadcrumbs().length - 1 ? 'btn-primary' : 'btn-outline'"
+              @click="openBreadcrumb(crumb.id)"
+            >
+              <span x-text="crumb.name"></span>
+            </button>
+          </template>
+        </div>
+        <button x-show="currentDirectoryId !== null && !hasSearchQuery()" class="btn btn-xs btn-outline" @click="goUp()" x-text="t('up')"></button>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 px-1">
+        <div class="flex items-center gap-2 overflow-x-auto fm-filter-row">
+        <button class="btn btn-xs whitespace-nowrap" :class="fileFilter === 'all' ? 'btn-primary' : 'btn-outline'" @click="fileFilter = 'all'" x-text="t('filterAll')"></button>
+        <button class="btn btn-xs whitespace-nowrap" :class="fileFilter === 'images' ? 'btn-primary' : 'btn-outline'" @click="fileFilter = 'images'" x-text="t('filterImages')"></button>
+        <button class="btn btn-xs whitespace-nowrap" :class="fileFilter === 'audio' ? 'btn-primary' : 'btn-outline'" @click="fileFilter = 'audio'" x-text="t('filterAudio')"></button>
+        </div>
+        <div class="join">
+          <button class="btn btn-xs join-item" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline'" @click="viewMode = 'list'" :title="t('viewList')">
+            <i class="fa-solid fa-list"></i>
+          </button>
+          <button class="btn btn-xs join-item" :class="viewMode === 'grid' ? 'btn-primary' : 'btn-outline'" @click="viewMode = 'grid'" :title="t('viewGrid')">
+            <i class="fa-solid fa-grip"></i>
+          </button>
+        </div>
+      </div>
+
+      <template x-if="!hasSearchQuery() && rootSystemFolders().length > 0">
+        <section class="card p-3 space-y-2 fm-elevated">
+          <h3 class="text-sm font-semibold" x-text="t('systemFolders')"></h3>
+          <div class="grid grid-cols-2 gap-2">
+            <template x-for="folder in rootSystemFolders()" :key="folder.id">
+              <button
+                class="btn btn-outline h-auto min-h-20 flex-col items-start justify-center gap-1 px-3 text-left"
+                @click="setCurrentDirectoryId(folder.id)"
+              >
+                <span class="font-medium text-sm" x-text="folder.name || folder.id"></span>
+                <span class="text-[11px] opacity-70" x-text="`${childrenCountByParentId().get(folder.id) || 0} ${t('itemsCount')}`"></span>
+                <span class="text-[11px] underline opacity-80" x-text="t('openFolder')"></span>
+              </button>
+            </template>
+          </div>
+        </section>
+      </template>
+
+      <section class="card p-3 space-y-2 fm-elevated">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold" x-text="t('filesSection')"></h3>
+          <span class="badge badge-outline text-[10px]" x-text="filteredVisibleItems().length"></span>
+        </div>
+        <template x-if="loading">
+          <div class="space-y-2">
+            <div class="fm-skeleton-row"></div>
+            <div class="fm-skeleton-row"></div>
+            <div class="fm-skeleton-row"></div>
+            <div class="fm-skeleton-row"></div>
+          </div>
+        </template>
+        <template x-if="!loading && filteredVisibleItems().length === 0">
+          <div class="fm-empty">
+            <i class="fa-regular fa-folder-open text-lg opacity-70"></i>
+            <p class="mt-2 text-sm font-medium" x-text="t('empty')"></p>
+            <p class="text-[11px] opacity-70 mt-1" x-text="t('emptyHint')"></p>
+          </div>
+        </template>
+        <div class="fm-files-viewport overflow-auto pr-1" :class="viewMode === 'grid' ? 'grid grid-cols-2 gap-2' : 'space-y-2'">
+          <template x-for="item in filteredVisibleItems()" :key="item.id">
+            <article class="card bg-base-200 border border-base-300 p-3" :class="viewMode === 'grid' ? 'min-h-[142px]' : ''">
+              <div class="flex items-start justify-between gap-2">
+                <span class="badge badge-xs" :class="item.readonly ? 'badge-ghost' : 'badge-primary'" x-text="item.readonly ? t('readonlyShort') : t('editableShort')"></span>
+                <button
+                  class="btn btn-ghost btn-xs"
+                  x-show="!item.readonly && !isSystemRootFolder(item)"
+                  @click="actionItem = item"
+                >
+                  <i class="fa-solid fa-ellipsis-vertical"></i>
+                </button>
+              </div>
+              <button class="mt-1 flex items-center gap-3 min-w-0 w-full text-left" :class="viewMode === 'grid' ? 'flex-col items-start gap-2' : ''" @click="openItem(item)">
+                <div class="avatar placeholder">
+                  <div class="bg-base-300 text-base-content rounded-lg w-9 h-9">
+                    <i class="text-sm" :class="item.kind === 'folder' ? 'fa-solid fa-folder text-warning' : 'fa-solid fa-file text-info'"></i>
+                  </div>
+                </div>
+                <div class="min-w-0 w-full">
+                  <p class="text-sm font-semibold truncate" x-text="item.name || item.id"></p>
+                  <p class="text-[11px] opacity-75 truncate" x-text="itemMetaLabel(item)"></p>
+                  <div class="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span class="badge badge-outline badge-xs" x-text="itemTypeLabel(item)"></span>
+                    <span class="badge badge-outline badge-xs" x-text="visibilityLabel(item.visibility)"></span>
+                    <span class="text-[10px] opacity-60" x-text="formatDateShort(item.updatedAt)"></span>
+                  </div>
+                </div>
+              </button>
+            </article>
+          </template>
+        </div>
+      </section>
+
+      <template x-if="selectedItem">
+        <section class="card bg-base-200 border border-base-300 p-3 space-y-1">
+          <h3 class="text-sm font-semibold" x-text="t('details')"></h3>
+          <p class="text-xs opacity-80 break-all" x-text="`id: ${selectedItem.id}`"></p>
+          <p class="text-xs opacity-80" x-text="`kind: ${selectedItem.kind || 'file'}`"></p>
+          <p class="text-xs opacity-80" x-text="`size: ${formatBytes(selectedItem.sizeBytes)}`"></p>
+        </section>
+      </template>
+
+      <section class="card p-3 space-y-2 fm-elevated">
+        <button class="w-full flex items-center justify-between text-left" @click="uploadPanelOpen = !uploadPanelOpen">
+          <div>
+            <h3 class="text-sm font-semibold" x-text="t('uploadSectionTitle')"></h3>
+            <p class="text-[11px] opacity-70" x-text="t('uploadSectionHint')"></p>
+          </div>
+          <i class="fa-solid transition-transform" :class="uploadPanelOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div x-show="uploadPanelOpen" class="space-y-2 pt-1">
+          <template x-if="!storageReady">
+            <div class="fm-banner fm-banner-warning">
+              <div class="flex items-center gap-2 min-w-0">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span class="truncate" x-text="t('storageUnavailable')"></span>
+              </div>
+              <button class="btn btn-xs btn-outline" @click="retryStorageAvailability()" x-text="t('retryUploadService')"></button>
+            </div>
+          </template>
+          <input type="file" class="file-input file-input-bordered file-input-sm w-full" :disabled="uploadBusy || hasActiveUploadSession()" @change="onFilePicked($event)" />
+          <div class="grid grid-cols-1 gap-2">
+            <input class="input input-bordered input-sm w-full" :placeholder="t('uploadPromptName')" :disabled="uploadBusy || hasActiveUploadSession()" x-model="uploadDraft.fileName" />
+            <input class="input input-bordered input-sm w-full" :placeholder="t('uploadPromptMime')" :disabled="uploadBusy || hasActiveUploadSession()" x-model="uploadDraft.mimeType" />
+            <input class="input input-bordered input-sm w-full" :placeholder="t('uploadPromptSize')" :disabled="uploadBusy || hasActiveUploadSession()" x-model="uploadDraft.sizeBytes" />
+            <select class="select select-bordered select-sm w-full" :disabled="uploadBusy || hasActiveUploadSession()" x-model="uploadDraft.visibility">
+              <option value="private">private</option>
+              <option value="followers">followers</option>
+              <option value="public">public</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn btn-sm btn-primary whitespace-nowrap" :disabled="uploadBusy || hasActiveUploadSession() || !storageReady || !client || !uploadDraft.file" @click="submitUpload(uploadDraft)" x-text="t('upload')"></button>
+            <button class="btn btn-sm btn-outline whitespace-nowrap" :disabled="uploadBusy || !activeUploadSession || !activeUploadSession.sessionId || !client" @click="completeUpload()" x-text="t('completeUpload')"></button>
+          </div>
+          <button
+            class="btn btn-sm btn-error btn-outline w-full whitespace-nowrap"
+            :disabled="uploadBusy || !activeUploadSession || !activeUploadSession.sessionId || !client"
+            @click="cancelActiveUploadSession()"
+            x-text="t('cancelUpload')"
+          ></button>
+        </div>
+      </section>
+    </section>
+
+    <footer class="fixed bottom-0 left-0 right-0 mx-auto max-w-md border-t border-base-300 bg-base-100/95 backdrop-blur p-3 space-y-2">
+      <template x-if="activeUploadSession && activeUploadSession.sessionId">
+        <div class="rounded-xl border border-base-300 bg-base-200/80 px-3 py-2 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-[11px] opacity-75" x-text="t('uploadSessionActive')"></p>
+            <p class="text-xs font-medium truncate" x-text="`${t('uploadSession')}: ${activeUploadSession.sessionId}`"></p>
+          </div>
+          <div class="flex items-center gap-1">
+            <button class="btn btn-xs btn-primary" :disabled="uploadBusy" @click="completeUpload()" x-text="t('completeNow')"></button>
+            <button class="btn btn-xs btn-outline" :disabled="uploadBusy" @click="cancelActiveUploadSession()" x-text="t('cancel')"></button>
+          </div>
+        </div>
+      </template>
+      <div class="grid grid-cols-4 gap-2">
+        <button class="btn btn-sm btn-outline" @click="onRefresh()" :disabled="loading || !client">
+          <i class="fa-solid fa-rotate mr-2"></i>
+          <span class="fm-action-label" x-text="t('refresh')"></span>
+        </button>
+        <button class="btn btn-sm btn-primary" :disabled="loading || !client" @click="openCreateFolderModal()">
+          <i class="fa-solid fa-folder-plus mr-2"></i>
+          <span class="fm-action-label" x-text="t('folderCreate')"></span>
+        </button>
+        <button class="btn btn-sm btn-outline" @click="uploadPanelOpen = !uploadPanelOpen">
+          <i class="fa-solid fa-upload mr-2"></i>
+          <span class="fm-action-label" x-text="t('uploadTools')"></span>
+        </button>
+        <div class="dropdown dropdown-top dropdown-end">
+          <label tabindex="0" class="btn btn-sm btn-outline w-full">
+            <i class="fa-solid fa-ellipsis"></i>
+            <span class="ml-1 fm-action-label" x-text="t('more')"></span>
+          </label>
+          <ul tabindex="0" class="dropdown-content menu z-[65] mt-2 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl">
+            <li>
+              <button @click="onReindex()" :disabled="loading || !client || typeof client.storageIndexRebuild !== 'function'">
+                <i class="fa-solid fa-database"></i>
+                <span x-text="t('reindex')"></span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+
+    <template x-if="actionItem">
+      <div class="fixed inset-0 bg-black/40 z-50 flex items-end" @click="actionItem = null">
+        <section class="w-full bg-base-100 rounded-t-2xl p-4 space-y-2" @click.stop>
+          <h3 class="font-semibold mb-2" x-text="t('actionSheet')"></h3>
+          <button class="btn btn-block btn-outline" @click="openItem(actionItem)" x-text="t('open')"></button>
+          <button class="btn btn-block btn-outline" @click="openRenameModal(actionItem)" :disabled="isSystemRootFolder(actionItem)" x-text="t('rename')"></button>
+          <button class="btn btn-block btn-outline" @click="moveItemToRoot(actionItem)" :disabled="isSystemRootFolder(actionItem)" x-text="t('moveRoot')"></button>
+          <button class="btn btn-block btn-error btn-outline" @click="openDeleteConfirm(actionItem)" :disabled="isSystemRootFolder(actionItem)" x-text="t('delete')"></button>
+          <button class="btn btn-block" @click="actionItem = null" x-text="t('close')"></button>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="inputModal">
+      <div class="fixed inset-0 bg-black/40 z-[60] flex items-end" @click="inputModal = null">
+        <section class="w-full bg-base-100 rounded-t-2xl p-4 space-y-3" @click.stop>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold" x-text="inputModal.title || ''"></h3>
+            <button class="btn btn-xs btn-outline" @click="inputModal = null" x-text="t('close')"></button>
+          </div>
+          <input
+            class="input input-bordered w-full"
+            :placeholder="inputModal.kind === 'rename' ? t('rename') : t('createFolderPrompt')"
+            x-model="inputModal.value"
+          />
+          <div class="grid grid-cols-2 gap-2 pt-2">
+            <button class="btn btn-outline" @click="inputModal = null" x-text="t('cancel')"></button>
+            <button
+              class="btn btn-primary"
+              @click="inputModal.kind === 'createFolder' ? submitCreateFolder(inputModal.value || '') : submitRenameItem(inputModal.item, inputModal.value || '')"
+              x-text="t('save')"
+            ></button>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="confirmModal">
+      <div class="fixed inset-0 bg-black/40 z-[70] flex items-end" @click="confirmModal = null">
+        <section class="w-full bg-base-100 rounded-t-2xl p-4 space-y-3" @click.stop>
+          <h3 class="font-semibold" x-text="confirmModal.title || t('confirm')"></h3>
+          <p class="text-sm opacity-80" x-text="confirmModal.message || ''"></p>
+          <div class="grid grid-cols-2 gap-2 pt-2">
+            <button class="btn btn-outline" @click="confirmModal = null" x-text="t('cancel')"></button>
+            <button class="btn btn-error" @click="deleteItem(confirmModal.item)" x-text="t('confirm')"></button>
+          </div>
+        </section>
+      </div>
+    </template>
+
+  </main>
 
   <script>
     function loadHayOSClient() {
@@ -62,25 +619,18 @@
   </script>
 
   <script type="module">
-    import React from 'https://esm.sh/react@19.2.0';
-    import { createRoot } from 'https://esm.sh/react-dom@19.2.0/client';
-    import { getApp, getApps, initializeApp } from 'https://esm.sh/firebase@12.8.0/app';
-    import { getStorage, ref as storageRef, uploadBytesResumable } from 'https://esm.sh/firebase@12.8.0/storage';
-
-    const h = React.createElement;
+    const MAX_ENTRY_NAME_LENGTH = 120;
+    const INVALID_ENTRY_NAME_PATTERN = /[\u0000-\u001f\u007f]/;
+    const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
 
     const i18n = {
       en: {
         title: 'File Manager',
         subtitle: 'Mobile-first Local + Global explorer',
-        local: 'Local',
-        global: 'Global',
-        searchPlaceholder: 'Search files and folders',
-        empty: 'No items found.',
-        refresh: 'Refresh',
-        upload: 'Upload',
+        root: 'Root',
         folder: 'Folder',
         details: 'Details',
+        up: 'Up',
         close: 'Close',
         open: 'Open',
         rename: 'Rename',
@@ -91,34 +641,95 @@
         cancel: 'Cancel',
         confirm: 'Confirm',
         createFolderPrompt: 'Folder name',
+        upload: 'Upload',
         uploadPromptName: 'File name (e.g. image.jpg)',
         uploadPromptMime: 'MIME type (e.g. image/jpeg)',
         uploadPromptSize: 'File size bytes',
         uploadSectionTitle: 'Upload Section',
-        chooseFile: 'Choose file',
-        visibility: 'Visibility',
+        uploadSectionHint: 'Secondary tools',
         completeUpload: 'Complete Upload',
+        cancelUpload: 'Cancel Upload',
+        uploadSession: 'Upload session',
+        uploadSessionActive: 'Active upload',
+        completeNow: 'Complete now',
+        systemFolders: 'System folders',
+        openFolder: 'Open folder',
+        itemsCount: 'items',
+        filterAll: 'All',
+        filterImages: 'Images',
+        filterAudio: 'Audio',
+        viewList: 'List view',
+        viewGrid: 'Grid view',
+        fileTypeFolder: 'Folder',
+        fileTypeImage: 'Image',
+        fileTypeAudio: 'Audio',
+        fileTypeVideo: 'Video',
+        fileTypeDocument: 'Document',
+        fileTypeFile: 'File',
+        visibilityPrivate: 'private',
+        visibilityFollowers: 'followers',
+        visibilityPublic: 'public',
+        visibilityUnknown: 'hidden',
+        readonlyShort: 'ro',
+        editableShort: 'rw',
+        searchPlaceholder: 'Search files and folders',
+        clearSearch: 'Clear search',
+        filesSection: 'Files',
+        empty: 'No items found.',
+        emptyHint: 'Try another folder, clear search, or upload a new file.',
+        refresh: 'Refresh',
+        folderCreate: 'Create folder',
+        uploadTools: 'Upload tools',
+        more: 'More',
+        reindex: 'Reindex',
+        storageUsage: 'Storage usage',
+        filesCount: 'Files',
+        imagesCount: 'Images',
+        audioCount: 'Audio',
+        indexedAt: 'Indexed',
+        statusLoading: 'Loading...',
+        statusLabel: 'Status',
+        statusReady: 'Ready',
+        statusRefreshing: 'Refreshing...',
+        statusReindexing: 'Reindexing...',
+        reindexDone: 'Storage index rebuilt',
         uploadInitDone: 'Upload session initialized',
         uploadCompleteDone: 'Upload completed',
         folderCreated: 'Folder created',
         renamed: 'Renamed',
         moved: 'Moved',
         deleted: 'Deleted',
-        statusReady: 'Ready',
-        statusLoading: 'Loading...',
-        statusRefreshing: 'Refreshing...',
+        statusPermissionDenied: 'Permission denied',
+        errorPermissionDenied: 'Access denied. Check app permissions and sign in again.',
+        errorInvalidName: 'Invalid name. Use at least 1 visible character.',
+        errorInvalidCharacters: 'Name contains unsupported characters.',
+        errorNameTooLong: 'Name is too long (max 120 chars).',
+        errorNameExists: 'An item with this name already exists here.',
+        errorNoChanges: 'No changes to apply.',
+        errorAlreadyInRoot: 'Item is already in Root.',
+        errorUploadExpired: 'Upload session expired. Please retry upload.',
+        errorUploadNoFile: 'Choose a file before uploading.',
+        errorUploadSizeMismatch: 'Selected file size does not match draft size.',
+        errorInvalidMimeType: 'Invalid MIME type.',
+        errorInvalidSizeBytes: 'Invalid file size. Use a positive number.',
+        errorUploadMimeMismatch: 'Selected file MIME type does not match draft MIME type.',
+        errorUploadSessionActive: 'An upload session is active. Complete or cancel it first.',
+        errorQuotaExceeded: 'Storage limit reached (500 MB). Delete files and retry.',
+        errorSearchLoading: 'Search failed. Please retry.',
+        storageUnavailable: 'Upload service is temporarily unavailable on this device.',
+        retryUploadService: 'Retry upload service',
+        uploadCanceled: 'Upload canceled',
+        statusStorageChecking: 'Checking upload service...',
+        statusUploading: 'Uploading...',
+        systemLocked: 'System folder is protected',
       },
       hy: {
         title: 'Ֆայլերի Կառավարիչ',
         subtitle: 'Mobile-first Local + Global դիտարկիչ',
-        local: 'Local',
-        global: 'Global',
-        searchPlaceholder: 'Փնտրել ֆայլեր և թղթապանակներ',
-        empty: 'Տվյալներ չեն գտնվել։',
-        refresh: 'Թարմացնել',
-        upload: 'Վերբեռնել',
+        root: 'Արմատ',
         folder: 'Թղթապանակ',
         details: 'Մանրամասներ',
+        up: 'Վեր',
         close: 'Փակել',
         open: 'Բացել',
         rename: 'Վերանվանել',
@@ -129,653 +740,972 @@
         cancel: 'Չեղարկել',
         confirm: 'Հաստատել',
         createFolderPrompt: 'Թղթապանակի անուն',
+        upload: 'Վերբեռնել',
         uploadPromptName: 'Ֆայլի անուն (օր. image.jpg)',
         uploadPromptMime: 'MIME type (օր. image/jpeg)',
         uploadPromptSize: 'Ֆայլի չափը byte-երով',
         uploadSectionTitle: 'Վերբեռնման Բաժին',
-        chooseFile: 'Ընտրել ֆայլ',
-        visibility: 'Տեսանելիություն',
+        uploadSectionHint: 'Լրացուցիչ գործիքներ',
         completeUpload: 'Ավարտել Վերբեռնումը',
+        cancelUpload: 'Չեղարկել Upload-ը',
+        uploadSession: 'Upload session',
+        uploadSessionActive: 'Ակտիվ upload',
+        completeNow: 'Ավարտել հիմա',
+        systemFolders: 'Համակարգային պանակներ',
+        openFolder: 'Բացել պանակը',
+        itemsCount: 'միավոր',
+        filterAll: 'Բոլորը',
+        filterImages: 'Նկարներ',
+        filterAudio: 'Երաժշտություն',
+        viewList: 'Ցուցակ',
+        viewGrid: 'Գրիդ',
+        fileTypeFolder: 'Թղթապանակ',
+        fileTypeImage: 'Նկար',
+        fileTypeAudio: 'Երաժշտություն',
+        fileTypeVideo: 'Տեսանյութ',
+        fileTypeDocument: 'Փաստաթուղթ',
+        fileTypeFile: 'Ֆայլ',
+        visibilityPrivate: 'private',
+        visibilityFollowers: 'followers',
+        visibilityPublic: 'public',
+        visibilityUnknown: 'թաքնված',
+        readonlyShort: 'ro',
+        editableShort: 'rw',
+        searchPlaceholder: 'Փնտրել ֆայլեր և թղթապանակներ',
+        clearSearch: 'Մաքրել փնտրումը',
+        filesSection: 'Ֆայլեր',
+        empty: 'Տվյալներ չեն գտնվել։',
+        emptyHint: 'Փորձիր այլ պանակ, մաքրիր փնտրումը կամ վերբեռնիր նոր ֆայլ։',
+        refresh: 'Թարմացնել',
+        folderCreate: 'Ստեղծել պանակ',
+        uploadTools: 'Upload գործիքներ',
+        more: 'Ավելին',
+        reindex: 'Վերաինդեքսավորել',
+        storageUsage: 'Պահեստի օգտագործում',
+        filesCount: 'Ֆայլեր',
+        imagesCount: 'Նկարներ',
+        audioCount: 'Երաժշտություն',
+        indexedAt: 'Ինդեքսավորված',
+        statusLoading: 'Բեռնվում է...',
+        statusLabel: 'Կարգավիճակ',
+        statusReady: 'Պատրաստ է',
+        statusRefreshing: 'Թարմացվում է...',
+        statusReindexing: 'Վերաինդեքսավորվում է...',
+        reindexDone: 'Պահեստի ինդեքսը վերակառուցված է',
         uploadInitDone: 'Upload session-ը սկսված է',
         uploadCompleteDone: 'Upload-ը ավարտված է',
         folderCreated: 'Թղթապանակը ստեղծված է',
         renamed: 'Վերանվանված է',
         moved: 'Տեղափոխված է',
         deleted: 'Ջնջված է',
-        statusReady: 'Պատրաստ է',
-        statusLoading: 'Բեռնվում է...',
-        statusRefreshing: 'Թարմացվում է...',
+        statusPermissionDenied: 'Թույլտվությունը մերժված է',
+        errorPermissionDenied: 'Մուտքը արգելված է։ Ստուգիր թույլտվությունները և նորից մուտք գործիր։',
+        errorInvalidName: 'Անվավեր անուն։ Օգտագործիր առնվազն 1 տեսանելի սիմվոլ։',
+        errorInvalidCharacters: 'Անունը պարունակում է չաջակցվող սիմվոլներ։',
+        errorNameTooLong: 'Անունը շատ երկար է (առավելագույնը 120 սիմվոլ)։',
+        errorNameExists: 'Այս անվամբ միավոր արդեն կա այս պանակում։',
+        errorNoChanges: 'Փոփոխություն չկա։',
+        errorAlreadyInRoot: 'Ֆայլը արդեն Արմատում է։',
+        errorUploadExpired: 'Upload session-ը ժամկետանց է։ Կրկին փորձիր վերբեռնել։',
+        errorUploadNoFile: 'Մինչ վերբեռնումը ընտրիր ֆայլ։',
+        errorUploadSizeMismatch: 'Ընտրված ֆայլի չափը չի համընկնում draft չափին։',
+        errorInvalidMimeType: 'Անվավեր MIME type։',
+        errorInvalidSizeBytes: 'Ֆայլի չափը անվավեր է։ Օգտագործիր դրական թիվ։',
+        errorUploadMimeMismatch: 'Ընտրված ֆայլի MIME type-ը չի համապատասխանում draft MIME type-ին։',
+        errorUploadSessionActive: 'Արդեն կա ակտիվ upload session։ Սկզբում ավարտիր կամ չեղարկիր այն։',
+        errorQuotaExceeded: 'Պահեստի սահմանաչափը լցված է (500 MB)։ Ջնջիր ֆայլեր և կրկին փորձիր։',
+        errorSearchLoading: 'Փնտրման բեռնումը ձախողվել է։ Կրկին փորձիր։',
+        storageUnavailable: 'Վերբեռնման ծառայությունը ժամանակավոր անհասանելի է այս սարքում։',
+        retryUploadService: 'Կրկին փորձել upload service-ը',
+        uploadCanceled: 'Upload-ը չեղարկված է',
+        statusStorageChecking: 'Ստուգվում է upload service-ը...',
+        statusUploading: 'Վերբեռնվում է...',
+        systemLocked: 'Համակարգային պանակը պաշտպանված է',
       },
     };
 
     function formatBytes(value) {
-      const bytes = typeof value === 'number' ? value : 0;
+      const bytes = typeof value === 'number' ? value : Number(value || 0);
       if (!Number.isFinite(bytes) || bytes <= 0) return '-';
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     }
 
-    function FileManagerApp() {
-      const [loading, setLoading] = React.useState(true);
-      const [status, setStatus] = React.useState('Loading...');
-      const [error, setError] = React.useState('');
-      const [language, setLanguage] = React.useState('en');
-      const [query, setQuery] = React.useState('');
-      const [user, setUser] = React.useState(null);
-      const [osTheme, setOsTheme] = React.useState(null);
-      const [client, setClient] = React.useState(null);
-      const [items, setItems] = React.useState([]);
-      const [selectedItem, setSelectedItem] = React.useState(null);
-      const [actionItem, setActionItem] = React.useState(null);
-      const [activeUploadSession, setActiveUploadSession] = React.useState(null);
-      const [inputModal, setInputModal] = React.useState(null);
-      const [confirmModal, setConfirmModal] = React.useState(null);
-      const [uploadDraft, setUploadDraft] = React.useState({
-        fileName: '',
-        mimeType: 'image/jpeg',
-        sizeBytes: '0',
-        visibility: 'private',
-        file: null,
-      });
-      const [firebaseStorage, setFirebaseStorage] = React.useState(null);
+    function normalizeParentId(value) {
+      return typeof value === 'string' && value.trim() ? value.trim() : null;
+    }
 
-      const t = (key) => {
-        const dict = i18n[language] || i18n.en;
-        return dict[key] || i18n.en[key] || key;
-      };
+    function sanitizeEntryName(value) {
+      if (typeof value !== 'string') return '';
+      return value.replace(/[\\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
 
-      React.useEffect(() => {
-        let mounted = true;
-        let unsubscribeLanguage = null;
+    function getNameValidationError(name) {
+      if (!name || name === '.' || name === '..') return 'errorInvalidName';
+      if (name.length > MAX_ENTRY_NAME_LENGTH) return 'errorNameTooLong';
+      if (INVALID_ENTRY_NAME_PATTERN.test(name)) return 'errorInvalidCharacters';
+      return '';
+    }
 
-        async function init() {
+    function parsePositiveSizeBytes(value) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) return null;
+      return Math.trunc(numeric);
+    }
+
+    function normalizeStorageStat(value, fallback = 0) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) return fallback;
+      return Math.trunc(numeric);
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        const slice = bytes.subarray(i, i + chunk);
+        binary += String.fromCharCode(...slice);
+      }
+      return btoa(binary);
+    }
+
+    function mapErrorMessage(raw, t) {
+      const rawText = raw && raw.message ? String(raw.message) : String(raw || '');
+      const normalized = rawText.toUpperCase();
+      if (normalized.includes('PERMISSION_DENIED')) return t('errorPermissionDenied');
+      if (normalized.includes('QUOTA_EXCEEDED')) return t('errorQuotaExceeded');
+      if (normalized.includes('UPLOAD_SESSION_EXPIRED')) return t('errorUploadExpired');
+      if (normalized.includes('SERVICE STORAGE IS NOT AVAILABLE')) return t('storageUnavailable');
+      return rawText || 'Unknown error';
+    }
+
+    function registerFileManagerApp() {
+      const factory = window.__hayosFileManagerFactory || (() => ({
+        ROOT_SYSTEM_FOLDERS: ['Music', 'Pictures'],
+        loading: true,
+        status: 'Loading...',
+        error: '',
+        language: 'en',
+        query: '',
+        user: null,
+        osTheme: null,
+        client: null,
+        storageReady: false,
+        storageQuota: null,
+        items: [],
+        currentDirectoryId: null,
+        fileFilter: 'all',
+        uploadPanelOpen: false,
+        viewMode: 'list',
+        selectedItem: null,
+        actionItem: null,
+        inputModal: null,
+        confirmModal: null,
+        activeUploadSession: null,
+        uploadBusy: false,
+        uploadDraft: {
+          fileName: '',
+          mimeType: 'image/jpeg',
+          sizeBytes: '0',
+          visibility: 'private',
+          file: null,
+        },
+        queryTimerId: null,
+        loadRequestSeq: 0,
+
+        t(key) {
+          const dict = i18n[this.language] || i18n.en;
+          return dict[key] || i18n.en[key] || key;
+        },
+
+        formatBytes,
+        normalizeStorageStat,
+        
+        formatDateShort(value) {
+          if (!value) return '-';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return '-';
+          const locale = this.language === 'hy' ? 'hy-AM' : 'en-US';
+          return new Intl.DateTimeFormat(locale, {
+            month: 'short',
+            day: 'numeric',
+          }).format(date);
+        },
+
+        itemTypeLabel(item) {
+          if (!item || item.kind === 'folder') return this.t('fileTypeFolder');
+          const mime = typeof item.mimeType === 'string' ? item.mimeType.toLowerCase() : '';
+          if (mime.startsWith('image/')) return this.t('fileTypeImage');
+          if (mime.startsWith('audio/')) return this.t('fileTypeAudio');
+          if (mime.startsWith('video/')) return this.t('fileTypeVideo');
+          if (mime.startsWith('text/') || mime.includes('json') || mime.includes('pdf')) return this.t('fileTypeDocument');
+          return this.t('fileTypeFile');
+        },
+
+        visibilityLabel(value) {
+          if (value === 'private') return this.t('visibilityPrivate');
+          if (value === 'followers') return this.t('visibilityFollowers');
+          if (value === 'public') return this.t('visibilityPublic');
+          return this.t('visibilityUnknown');
+        },
+
+        itemMetaLabel(item) {
+          if (!item) return '-';
+          if (item.kind === 'folder') {
+            const count = this.childrenCountByParentId().get(item.id) || 0;
+            return `${count} ${this.t('itemsCount')}`;
+          }
+          return `${this.itemTypeLabel(item)} • ${this.formatBytes(item.sizeBytes)}`;
+        },
+
+        quotaUsedBytes() {
+          return this.storageQuota ? normalizeStorageStat(this.storageQuota.usedBytes, 0) : 0;
+        },
+
+        quotaMaxBytes() {
+          return this.storageQuota ? Math.max(1, normalizeStorageStat(this.storageQuota.maxBytes, 500 * 1024 * 1024)) : 500 * 1024 * 1024;
+        },
+
+        quotaPercent() {
+          const used = this.quotaUsedBytes();
+          const max = this.quotaMaxBytes();
+          return Math.max(0, Math.min(100, Math.round((used / max) * 100)));
+        },
+
+        hasSearchQuery() {
+          return typeof this.query === 'string' && this.query.trim().length > 0;
+        },
+
+        canUseStorageBridge() {
+          return Boolean(
+            this.client
+            && typeof this.client.storageUploadInit === 'function'
+            && typeof this.client.storageUploadWriteChunk === 'function'
+            && typeof this.client.storageUploadComplete === 'function'
+            && typeof this.client.storageUploadCancel === 'function',
+          );
+        },
+
+        async checkStorageHealth({ withStatus = false } = {}) {
+          const hasBridge = this.canUseStorageBridge();
+          this.storageReady = hasBridge;
+          if (!hasBridge || !this.client) return false;
+          if (typeof this.client.storageQuotaGet !== 'function') return this.storageReady;
+          const previousStatus = this.status;
+          try {
+            if (withStatus) {
+              this.status = this.t('statusStorageChecking');
+            }
+            await this.client.storageQuotaGet();
+            this.storageReady = true;
+            if (withStatus) {
+              this.status = this.t('statusReady');
+            } else {
+              this.status = previousStatus;
+            }
+            return true;
+          } catch (err) {
+            const message = mapErrorMessage(err, this.t.bind(this));
+            if (message === this.t('storageUnavailable')) {
+              this.storageReady = false;
+              this.clearActiveUploadSession();
+            }
+            if (withStatus) {
+              this.status = this.storageReady ? this.t('statusReady') : message;
+            } else {
+              this.status = previousStatus;
+            }
+            return this.storageReady;
+          }
+        },
+
+        hasActiveUploadSession() {
+          return Boolean(
+            this.activeUploadSession
+            && typeof this.activeUploadSession.sessionId === 'string'
+            && this.activeUploadSession.sessionId.trim().length > 0,
+          );
+        },
+
+        clearActiveUploadSession() {
+          this.activeUploadSession = null;
+          this.uploadBusy = false;
+        },
+
+        itemById() {
+          const map = new Map();
+          for (const item of this.items) {
+            if (item && typeof item.id === 'string') {
+              map.set(item.id, item);
+            }
+          }
+          return map;
+        },
+
+        breadcrumbs() {
+          const chain = [{ id: null, name: this.t('root') }];
+          const map = this.itemById();
+          let cursor = this.currentDirectoryId;
+          let guard = 0;
+          while (cursor && guard < 32) {
+            const node = map.get(cursor);
+            if (!node) break;
+            chain.push({ id: node.id, name: node.name || node.id });
+            cursor = normalizeParentId(node.parentId);
+            guard += 1;
+          }
+          return chain;
+        },
+
+        visibleItems() {
+          const hasSearchQuery = typeof this.query === 'string' && this.query.trim().length > 0;
+          if (hasSearchQuery) return this.items;
+          return this.items.filter((item) => normalizeParentId(item && item.parentId) === this.currentDirectoryId);
+        },
+
+        filteredVisibleItems() {
+          const rows = this.visibleItems();
+          if (this.fileFilter === 'all') return rows;
+          return rows.filter((item) => {
+            if (!item) return false;
+            if (item.kind === 'folder') return true;
+            const mime = typeof item.mimeType === 'string' ? item.mimeType.toLowerCase() : '';
+            if (this.fileFilter === 'images') return mime.startsWith('image/');
+            if (this.fileFilter === 'audio') return mime.startsWith('audio/');
+            return true;
+          });
+        },
+
+        childrenCountByParentId() {
+          const map = new Map();
+          for (const item of this.items) {
+            if (!item) continue;
+            const parentId = normalizeParentId(item.parentId);
+            map.set(parentId, (map.get(parentId) || 0) + 1);
+          }
+          return map;
+        },
+
+        rootSystemFolders() {
+          if (this.currentDirectoryId !== null) return [];
+          return this.items
+            .filter((item) => {
+              if (!item || item.kind !== 'folder') return false;
+              const parentId = normalizeParentId(item.parentId);
+              if (parentId !== null) return false;
+              const name = typeof item.name === 'string' ? item.name.trim().toLowerCase() : '';
+              return name === 'music' || name === 'pictures';
+            })
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        },
+
+        isSystemRootFolder(item) {
+          if (!item || item.kind !== 'folder') return false;
+          if (normalizeParentId(item.parentId) !== null) return false;
+          const name = typeof item.name === 'string' ? item.name.trim().toLowerCase() : '';
+          return this.ROOT_SYSTEM_FOLDERS.some((folderName) => folderName.toLowerCase() === name);
+        },
+
+        hasSiblingNameConflict(name, parentId, excludeId = null) {
+          const expectedName = String(name || '').trim().toLowerCase();
+          const expectedParentId = normalizeParentId(parentId);
+          if (!expectedName) return false;
+          return this.items.some((item) => {
+            if (!item || typeof item.id !== 'string') return false;
+            if (excludeId && item.id === excludeId) return false;
+            const itemName = typeof item.name === 'string' ? item.name.trim().toLowerCase() : '';
+            const itemParentId = normalizeParentId(item.parentId);
+            return itemName === expectedName && itemParentId === expectedParentId;
+          });
+        },
+
+        async ensureRootSystemFolders(rows) {
+          if (!this.client) return rows;
+          const sourceRows = Array.isArray(rows) ? rows : [];
+          const existingRootFolderNames = new Set(
+            sourceRows
+              .filter((item) => item && item.kind === 'folder' && normalizeParentId(item.parentId) === null)
+              .map((item) => (typeof item.name === 'string' ? item.name.trim().toLowerCase() : ''))
+              .filter(Boolean),
+          );
+          const missing = this.ROOT_SYSTEM_FOLDERS.filter((folderName) => !existingRootFolderNames.has(folderName.toLowerCase()));
+          if (missing.length === 0) return sourceRows;
+          for (const folderName of missing) {
+            await this.client.filesCreateFolder(folderName, { space: 'local', parentId: null });
+          }
+          const refreshed = await this.client.filesList({ space: 'local', limit: 160 });
+          return Array.isArray(refreshed) ? refreshed : sourceRows;
+        },
+
+        async refreshStorageQuota() {
+          if (!this.client || typeof this.client.storageQuotaGet !== 'function') return;
+          try {
+            const data = await this.client.storageQuotaGet();
+            const maxBytes = normalizeStorageStat(data && data.maxBytes, 500 * 1024 * 1024);
+            const usedBytes = normalizeStorageStat(data && data.usedBytes, 0);
+            this.storageQuota = {
+              usedBytes: Math.min(usedBytes, maxBytes),
+              maxBytes,
+              fileCount: normalizeStorageStat(data && data.fileCount, 0),
+              imageCount: normalizeStorageStat(data && data.imageCount, 0),
+              audioCount: normalizeStorageStat(data && data.audioCount, 0),
+              lastIndexedAt: data && typeof data.lastIndexedAt === 'string' ? data.lastIndexedAt : null,
+            };
+          } catch {
+            this.storageQuota = null;
+          }
+        },
+
+        setCurrentDirectoryId(value) {
+          this.currentDirectoryId = normalizeParentId(value);
+          this.selectedItem = null;
+          this.actionItem = null;
+        },
+
+        async openBreadcrumb(value) {
+          if (this.hasSearchQuery()) {
+            this.query = '';
+            if (this.queryTimerId) {
+              window.clearTimeout(this.queryTimerId);
+            }
+            this.setCurrentDirectoryId(value);
+            await this.loadItems('');
+            return;
+          }
+          this.setCurrentDirectoryId(value);
+        },
+
+        goUp() {
+          const hasSearchQuery = typeof this.query === 'string' && this.query.trim().length > 0;
+          if (hasSearchQuery) return;
+          if (this.currentDirectoryId === null) return;
+          const map = this.itemById();
+          const current = map.get(this.currentDirectoryId);
+          this.currentDirectoryId = current ? normalizeParentId(current.parentId) : null;
+          this.selectedItem = null;
+          this.actionItem = null;
+        },
+
+        async init() {
+          this.status = this.t('statusLoading');
           try {
             await loadHayOSClient();
             const appId = new URLSearchParams(window.location.search).get('appId') || 'file-manager';
             const nextClient = new window.HayOSClient(appId);
-            if (!mounted) return;
-            setClient(nextClient);
+            this.client = nextClient;
 
             const auth = await nextClient.ensureAuthenticated();
-            if (!mounted) return;
-            setUser(auth.user || null);
+            this.user = auth.user || null;
 
             const nextLanguage = await nextClient.getLanguage();
-            if (!mounted) return;
             const resolvedLang = nextLanguage === 'hy' ? 'hy' : 'en';
-            setLanguage(resolvedLang);
+            this.language = resolvedLang;
             document.documentElement.lang = resolvedLang;
 
-            unsubscribeLanguage = nextClient.onLanguageChanged((next) => {
+            nextClient.onLanguageChanged((next) => {
               const lang = next === 'hy' ? 'hy' : 'en';
-              setLanguage(lang);
+              this.language = lang;
               document.documentElement.lang = lang;
             });
 
             const theme = typeof nextClient.getTheme === 'function'
               ? await nextClient.getTheme()
               : await nextClient.requestTheme();
-            if (!mounted) return;
-            setOsTheme(theme || null);
-            const firebaseConfig = await nextClient.firebaseConfigGet();
-            const appForStorage = getApps().length > 0
-              ? getApp()
-              : initializeApp({
-                apiKey: firebaseConfig.apiKey,
-                authDomain: firebaseConfig.authDomain,
-                projectId: firebaseConfig.projectId,
-                appId: firebaseConfig.appId,
-                measurementId: firebaseConfig.measurementId || undefined,
-                storageBucket: firebaseConfig.storageBucket,
-              });
-            setFirebaseStorage(getStorage(appForStorage));
-            setStatus('Ready');
-            await loadItems(nextClient, '');
+            this.osTheme = theme || null;
+
+            await this.checkStorageHealth();
+
+            await this.loadItems('');
+            await this.refreshStorageQuota();
+            this.status = this.t('statusReady');
           } catch (err) {
-            if (!mounted) return;
-            setError(err && err.message ? err.message : String(err));
-            setStatus('Init failed');
+            this.error = mapErrorMessage(err, this.t.bind(this));
+            this.status = this.error;
           } finally {
-            if (mounted) {
-              setLoading(false);
+            this.loading = false;
+          }
+        },
+
+        async loadItems(searchText) {
+          if (!this.client) return;
+          const requestSeq = this.loadRequestSeq + 1;
+          this.loadRequestSeq = requestSeq;
+          try {
+            this.error = '';
+            const baseParams = { space: 'local', limit: 120 };
+            const text = typeof searchText === 'string' ? searchText.trim() : '';
+            let rows = [];
+            if (text) {
+              rows = await this.client.filesSearch({ ...baseParams, query: text });
+            } else {
+              rows = await this.client.filesList(baseParams);
+              rows = await this.ensureRootSystemFolders(rows);
+            }
+            const nextItems = Array.isArray(rows) ? rows.slice() : [];
+            nextItems.sort((a, b) => {
+              const aKind = a && a.kind === 'folder' ? 0 : 1;
+              const bKind = b && b.kind === 'folder' ? 0 : 1;
+              if (aKind !== bKind) return aKind - bKind;
+              const aName = a && typeof a.name === 'string' ? a.name.toLowerCase() : '';
+              const bName = b && typeof b.name === 'string' ? b.name.toLowerCase() : '';
+              return aName.localeCompare(bName);
+            });
+            if (requestSeq !== this.loadRequestSeq) return;
+            this.items = nextItems;
+            this.status = this.t('statusReady');
+          } catch (err) {
+            if (requestSeq !== this.loadRequestSeq) return;
+            const message = mapErrorMessage(err, this.t.bind(this));
+            if (message === this.t('storageUnavailable')) {
+              this.storageReady = false;
+              this.error = '';
+              this.status = this.t('statusReady');
+              return;
+            }
+            this.error = typeof searchText === 'string' && searchText.trim().length > 0
+              ? this.t('errorSearchLoading')
+              : message;
+            const rawText = err && err.message ? String(err.message) : String(err || '');
+            const permissionDenied = rawText.toUpperCase().includes('PERMISSION_DENIED');
+            this.status = permissionDenied ? this.t('statusPermissionDenied') : message;
+          }
+        },
+
+        onQueryInput() {
+          if (this.queryTimerId) {
+            window.clearTimeout(this.queryTimerId);
+          }
+          const queryText = typeof this.query === 'string' ? this.query.trim() : '';
+          this.queryTimerId = window.setTimeout(async () => {
+            await this.loadItems(queryText);
+          }, 220);
+        },
+
+        async clearSearch() {
+          this.query = '';
+          if (this.queryTimerId) {
+            window.clearTimeout(this.queryTimerId);
+          }
+          await this.loadItems('');
+        },
+
+        async openItem(item) {
+          if (!item || !this.client) return;
+          this.actionItem = null;
+          if (item.kind === 'folder') {
+            if (this.hasSearchQuery()) {
+              this.query = '';
+              if (this.queryTimerId) {
+                window.clearTimeout(this.queryTimerId);
+              }
+              this.setCurrentDirectoryId(item.id);
+              await this.loadItems('');
+              return;
+            }
+            this.setCurrentDirectoryId(item.id);
+            return;
+          }
+          try {
+            const data = await this.client.filesGet(item.id, { space: 'local' });
+            this.selectedItem = data || item;
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+          }
+        },
+
+        async onRefresh() {
+          if (!this.client) return;
+          this.status = this.t('statusRefreshing');
+          try {
+            if (!this.storageReady) {
+              await this.checkStorageHealth();
+            }
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+            this.status = this.t('statusReady');
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+            this.status = this.error;
+          }
+        },
+
+        async onReindex() {
+          if (!this.client || typeof this.client.storageIndexRebuild !== 'function') return;
+          try {
+            this.error = '';
+            this.status = this.t('statusReindexing');
+            await this.client.storageIndexRebuild();
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+            this.status = this.t('reindexDone');
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+            this.status = this.error;
+          }
+        },
+
+        onFilePicked(event) {
+          const file = event && event.target && event.target.files && event.target.files[0]
+            ? event.target.files[0]
+            : null;
+          if (!file) return;
+          this.error = '';
+          this.uploadDraft = {
+            ...this.uploadDraft,
+            fileName: sanitizeEntryName(typeof file.name === 'string' ? file.name : this.uploadDraft.fileName),
+            mimeType: typeof file.type === 'string' && file.type ? file.type : this.uploadDraft.mimeType,
+            sizeBytes: String(typeof file.size === 'number' ? file.size : this.uploadDraft.sizeBytes),
+            file,
+          };
+          this.status = this.t('statusReady');
+        },
+
+        async retryStorageAvailability() {
+          await this.checkStorageHealth({ withStatus: true });
+          if (this.storageReady) {
+            if (this.error === this.t('storageUnavailable')) {
+              this.error = '';
+            }
+            this.status = this.t('statusReady');
+            return;
+          }
+          this.clearActiveUploadSession();
+          this.error = this.t('storageUnavailable');
+          this.status = this.error;
+        },
+
+        async submitUpload(payload) {
+          if (!this.client) return;
+          if (this.uploadBusy) return;
+          if (this.hasActiveUploadSession()) {
+            this.error = this.t('errorUploadSessionActive');
+            this.status = this.error;
+            return;
+          }
+          if (!this.storageReady) {
+            this.error = this.t('storageUnavailable');
+            this.status = this.error;
+            return;
+          }
+          const fileName = sanitizeEntryName(payload && payload.fileName);
+          const mimeType = typeof (payload && payload.mimeType) === 'string' ? payload.mimeType.trim() : '';
+          const sizeBytes = parsePositiveSizeBytes(payload && payload.sizeBytes);
+          const visibility = typeof (payload && payload.visibility) === 'string' ? payload.visibility : 'private';
+          const file = payload && payload.file instanceof File
+            ? payload.file
+            : (this.uploadDraft.file instanceof File ? this.uploadDraft.file : null);
+          const validationErrorKey = getNameValidationError(fileName);
+          if (validationErrorKey) {
+            this.error = this.t(validationErrorKey);
+            return;
+          }
+          if (!MIME_TYPE_PATTERN.test(mimeType)) {
+            this.error = this.t('errorInvalidMimeType');
+            return;
+          }
+          if (!sizeBytes) {
+            this.error = this.t('errorInvalidSizeBytes');
+            return;
+          }
+          if (!file) {
+            this.error = this.t('errorUploadNoFile');
+            return;
+          }
+          if (this.hasSiblingNameConflict(fileName, this.currentDirectoryId)) {
+            this.error = this.t('errorNameExists');
+            return;
+          }
+          if (typeof file.size === 'number' && file.size !== sizeBytes) {
+            this.error = this.t('errorUploadSizeMismatch');
+            return;
+          }
+          if (typeof file.type === 'string' && file.type.trim()) {
+            const actualMimeType = file.type.trim().toLowerCase();
+            if (actualMimeType !== mimeType.toLowerCase()) {
+              this.error = this.t('errorUploadMimeMismatch');
+              return;
             }
           }
-        }
-
-        init();
-
-        return () => {
-          mounted = false;
-          if (typeof unsubscribeLanguage === 'function') {
-            unsubscribeLanguage();
-          }
-        };
-      }, []);
-
-      const loadItems = React.useCallback(async (apiClient, searchText) => {
-        if (!apiClient) return;
-        try {
-          setError('');
-          const baseParams = {
-            space: 'local',
-            limit: 80,
-          };
-          const rows = searchText.trim()
-            ? await apiClient.filesSearch({ ...baseParams, query: searchText.trim() })
-            : await apiClient.filesList(baseParams);
-          setItems(Array.isArray(rows) ? rows : []);
-          setStatus('Ready');
-        } catch (err) {
-          const message = err && err.message ? err.message : String(err);
-          setError(message);
-          setStatus(message.includes('PERMISSION_DENIED') ? 'Permission denied' : message);
-        }
-      }, []);
-
-      React.useEffect(() => {
-        if (!client || loading) return;
-        const timer = window.setTimeout(() => {
-          loadItems(client, query);
-        }, 200);
-        return () => window.clearTimeout(timer);
-      }, [client, loading, query, loadItems]);
-
-      const onRefresh = async () => {
-        if (!client) return;
-        setStatus(t('statusRefreshing'));
-        await loadItems(client, query);
-      };
-
-      const openItem = async (item) => {
-        if (!client || !item) return;
-        try {
-          const data = await client.filesGet(item.id, {
-            space: 'local',
-          });
-          setSelectedItem(data || item);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const submitCreateFolder = async (name) => {
-        if (!client || !name || !name.trim()) return;
-        try {
-          await client.filesCreateFolder(name.trim(), {
-            space: 'local',
-            parentId: null,
-          });
-          setInputModal(null);
-          setStatus(t('folderCreated'));
-          await loadItems(client, query);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const submitUpload = async (payload) => {
-        if (!client || !firebaseStorage) return;
-        const fileName = typeof payload?.fileName === 'string' ? payload.fileName.trim() : '';
-        const mimeType = typeof payload?.mimeType === 'string' ? payload.mimeType.trim() : '';
-        const sizeBytes = Number(payload?.sizeBytes);
-        const visibility = typeof payload?.visibility === 'string' ? payload.visibility : 'private';
-        const file = payload?.file instanceof File ? payload.file : null;
-        if (!fileName || !mimeType || !Number.isFinite(sizeBytes) || sizeBytes <= 0) return;
-        try {
-          const initData = await client.filesUploadInit(
-            { fileName: fileName.trim(), mimeType: mimeType.trim(), sizeBytes, visibility },
-            { space: 'local' },
-          );
-          if (!file || !initData?.targetPath || !initData?.sessionId) {
-            throw new Error('Upload file or target path missing');
-          }
-          await new Promise((resolve, reject) => {
-            const task = uploadBytesResumable(
-              storageRef(firebaseStorage, initData.targetPath),
-              file,
-              { contentType: mimeType.trim() },
+          try {
+            this.uploadBusy = true;
+            this.error = '';
+            this.status = this.t('statusUploading');
+            const uploadParentId = this.currentDirectoryId;
+            const initData = await this.client.storageUploadInit(
+              { fileName: fileName.trim(), mimeType: mimeType.trim(), sizeBytes, visibility },
             );
-            task.on('state_changed', undefined, reject, resolve);
-          });
-          setInputModal(null);
-          setActiveUploadSession(initData);
-          setStatus(t('uploadInitDone'));
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
+            if (!initData || !initData.sessionId) {
+              throw new Error('Upload file or target path missing');
+            }
+            const sessionId = String(initData.sessionId || '').trim();
+            this.activeUploadSession = { ...initData, sessionId, parentId: uploadParentId };
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const chunkSize = 256 * 1024;
+            const totalChunks = Math.max(1, Math.ceil(bytes.length / chunkSize));
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+              const start = chunkIndex * chunkSize;
+              const end = Math.min(start + chunkSize, bytes.length);
+              const chunkBase64 = bytesToBase64(bytes.subarray(start, end));
+              await this.client.storageUploadWriteChunk(sessionId, chunkBase64, chunkIndex, totalChunks);
+            }
+            this.status = this.t('uploadInitDone');
+          } catch (err) {
+            if (this.hasActiveUploadSession()) {
+              try {
+                await this.client.storageUploadCancel(String(this.activeUploadSession.sessionId));
+              } catch {
+                // ignore cancel failure
+              }
+            }
+            this.clearActiveUploadSession();
+            const message = mapErrorMessage(err, this.t.bind(this));
+            if (message === this.t('storageUnavailable')) {
+              this.storageReady = false;
+            }
+            this.error = message;
+            this.status = this.error;
+          } finally {
+            this.uploadBusy = false;
+          }
+        },
+
+        async cancelActiveUploadSession() {
+          if (!this.client || !this.hasActiveUploadSession()) return;
+          if (this.uploadBusy) return;
+          try {
+            this.uploadBusy = true;
+            await this.client.storageUploadCancel(String(this.activeUploadSession.sessionId));
+            this.error = '';
+            this.status = this.t('uploadCanceled');
+          } catch {
+            // ignore cancel failures
+          } finally {
+            this.clearActiveUploadSession();
+            if (!this.status || this.status === this.t('statusUploading')) {
+              this.status = this.t('statusReady');
+            }
+          }
+        },
+
+        async completeUpload() {
+          if (!this.client || !this.hasActiveUploadSession()) return;
+          if (this.uploadBusy) return;
+          const sessionIdToComplete = String(this.activeUploadSession.sessionId || '').trim();
+          if (!sessionIdToComplete) {
+            this.clearActiveUploadSession();
+            this.error = this.t('errorUploadExpired');
+            this.status = this.error;
+            return;
+          }
+          try {
+            this.uploadBusy = true;
+            this.error = '';
+            this.status = this.t('statusUploading');
+            const completed = await this.client.storageUploadComplete(sessionIdToComplete);
+            const uploadedFileId = completed && typeof completed.fileId === 'string' && completed.fileId.trim()
+              ? completed.fileId.trim()
+              : (completed && typeof completed.id === 'string' && completed.id.trim()
+                  ? completed.id.trim()
+                  : sessionIdToComplete
+                );
+            const previousUploadDraft = this.uploadDraft;
+            const fileNameToKeep = typeof previousUploadDraft.fileName === 'string' ? previousUploadDraft.fileName : '';
+            const mimeTypeToKeep = typeof previousUploadDraft.mimeType === 'string' ? previousUploadDraft.mimeType : 'image/jpeg';
+            const visibilityToKeep = typeof previousUploadDraft.visibility === 'string' ? previousUploadDraft.visibility : 'private';
+            const targetParentId = typeof this.activeUploadSession.parentId === 'string' && this.activeUploadSession.parentId.trim()
+              ? this.activeUploadSession.parentId.trim()
+              : null;
+            if (uploadedFileId && targetParentId) {
+              await this.client.filesMove(uploadedFileId, targetParentId, { space: 'local' });
+            }
+            this.clearActiveUploadSession();
+            this.uploadDraft = {
+              fileName: fileNameToKeep,
+              mimeType: mimeTypeToKeep,
+              sizeBytes: '0',
+              visibility: visibilityToKeep,
+              file: null,
+            };
+            this.status = this.t('uploadCompleteDone');
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+          } catch (err) {
+            const message = mapErrorMessage(err, this.t.bind(this));
+            if (message === this.t('storageUnavailable')) {
+              this.storageReady = false;
+              this.clearActiveUploadSession();
+            } else if (message === this.t('errorUploadExpired')) {
+              this.clearActiveUploadSession();
+            }
+            this.error = message;
+            this.status = this.error;
+          } finally {
+            this.uploadBusy = false;
+          }
+        },
+
+        openCreateFolderModal() {
+          this.inputModal = {
+            kind: 'createFolder',
+            title: this.t('folder'),
+            value: '',
+          };
+        },
+
+        openRenameModal(item) {
+          if (!item || item.readonly || this.isSystemRootFolder(item)) return;
+          this.actionItem = null;
+          this.inputModal = {
+            kind: 'rename',
+            title: this.t('rename'),
+            item,
+            value: item.name || '',
+          };
+        },
+
+        openDeleteConfirm(item) {
+          if (!item || item.readonly || this.isSystemRootFolder(item)) return;
+          this.actionItem = null;
+          this.confirmModal = {
+            title: this.t('delete'),
+            item,
+            message: `${this.t('delete')} "${item.name || item.id}"?`,
+          };
+        },
+
+        async submitCreateFolder(name) {
+          if (!this.client) return;
+          const normalizedName = sanitizeEntryName(name);
+          const validationErrorKey = getNameValidationError(normalizedName);
+          if (validationErrorKey) {
+            this.error = this.t(validationErrorKey);
+            return;
+          }
+          if (this.hasSiblingNameConflict(normalizedName, this.currentDirectoryId)) {
+            this.error = this.t('errorNameExists');
+            return;
+          }
+          try {
+            await this.client.filesCreateFolder(normalizedName, { space: 'local', parentId: this.currentDirectoryId });
+            this.inputModal = null;
+            this.status = this.t('folderCreated');
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+          }
+        },
+
+        async submitRenameItem(item, name) {
+          if (!this.client || !item || item.readonly || this.isSystemRootFolder(item)) {
+            this.error = item && this.isSystemRootFolder(item) ? this.t('systemLocked') : this.t('errorInvalidName');
+            return;
+          }
+          const normalizedName = sanitizeEntryName(name);
+          const validationErrorKey = getNameValidationError(normalizedName);
+          if (validationErrorKey) {
+            this.error = this.t(validationErrorKey);
+            return;
+          }
+          const currentName = typeof item.name === 'string' ? item.name.trim() : '';
+          if (currentName && currentName === normalizedName) {
+            this.error = this.t('errorNoChanges');
+            this.inputModal = null;
+            this.actionItem = null;
+            return;
+          }
+          if (this.hasSiblingNameConflict(normalizedName, normalizeParentId(item.parentId), item.id)) {
+            this.error = this.t('errorNameExists');
+            return;
+          }
+          try {
+            await this.client.filesRename(item.id, normalizedName, { space: 'local' });
+            this.inputModal = null;
+            this.actionItem = null;
+            this.status = this.t('renamed');
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+          }
+        },
+
+        async moveItemToRoot(item) {
+          if (!this.client || !item || item.readonly || this.isSystemRootFolder(item)) {
+            if (item && this.isSystemRootFolder(item)) this.error = this.t('systemLocked');
+            return;
+          }
+          const currentParentId = normalizeParentId(item.parentId);
+          if (currentParentId === null) {
+            this.error = this.t('errorAlreadyInRoot');
+            this.actionItem = null;
+            return;
+          }
+          try {
+            await this.client.filesMove(item.id, null, { space: 'local' });
+            this.actionItem = null;
+            this.status = this.t('moved');
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+          }
+        },
+
+        async deleteItem(item) {
+          if (!this.client || !item || item.readonly || this.isSystemRootFolder(item)) {
+            if (item && this.isSystemRootFolder(item)) this.error = this.t('systemLocked');
+            return;
+          }
+          try {
+            await this.client.filesDelete(item.id, { space: 'local' });
+            this.confirmModal = null;
+            this.actionItem = null;
+            this.selectedItem = null;
+            this.status = this.t('deleted');
+            await this.loadItems(this.query);
+            await this.refreshStorageQuota();
+          } catch (err) {
+            this.error = mapErrorMessage(err, this.t.bind(this));
+          }
+        },
+      }));
+      window.__hayosFileManagerFactory = factory;
+      window.fileManagerApp = factory;
+      if (window.Alpine && !window.__hayosFileManagerRegistered) {
+        window.Alpine.data('fileManagerApp', factory);
+        window.__hayosFileManagerRegistered = true;
+      }
+      if (Array.isArray(window.__hayosFileManagerReadyResolvers) && window.__hayosFileManagerReadyResolvers.length > 0) {
+        const resolvers = window.__hayosFileManagerReadyResolvers.slice();
+        window.__hayosFileManagerReadyResolvers = [];
+        for (const resolve of resolvers) {
+          try {
+            resolve(factory);
+          } catch {
+            // ignore resolver errors
+          }
         }
-      };
-
-      const completeUpload = async () => {
-        if (!client || !activeUploadSession || !activeUploadSession.sessionId) return;
-        try {
-          await client.filesUploadComplete(activeUploadSession.sessionId, { space: 'local' });
-          setActiveUploadSession(null);
-          setStatus(t('uploadCompleteDone'));
-          await loadItems(client, query);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const submitRenameItem = async (item, name) => {
-        if (!client || !item || item.readonly || !name || !name.trim()) return;
-        try {
-          await client.filesRename(item.id, name.trim(), {
-            space: 'local',
-          });
-          setInputModal(null);
-          setActionItem(null);
-          setStatus(t('renamed'));
-          await loadItems(client, query);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const moveItemToRoot = async (item) => {
-        if (!client || !item || item.readonly) return;
-        try {
-          await client.filesMove(item.id, null, {
-            space: 'local',
-          });
-          setActionItem(null);
-          setStatus(t('moved'));
-          await loadItems(client, query);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const deleteItem = async (item) => {
-        if (!client || !item || item.readonly) return;
-        try {
-          await client.filesDelete(item.id, {
-            space: 'local',
-          });
-          setConfirmModal(null);
-          setActionItem(null);
-          setSelectedItem(null);
-          setStatus(t('deleted'));
-          await loadItems(client, query);
-        } catch (err) {
-          setError(err && err.message ? err.message : String(err));
-        }
-      };
-
-      const openCreateFolderModal = () => {
-        setInputModal({
-          kind: 'createFolder',
-          title: t('folder'),
-          value: '',
-        });
-      };
-
-      const openUploadModal = () => {
-        setInputModal({
-          kind: 'upload',
-          title: t('upload'),
-          fileName: '',
-          mimeType: 'image/jpeg',
-          sizeBytes: '2048',
-        });
-      };
-
-      const openRenameModal = (item) => {
-        if (!item || item.readonly) return;
-        setInputModal({
-          kind: 'rename',
-          title: t('rename'),
-          item,
-          value: item.name || '',
-        });
-      };
-
-      const openDeleteConfirm = (item) => {
-        if (!item || item.readonly) return;
-        setConfirmModal({
-          title: t('delete'),
-          item,
-          message: `${t('delete')} "${item.name || item.id}"?`,
-        });
-      };
-
-      const onFilePicked = (event) => {
-        const file = event && event.target && event.target.files && event.target.files[0]
-          ? event.target.files[0]
-          : null;
-        if (!file) return;
-        setUploadDraft((prev) => ({
-          ...prev,
-          fileName: typeof file.name === 'string' ? file.name : prev.fileName,
-          mimeType: typeof file.type === 'string' && file.type ? file.type : prev.mimeType,
-          sizeBytes: String(typeof file.size === 'number' ? file.size : prev.sizeBytes),
-          file,
-        }));
-      };
-
-      return h(
-        'main',
-        { className: 'h-full max-w-md mx-auto flex flex-col bg-base-100' },
-        h(
-          'header',
-          { className: 'sticky top-0 z-10 bg-base-100/95 backdrop-blur border-b border-base-300 p-3 space-y-2' },
-          h(
-            'div',
-            { className: 'flex items-start justify-between gap-3' },
-            h('div', null,
-              h('h1', { className: 'text-lg font-semibold leading-tight' }, t('title')),
-              h('p', { className: 'text-xs opacity-70' }, t('subtitle'))
-            ),
-            h('div', { className: 'text-right' },
-              h('div', { className: 'badge badge-outline text-[10px]' }, 'local'),
-              h('div', { className: 'text-[10px] opacity-70 mt-1' }, user && user.uid ? user.uid.slice(0, 10) : '-')
-            )
-          ),
-          h(
-            'label',
-            { className: 'input input-bordered input-sm flex items-center gap-2' },
-            h('i', { className: 'fa-solid fa-magnifying-glass opacity-60' }),
-            h('input', {
-              className: 'grow',
-              value: query,
-              onChange: (event) => setQuery(event.target.value),
-              placeholder: t('searchPlaceholder'),
-            })
-          )
-        ),
-        h(
-          'section',
-          { className: 'flex-1 overflow-auto p-3 pb-28 space-y-2' },
-          error ? h('div', { className: 'alert alert-error text-sm' }, error) : null,
-          h('div', { className: 'text-xs opacity-70 px-1' }, `Status: ${status}`),
-          activeUploadSession && activeUploadSession.sessionId
-            ? h('div', { className: 'alert alert-info text-xs' }, `Upload session: ${activeUploadSession.sessionId}`)
-            : null,
-          h(
-              'section',
-              { className: 'card bg-base-200 border border-base-300 p-3 space-y-2' },
-              h('h3', { className: 'text-sm font-semibold' }, t('uploadSectionTitle')),
-              h('input', {
-                type: 'file',
-                className: 'file-input file-input-bordered file-input-sm w-full',
-                onChange: onFilePicked,
-              }),
-              h(
-                'div',
-                { className: 'grid grid-cols-1 gap-2' },
-                h('input', {
-                  className: 'input input-bordered input-sm w-full',
-                  placeholder: t('uploadPromptName'),
-                  value: uploadDraft.fileName,
-                  onChange: (event) => setUploadDraft((prev) => ({ ...prev, fileName: event.target.value })),
-                }),
-                h('input', {
-                  className: 'input input-bordered input-sm w-full',
-                  placeholder: t('uploadPromptMime'),
-                  value: uploadDraft.mimeType,
-                  onChange: (event) => setUploadDraft((prev) => ({ ...prev, mimeType: event.target.value })),
-                }),
-                h('input', {
-                  className: 'input input-bordered input-sm w-full',
-                  placeholder: t('uploadPromptSize'),
-                  value: uploadDraft.sizeBytes,
-                  onChange: (event) => setUploadDraft((prev) => ({ ...prev, sizeBytes: event.target.value })),
-                }),
-                h(
-                  'select',
-                  {
-                    className: 'select select-bordered select-sm w-full',
-                    value: uploadDraft.visibility,
-                    onChange: (event) => setUploadDraft((prev) => ({ ...prev, visibility: event.target.value })),
-                  },
-                  h('option', { value: 'private' }, 'private'),
-                  h('option', { value: 'followers' }, 'followers'),
-                  h('option', { value: 'public' }, 'public')
-                )
-              ),
-              h(
-                'div',
-                { className: 'grid grid-cols-2 gap-2' },
-                h(
-                  'button',
-                  {
-                    className: 'btn btn-sm btn-primary',
-                    disabled: !client || !firebaseStorage || !uploadDraft.file,
-                    onClick: () => submitUpload(uploadDraft),
-                  },
-                  t('upload')
-                ),
-                h(
-                  'button',
-                  {
-                    className: 'btn btn-sm btn-outline',
-                    disabled: !activeUploadSession || !activeUploadSession.sessionId || !client,
-                    onClick: completeUpload,
-                  },
-                  t('completeUpload')
-                )
-              )
-            ),
-          osTheme && osTheme.mode
-            ? h('div', { className: 'text-[11px] opacity-60 px-1' }, `Theme mode: ${osTheme.mode}`)
-            : null,
-          loading
-            ? h('div', { className: 'space-y-2' },
-                h('div', { className: 'skeleton h-16 w-full' }),
-                h('div', { className: 'skeleton h-16 w-full' }),
-                h('div', { className: 'skeleton h-16 w-full' })
-              )
-            : null,
-          !loading && items.length === 0
-            ? h('div', { className: 'card bg-base-200 p-4 text-sm opacity-70' }, t('empty'))
-            : null,
-          !loading && items.map((item) =>
-            h(
-              'article',
-              { key: item.id, className: 'card bg-base-200 border border-base-300 p-3' },
-              h(
-                'div',
-                { className: 'flex items-center justify-between gap-3' },
-                h(
-                  'div',
-                  { className: 'flex items-center gap-3 min-w-0 flex-1 cursor-pointer', onClick: () => openItem(item) },
-                  h('i', { className: item.kind === 'folder' ? 'fa-solid fa-folder text-warning' : 'fa-solid fa-file text-info' }),
-                  h(
-                    'div',
-                    { className: 'min-w-0' },
-                    h('p', { className: 'text-sm font-medium truncate' }, item.name),
-                    h('p', { className: 'text-[11px] opacity-70' }, item.kind === 'folder' ? t('folder') : formatBytes(item.sizeBytes))
-                  )
-                ),
-                h(
-                  'button',
-                  { className: 'text-right' },
-                  h('span', { className: `badge badge-xs ${item.readonly ? 'badge-ghost' : 'badge-primary'}` }, item.readonly ? 'ro' : 'rw'),
-                  h('p', { className: 'text-[10px] opacity-60 mt-1' }, item.visibility || '-'),
-                  !item.readonly
-                    ? h('i', { className: 'fa-solid fa-ellipsis-vertical text-xs opacity-70 ml-2', onClick: () => setActionItem(item) })
-                    : null
-                )
-              )
-            )
-          )
-        ),
-        h(
-          'footer',
-          { className: 'fixed bottom-0 left-0 right-0 mx-auto max-w-md border-t border-base-300 bg-base-100/95 backdrop-blur p-3' },
-          h(
-            'div',
-            { className: 'grid grid-cols-3 gap-2' },
-            h(
-              'button',
-              { className: 'btn btn-sm btn-outline', onClick: onRefresh, disabled: loading || !client },
-              h('i', { className: 'fa-solid fa-rotate mr-2' }),
-              t('refresh')
-            ),
-            h(
-              'button',
-              { className: 'btn btn-sm btn-primary', disabled: loading || !client, onClick: openUploadModal },
-              h('i', { className: 'fa-solid fa-upload mr-2' }),
-              t('upload')
-            ),
-            h(
-              'button',
-              { className: 'btn btn-sm btn-secondary', disabled: loading || !client, onClick: openCreateFolderModal },
-              h('i', { className: 'fa-solid fa-folder-plus mr-2' }),
-              t('folder')
-            )
-          )
-        ),
-        selectedItem
-          ? h(
-            'div',
-            { className: 'fixed inset-0 bg-black/40 z-40 flex items-end', onClick: () => setSelectedItem(null) },
-            h(
-              'section',
-              { className: 'w-full bg-base-100 rounded-t-2xl p-4 space-y-3', onClick: (event) => event.stopPropagation() },
-              h('div', { className: 'flex items-center justify-between' },
-                h('h3', { className: 'font-semibold' }, t('details')),
-                h('button', { className: 'btn btn-xs btn-outline', onClick: () => setSelectedItem(null) }, t('close'))
-              ),
-              h('p', { className: 'text-sm font-medium break-all' }, selectedItem.name || selectedItem.id),
-              h('p', { className: 'text-xs opacity-70' }, `id: ${selectedItem.id}`),
-              h('p', { className: 'text-xs opacity-70' }, `kind: ${selectedItem.kind || 'file'}`),
-              h('p', { className: 'text-xs opacity-70' }, `size: ${formatBytes(selectedItem.sizeBytes)}`),
-              h('p', { className: 'text-xs opacity-70' }, `visibility: ${selectedItem.visibility || '-'}`)
-            )
-          )
-          : null,
-        actionItem
-          ? h(
-            'div',
-            { className: 'fixed inset-0 bg-black/40 z-50 flex items-end', onClick: () => setActionItem(null) },
-            h(
-              'section',
-              { className: 'w-full bg-base-100 rounded-t-2xl p-4 space-y-2', onClick: (event) => event.stopPropagation() },
-              h('h3', { className: 'font-semibold mb-2' }, t('actionSheet')),
-              h('button', { className: 'btn btn-block btn-outline', onClick: () => openItem(actionItem) }, t('open')),
-              h('button', { className: 'btn btn-block btn-outline', onClick: () => openRenameModal(actionItem) }, t('rename')),
-              h('button', { className: 'btn btn-block btn-outline', onClick: () => moveItemToRoot(actionItem) }, t('moveRoot')),
-              h('button', { className: 'btn btn-block btn-error btn-outline', onClick: () => openDeleteConfirm(actionItem) }, t('delete')),
-              h('button', { className: 'btn btn-block', onClick: () => setActionItem(null) }, t('close'))
-            )
-          )
-          : null,
-        activeUploadSession && activeUploadSession.sessionId
-          ? h(
-            'button',
-            {
-              className: 'fixed right-4 bottom-24 z-40 btn btn-primary btn-sm shadow-lg',
-              onClick: completeUpload,
-            },
-            h('i', { className: 'fa-solid fa-check mr-2' }),
-            t('upload')
-          )
-          : null,
-        inputModal
-          ? h(
-            'div',
-            { className: 'fixed inset-0 bg-black/40 z-[60] flex items-end', onClick: () => setInputModal(null) },
-            h(
-              'section',
-              { className: 'w-full bg-base-100 rounded-t-2xl p-4 space-y-3', onClick: (event) => event.stopPropagation() },
-              h('div', { className: 'flex items-center justify-between' },
-                h('h3', { className: 'font-semibold' }, inputModal.title || ''),
-                h('button', { className: 'btn btn-xs btn-outline', onClick: () => setInputModal(null) }, t('close'))
-              ),
-              inputModal.kind === 'upload'
-                ? h(
-                  'div',
-                  { className: 'space-y-2' },
-                  h('input', {
-                    className: 'input input-bordered w-full',
-                    placeholder: t('uploadPromptName'),
-                    value: inputModal.fileName || '',
-                    onChange: (event) => setInputModal((prev) => ({ ...prev, fileName: event.target.value })),
-                  }),
-                  h('input', {
-                    className: 'input input-bordered w-full',
-                    placeholder: t('uploadPromptMime'),
-                    value: inputModal.mimeType || '',
-                    onChange: (event) => setInputModal((prev) => ({ ...prev, mimeType: event.target.value })),
-                  }),
-                  h('input', {
-                    className: 'input input-bordered w-full',
-                    placeholder: t('uploadPromptSize'),
-                    value: inputModal.sizeBytes || '',
-                    onChange: (event) => setInputModal((prev) => ({ ...prev, sizeBytes: event.target.value })),
-                  }),
-                )
-                : h('input', {
-                  className: 'input input-bordered w-full',
-                  placeholder: inputModal.kind === 'rename' ? t('rename') : t('createFolderPrompt'),
-                  value: inputModal.value || '',
-                  onChange: (event) => setInputModal((prev) => ({ ...prev, value: event.target.value })),
-                }),
-              h(
-                'div',
-                { className: 'grid grid-cols-2 gap-2 pt-2' },
-                h('button', { className: 'btn btn-outline', onClick: () => setInputModal(null) }, t('cancel')),
-                h(
-                  'button',
-                  {
-                    className: 'btn btn-primary',
-                    onClick: () => {
-                      if (inputModal.kind === 'createFolder') {
-                        submitCreateFolder(inputModal.value || '');
-                        return;
-                      }
-                      if (inputModal.kind === 'rename') {
-                        submitRenameItem(inputModal.item, inputModal.value || '');
-                        return;
-                      }
-                      if (inputModal.kind === 'upload') {
-                        submitUpload({
-                          fileName: inputModal.fileName || '',
-                          mimeType: inputModal.mimeType || '',
-                          sizeBytes: inputModal.sizeBytes || '',
-                          file: inputModal.file || null,
-                        });
-                      }
-                    },
-                  },
-                  t('save')
-                )
-              )
-            )
-          )
-          : null,
-        confirmModal
-          ? h(
-            'div',
-            { className: 'fixed inset-0 bg-black/40 z-[70] flex items-end', onClick: () => setConfirmModal(null) },
-            h(
-              'section',
-              { className: 'w-full bg-base-100 rounded-t-2xl p-4 space-y-3', onClick: (event) => event.stopPropagation() },
-              h('h3', { className: 'font-semibold' }, confirmModal.title || t('confirm')),
-              h('p', { className: 'text-sm opacity-80' }, confirmModal.message || ''),
-              h(
-                'div',
-                { className: 'grid grid-cols-2 gap-2 pt-2' },
-                h('button', { className: 'btn btn-outline', onClick: () => setConfirmModal(null) }, t('cancel')),
-                h(
-                  'button',
-                  {
-                    className: 'btn btn-error',
-                    onClick: () => deleteItem(confirmModal.item),
-                  },
-                  t('confirm')
-                )
-              )
-            )
-          )
-          : null
-      );
+      }
     }
 
-    const root = createRoot(document.getElementById('app'));
-    root.render(h(FileManagerApp));
+    registerFileManagerApp();
+    if (window.Alpine && typeof window.__hayosStartAlpine === 'function') {
+      const startAlpine = window.__hayosStartAlpine;
+      window.__hayosStartAlpine = null;
+      startAlpine();
+    }
+    if (!window.Alpine) {
+      document.addEventListener('alpine:init', () => {
+        registerFileManagerApp();
+        if (typeof window.__hayosStartAlpine === 'function') {
+          const startAlpine = window.__hayosStartAlpine;
+          window.__hayosStartAlpine = null;
+          startAlpine();
+        }
+      }, { once: true });
+    }
   </script>
 </body>
 </html>

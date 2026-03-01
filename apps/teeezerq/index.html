@@ -219,9 +219,55 @@
         <div class="mt-2 max-h-[min(30vh,18rem)] overflow-auto break-words text-base-content/90 leading-relaxed"
           id="sidebar-record-body"></div>
       </div>
+      <div id="sidebar-friend-actions" class="mt-2 rounded-lg border border-base-300/80 bg-base-200/70 p-3">
+        <div id="sidebar-friend-view-badge" class="mb-2 hidden rounded border border-info/70 bg-info/15 px-2 py-1 text-[11px] font-medium text-info">
+          Viewing friend planet
+        </div>
+        <div id="sidebar-friend-target" class="mb-2 truncate text-[11px] font-medium opacity-85">Friend planet: -</div>
+        <button id="sidebar-open-friend-planet" type="button"
+          class="btn btn-primary btn-sm w-full justify-start text-left normal-case">
+          Go to friend planet
+        </button>
+        <button id="sidebar-back-from-friend" type="button"
+          class="btn btn-ghost btn-sm mt-2 w-full justify-start text-left normal-case">
+          Back
+        </button>
+      </div>
     </div>
   </aside>
   <canvas id="c" class="fixed inset-0 block h-full w-full select-none" tabindex="0"></canvas>
+  <section id="list-shell" class="fixed inset-0 z-20 hidden bg-base-100 text-base-content">
+    <div class="mx-auto flex h-full w-full max-w-3xl flex-col px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-[max(0.7rem,env(safe-area-inset-top))] sm:px-4">
+      <header class="mb-2 rounded-xl border border-base-300/80 bg-base-200/70 px-3 py-2">
+        <div class="flex items-center justify-between gap-2 text-xs">
+          <div class="flex min-w-0 items-center gap-2">
+            <button id="list-shell-zoom-out" type="button" class="hidden rounded border border-base-300/80 px-1.5 py-0.5 text-[10px] opacity-80">←</button>
+            <span id="list-shell-current-label" class="font-medium opacity-70">Current planet</span>
+          </div>
+          <span id="list-shell-current-value" class="max-w-[68%] truncate text-right font-semibold">-</span>
+        </div>
+        <div id="list-shell-breadcrumb" class="mt-1 hidden truncate text-[11px] opacity-70"></div>
+      </header>
+      <main class="min-h-0 flex-1 overflow-auto rounded-xl border border-base-300/80 bg-base-100">
+        <ul id="list-shell-items" class="divide-y divide-base-300/70">
+          <li class="px-3 py-3 text-sm">• Start writing your first bullet</li>
+          <li class="px-3 py-3 text-sm opacity-80">• Keep one idea per line</li>
+          <li class="px-3 py-3 pl-8 text-sm opacity-70">• Sub-bullet example</li>
+        </ul>
+      </main>
+      <footer class="mt-2">
+        <div class="mb-1 flex items-center gap-1 text-[11px]">
+          <button id="list-shell-add-sibling" type="button" class="rounded border border-base-300/80 px-2 py-0.5 opacity-80">+Sibling</button>
+          <button id="list-shell-add-child" type="button" class="rounded border border-base-300/80 px-2 py-0.5 opacity-70">+Child</button>
+          <span id="list-shell-active-hint" class="truncate opacity-60"></span>
+        </div>
+        <label class="flex items-center gap-2 rounded-xl border border-base-300/90 bg-base-100 px-3 py-2">
+          <span class="text-sm opacity-60">•</span>
+          <input id="list-shell-quick-add" type="text" class="w-full bg-transparent text-sm outline-none" placeholder="Add bullet..." />
+        </label>
+      </footer>
+    </div>
+  </section>
   <div id="mobile-controls"
     class="fixed inset-x-0 bottom-0 z-40 hidden px-2 pb-[max(0.2rem,env(safe-area-inset-bottom))] pointer-events-none select-none">
     <div id="mobile-controls-pad"
@@ -254,8 +300,21 @@
     import { MeshSurfaceSampler } from 'https://unpkg.com/three@0.165.0/examples/jsm/math/MeshSurfaceSampler.js?module';
 
     const params = new URLSearchParams(window.location.search);
+    const IS_DEV = (
+      (typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost'
+        || window.location.hostname === '127.0.0.1'
+      ))
+      || params.get('debug') === '1'
+    );
     const APP_ID = params.get('appId') || 'teeezerq';
     const APP_STATE_DOC_ID = 'teeezerq';
+    const FRIEND_VIEW_SESSION_KEY = 'teeezerq.friendViewContext.v1';
+    const FRIENDS_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+    const FRIENDS_PROFILE_HYDRATE_LIMIT = 64;
+    const FRIENDS_HUB_PLANET_ID = '__friends_hub__';
+    const FRIENDS_HUB_LIST_LIMIT = 120;
+    const FRIENDS_HUB_TREE_ORDER = 900000;
     const UNIFORM_PLANET_RADIUS = 26;
     const UNIFORM_PLANET_EFFECTIVE_RADIUS = 34;
     const ORBIT_BASE_RADIUS = 96;
@@ -264,9 +323,20 @@
     const ORBIT_MAX_RINGS_PER_PARENT = 3;
     const ORBIT_MAX_RADIUS = 260;
     const ORBIT_SPEED_BASE = 0.0002;
+    const friendProfileCache = new Map();
+    const friendProfileInFlight = new Map();
+    const warnedMissingFriendLabelUids = new Set();
     const rawRuntimeMode = (params.get('mode') || 'wallpaper').trim().toLowerCase();
     const RUNTIME_MODE = rawRuntimeMode === 'app' ? 'app' : 'wallpaper';
     const IS_WALLPAPER_MODE = RUNTIME_MODE !== 'app';
+    if (!IS_WALLPAPER_MODE) {
+      const redirectParams = new URLSearchParams(window.location.search);
+      redirectParams.set('mode', 'app');
+      const target = `/apps/teeezerq/teeezerq.html?${redirectParams.toString()}`;
+      if (window.location.pathname !== '/apps/teeezerq/teeezerq.html') {
+        window.location.replace(target);
+      }
+    }
     const INITIAL_TRAVEL_MODE = params.has('travel')
       ? params.get('travel') !== '0'
       : IS_WALLPAPER_MODE;
@@ -485,6 +555,16 @@
     const runtimeNoticeEl = document.getElementById('runtime-notice');
     const runtimeNoticeTextEl = document.getElementById('runtime-notice-text');
     const sidebarEl = document.getElementById('planet-sidebar');
+    const canvasEl = document.getElementById('c');
+    const listShellEl = document.getElementById('list-shell');
+    const listShellCurrentLabelEl = document.getElementById('list-shell-current-label');
+    const listShellCurrentValueEl = document.getElementById('list-shell-current-value');
+    const listShellQuickAddEl = document.getElementById('list-shell-quick-add');
+    const listShellAddSiblingEl = document.getElementById('list-shell-add-sibling');
+    const listShellAddChildEl = document.getElementById('list-shell-add-child');
+    const listShellActiveHintEl = document.getElementById('list-shell-active-hint');
+    const listShellZoomOutEl = document.getElementById('list-shell-zoom-out');
+    const listShellBreadcrumbEl = document.getElementById('list-shell-breadcrumb');
     const sidebarContextEl = document.getElementById('sidebar-context');
     const sidebarCurrentLabelEl = document.getElementById('sidebar-current-label');
     const sidebarNearestLabelEl = document.getElementById('sidebar-nearest-label');
@@ -495,6 +575,10 @@
     const sidebarRecordContentEl = document.getElementById('sidebar-record-content');
     const sidebarRecordTitleEl = document.getElementById('sidebar-record-title');
     const sidebarRecordBodyEl = document.getElementById('sidebar-record-body');
+    const sidebarFriendViewBadgeEl = document.getElementById('sidebar-friend-view-badge');
+    const sidebarFriendTargetEl = document.getElementById('sidebar-friend-target');
+    const sidebarOpenFriendPlanetBtnEl = document.getElementById('sidebar-open-friend-planet');
+    const sidebarBackFromFriendBtnEl = document.getElementById('sidebar-back-from-friend');
     const mobileControlsEl = document.getElementById('mobile-controls');
     const mobileControlsPadEl = document.getElementById('mobile-controls-pad');
     const mobileZoneUpEl = document.getElementById('mobile-zone-up');
@@ -510,9 +594,16 @@
       nearestPlanet: '-',
       spaceName: '-',
       recordKey: '',
+      friendUid: '',
+      friendLabel: '',
+      friendViewActive: false,
+      friendViewUid: '',
+      friendViewLabel: '',
+      friendReturnPlanetLabel: '',
+      friendJumping: false,
     };
     let runtimeTravelMode = INITIAL_TRAVEL_MODE;
-    let runtimeSidebarOverlayForeground = true;
+    let runtimeSidebarOverlayForeground = !INITIAL_TRAVEL_MODE;
     const SIDEBAR_Z_INDEX_FOREGROUND = 35;
     const SIDEBAR_Z_INDEX_BACKGROUND = 0;
     let runtimeAppInstance = null;
@@ -525,6 +616,26 @@
         hudControls: 'Controls',
         sidebarCurrentPlanet: 'Current planet',
         sidebarNearestPlanet: 'Nearest planet',
+        listQuickAdd: 'Add bullet...',
+        listStarterPrimary: 'Start writing your first bullet',
+        listStarterSecondary: 'Keep one idea per line',
+        listStarterSub: 'Sub-bullet example',
+        listActionIndent: 'Indent',
+        listActionOutdent: 'Outdent',
+        listActionUp: 'Move up',
+        listActionDown: 'Move down',
+        listActionDelete: 'Delete',
+        listActionCollapse: 'Collapse',
+        listActionExpand: 'Expand',
+        listActionZoomIn: 'Zoom in',
+        listZoomPathPrefix: 'Path',
+        listAddSibling: '+Sibling',
+        listAddChild: '+Child',
+        listActiveHintPrefix: 'Active',
+        listActionScope: 'Scope',
+        scopeLocal: 'local',
+        scopeShared: 'shared',
+        scopePortal: 'portal',
         mobileSpeedUp: 'Speed Up',
         mobileRotateLeft: 'Rotate Left',
         mobileRotateRight: 'Rotate Right',
@@ -537,6 +648,22 @@
         homePlanet: 'Home',
         planet: 'Planet',
         blackHole: 'Black Hole',
+        friendsHubPlanet: 'Friends',
+        friendsHubDescription: 'Browse your friends and open their planets.',
+        friendRecordFallbackName: 'Friend',
+        friendRecordOpenHint: 'Select this friend and use sidebar button to enter their planet.',
+        sidebarFriendTarget: 'Friend planet',
+        sidebarFriendTargetNone: 'No friend selected',
+        sidebarGoToFriendPlanet: 'Go to friend planet',
+        sidebarBackFromFriendPlanet: 'Back to previous planet',
+        sidebarFriendOpening: 'Opening friend planet…',
+        sidebarViewingFriendPlanet: 'Viewing friend planet',
+        noticeFriendPlanetUnavailable: 'Friend planet is not available yet.',
+        noticeFriendSelectRequired: 'Select a friend record first.',
+        noticeFriendBackUnavailable: 'No previous planet to return to.',
+        noticeFriendPlanetLoading: 'Looking for friend planet…',
+        noticeFriendBackFallbackHome: 'Previous planet is unavailable. Returned to Home.',
+        noticeFriendAlreadyViewing: 'Already viewing this friend planet.',
         noticeAuthRequired: 'Authentication is required to load your live tree.',
         noticeNoTree: 'No Teeezerq tree data yet. Add paths and markdown in the editor.',
         noticeSyncIssue: 'Live tree sync failed. Retrying…',
@@ -549,6 +676,26 @@
         hudControls: 'Կառավարում',
         sidebarCurrentPlanet: 'Ընթացիկ մոլորակ',
         sidebarNearestPlanet: 'Մոտակա մոլորակ',
+        listQuickAdd: 'Ավելացնել տող...',
+        listStarterPrimary: 'Սկսիր առաջին տողից',
+        listStarterSecondary: 'Մեկ միտք՝ մեկ տողում',
+        listStarterSub: 'Ենթատող օրինակ',
+        listActionIndent: 'Խորացնել',
+        listActionOutdent: 'Հետ բերել',
+        listActionUp: 'Բարձրացնել',
+        listActionDown: 'Իջեցնել',
+        listActionDelete: 'Ջնջել',
+        listActionCollapse: 'Փակել',
+        listActionExpand: 'Բացել',
+        listActionZoomIn: 'Մտնել ներս',
+        listZoomPathPrefix: 'Ճանապարհ',
+        listAddSibling: '+Նույն մակարդակ',
+        listAddChild: '+Ենթամակարդակ',
+        listActiveHintPrefix: 'Ակտիվ',
+        listActionScope: 'Սկոպ',
+        scopeLocal: 'տեղային',
+        scopeShared: 'կիսված',
+        scopePortal: 'պորտալ',
         mobileSpeedUp: 'Արագացնել',
         mobileRotateLeft: 'Պտտել ձախ',
         mobileRotateRight: 'Պտտել աջ',
@@ -561,6 +708,22 @@
         homePlanet: 'Տուն',
         planet: 'Մոլորակ',
         blackHole: 'Սև խոռոչ',
+        friendsHubPlanet: 'Ընկերներ',
+        friendsHubDescription: 'Դիտիր ընկերներին ու բացիր նրանց մոլորակները։',
+        friendRecordFallbackName: 'Ընկեր',
+        friendRecordOpenHint: 'Ընտրիր ընկերոջը և sidebar-ի կոճակով մտիր նրա մոլորակ։',
+        sidebarFriendTarget: 'Ընկերոջ մոլորակ',
+        sidebarFriendTargetNone: 'Ընտրված ընկեր չկա',
+        sidebarGoToFriendPlanet: 'Գնալ ընկերոջ մոլորակ',
+        sidebarBackFromFriendPlanet: 'Հետ գնալ նախորդ մոլորակ',
+        sidebarFriendOpening: 'Բացում ենք ընկերոջ մոլորակը…',
+        sidebarViewingFriendPlanet: 'Դիտում ես ընկերոջ մոլորակը',
+        noticeFriendPlanetUnavailable: 'Ընկերոջ մոլորակը դեռ հասանելի չէ։',
+        noticeFriendSelectRequired: 'Սկզբում ընտրիր ընկերոջ գրառումը։',
+        noticeFriendBackUnavailable: 'Վերադառնալու նախորդ մոլորակ չկա։',
+        noticeFriendPlanetLoading: 'Փնտրում ենք ընկերոջ մոլորակը…',
+        noticeFriendBackFallbackHome: 'Նախորդ մոլորակը անհասանելի է։ Վերադարձանք Տուն։',
+        noticeFriendAlreadyViewing: 'Այս ընկերոջ մոլորակն արդեն բաց է։',
         noticeAuthRequired: 'Live tree-ը բեռնելու համար անհրաժեշտ է մուտք գործել։',
         noticeNoTree: 'Teeezerq tree տվյալներ դեռ չկան։ Ավելացրու path և markdown editor-ում։',
         noticeSyncIssue: 'Live tree sync-ը ձախողվեց։ Կրկին փորձում ենք…',
@@ -573,6 +736,11 @@
     let runtimeNoticeKey = '';
     let runtimeNoticeKind = 'info';
     let runtimeNoticeTimer = null;
+    const listShellRows = [];
+    let listShellRowCounter = 0;
+    let listShellZoomRootId = '';
+    let listShellActiveRowId = '';
+    let listShellQuickAddMode = 'sibling';
     const mobileZoneElements = {
       up: mobileZoneUpEl,
       left: mobileZoneLeftEl,
@@ -633,11 +801,377 @@
       if (hudControlsLabelEl) hudControlsLabelEl.textContent = `${t('hudControls')}:`;
       if (sidebarCurrentLabelEl) sidebarCurrentLabelEl.textContent = t('sidebarCurrentPlanet');
       if (sidebarNearestLabelEl) sidebarNearestLabelEl.textContent = t('sidebarNearestPlanet');
+      if (listShellCurrentLabelEl) listShellCurrentLabelEl.textContent = t('sidebarCurrentPlanet');
+      if (listShellQuickAddEl) listShellQuickAddEl.placeholder = t('listQuickAdd');
+      if (listShellZoomOutEl) listShellZoomOutEl.title = t('listActionOutdent');
+      if (listShellAddSiblingEl) listShellAddSiblingEl.textContent = t('listAddSibling');
+      if (listShellAddChildEl) listShellAddChildEl.textContent = t('listAddChild');
       if (mobileZoneUpLabelEl) mobileZoneUpLabelEl.textContent = t('mobileSpeedUp');
       if (mobileZoneLeftLabelEl) mobileZoneLeftLabelEl.textContent = t('mobileRotateLeft');
       if (mobileZoneRightLabelEl) mobileZoneRightLabelEl.textContent = t('mobileRotateRight');
       if (mobileZoneDownLabelEl) mobileZoneDownLabelEl.textContent = t('mobileSpeedDown');
       if (sidebarRecordEmptyEl) sidebarRecordEmptyEl.textContent = t('noActiveRecord');
+      updateSidebarFriendActionsUI();
+      if (listShellRows.length > 0) {
+        renderListShellRows();
+      }
+    }
+
+    function nextListShellRowId() {
+      listShellRowCounter += 1;
+      return `row-${listShellRowCounter}`;
+    }
+
+    function createListShellRow(content, depth = 0) {
+      return {
+        id: nextListShellRowId(),
+        content: typeof content === 'string' ? content : '',
+        depth: Math.max(0, Number.isFinite(Number(depth)) ? Math.floor(Number(depth)) : 0),
+        collapsed: false,
+        scope: 'local',
+      };
+    }
+
+    function normalizeListShellScope(scope) {
+      if (scope === 'shared' || scope === 'portal') return scope;
+      return 'local';
+    }
+
+    function nextListShellScope(scope) {
+      if (scope === 'local') return 'shared';
+      if (scope === 'shared') return 'portal';
+      return 'local';
+    }
+
+    function seedListShellRowsIfNeeded() {
+      if (listShellRows.length > 0) return;
+      listShellRows.push(createListShellRow(t('listStarterPrimary'), 0));
+      listShellRows.push(createListShellRow(t('listStarterSecondary'), 0));
+      listShellRows.push(createListShellRow(t('listStarterSub'), 1));
+    }
+
+    function commitListShellRowFromInput(rowId, input) {
+      if (!input) return;
+      const idx = listShellRows.findIndex((item) => item.id === rowId);
+      if (idx < 0) return;
+      listShellRows[idx].content = input.value;
+    }
+
+    function focusListShellRowById(rowId, placeAtEnd = true) {
+      if (!listShellEl) return;
+      const input = listShellEl.querySelector(`input[data-row-id="${rowId}"]`);
+      if (!(input instanceof HTMLInputElement)) return;
+      input.focus();
+      if (placeAtEnd) {
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+      } else {
+        input.setSelectionRange(0, 0);
+      }
+    }
+
+    function moveListShellRow(rowId, direction) {
+      const idx = listShellRows.findIndex((item) => item.id === rowId);
+      if (idx < 0) return;
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= listShellRows.length) return;
+      const [row] = listShellRows.splice(idx, 1);
+      listShellRows.splice(targetIdx, 0, row);
+      renderListShellRows();
+      focusListShellRowById(rowId, true);
+    }
+
+    function adjustListShellRowDepth(rowId, delta) {
+      const idx = listShellRows.findIndex((item) => item.id === rowId);
+      if (idx < 0) return;
+      const row = listShellRows[idx];
+      row.depth = Math.max(0, row.depth + delta);
+      renderListShellRows();
+      focusListShellRowById(rowId, true);
+    }
+
+    function deleteListShellRow(rowId) {
+      const idx = listShellRows.findIndex((item) => item.id === rowId);
+      if (idx < 0 || listShellRows.length <= 1) return;
+      const fallbackId = idx > 0
+        ? listShellRows[idx - 1].id
+        : (listShellRows[idx + 1] ? listShellRows[idx + 1].id : '');
+      listShellRows.splice(idx, 1);
+      renderListShellRows();
+      if (fallbackId) {
+        focusListShellRowById(fallbackId, true);
+      }
+    }
+
+    function listShellChildRangeStart(index) {
+      return index + 1;
+    }
+
+    function listShellChildRangeEnd(index) {
+      const row = listShellRows[index];
+      if (!row) return index;
+      let end = index;
+      for (let i = index + 1; i < listShellRows.length; i += 1) {
+        if (listShellRows[i].depth <= row.depth) break;
+        end = i;
+      }
+      return end;
+    }
+
+    function listShellChildCount(index) {
+      const end = listShellChildRangeEnd(index);
+      return Math.max(0, end - index);
+    }
+
+    function isListShellRowHiddenByCollapse(index) {
+      const row = listShellRows[index];
+      if (!row) return false;
+      for (let i = index - 1; i >= 0; i -= 1) {
+        const candidate = listShellRows[i];
+        if (candidate.depth < row.depth) {
+          if (candidate.collapsed) return true;
+        }
+      }
+      return false;
+    }
+
+    function listShellIndexById(rowId) {
+      return listShellRows.findIndex((item) => item.id === rowId);
+    }
+
+    function listShellVisibleRangeForZoom() {
+      if (!listShellZoomRootId) {
+        return { start: 0, end: listShellRows.length - 1, baseDepth: 0 };
+      }
+      const rootIndex = listShellIndexById(listShellZoomRootId);
+      if (rootIndex < 0) {
+        listShellZoomRootId = '';
+        return { start: 0, end: listShellRows.length - 1, baseDepth: 0 };
+      }
+      const end = listShellChildRangeEnd(rootIndex);
+      return { start: rootIndex, end, baseDepth: listShellRows[rootIndex].depth };
+    }
+
+    function listShellGetParentId(rowId) {
+      const idx = listShellIndexById(rowId);
+      if (idx < 0) return '';
+      const depth = listShellRows[idx].depth;
+      if (depth <= 0) return '';
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        if (listShellRows[i].depth === depth - 1) return listShellRows[i].id;
+      }
+      return '';
+    }
+
+    function listShellPathLabels(rowId) {
+      const labels = [];
+      let cursor = rowId;
+      let guard = 0;
+      while (cursor && guard < 80) {
+        const idx = listShellIndexById(cursor);
+        if (idx < 0) break;
+        const row = listShellRows[idx];
+        labels.push((row.content || '•').trim() || '•');
+        cursor = listShellGetParentId(cursor);
+        guard += 1;
+      }
+      return labels.reverse();
+    }
+
+    function updateListShellZoomHeader() {
+      if (!listShellZoomOutEl || !listShellBreadcrumbEl) return;
+      const hasZoom = Boolean(listShellZoomRootId);
+      listShellZoomOutEl.classList.toggle('hidden', !hasZoom);
+      listShellBreadcrumbEl.classList.toggle('hidden', !hasZoom);
+      if (!hasZoom) {
+        listShellBreadcrumbEl.textContent = '';
+        return;
+      }
+      listShellBreadcrumbEl.textContent = `${t('listZoomPathPrefix')}: ${listShellPathLabels(listShellZoomRootId).join(' / ')}`;
+    }
+
+    function updateListShellActiveHint() {
+      if (!listShellActiveHintEl) return;
+      if (!listShellActiveRowId) {
+        listShellActiveHintEl.textContent = '';
+        return;
+      }
+      const idx = listShellIndexById(listShellActiveRowId);
+      if (idx < 0) {
+        listShellActiveHintEl.textContent = '';
+        return;
+      }
+      const title = (listShellRows[idx].content || '•').trim() || '•';
+      listShellActiveHintEl.textContent = `${t('listActiveHintPrefix')}: ${title}`;
+    }
+
+    function updateQuickAddModeUI() {
+      if (listShellAddSiblingEl) {
+        listShellAddSiblingEl.classList.toggle('opacity-100', listShellQuickAddMode === 'sibling');
+        listShellAddSiblingEl.classList.toggle('opacity-70', listShellQuickAddMode !== 'sibling');
+      }
+      if (listShellAddChildEl) {
+        listShellAddChildEl.classList.toggle('opacity-100', listShellQuickAddMode === 'child');
+        listShellAddChildEl.classList.toggle('opacity-70', listShellQuickAddMode !== 'child');
+      }
+      updateListShellActiveHint();
+    }
+
+    function renderListShellRows() {
+      const listEl = document.getElementById('list-shell-items');
+      if (!listEl) return;
+      const zoomRange = listShellVisibleRangeForZoom();
+
+      listEl.innerHTML = '';
+      for (let i = 0; i < listShellRows.length; i += 1) {
+        const row = listShellRows[i];
+        if (i < zoomRange.start || i > zoomRange.end) {
+          continue;
+        }
+        if (isListShellRowHiddenByCollapse(i)) {
+          continue;
+        }
+        const childCount = listShellChildCount(i);
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'flex items-center gap-2';
+        wrap.style.paddingLeft = `${Math.max(0, row.depth - zoomRange.baseDepth) * 1.25}rem`;
+
+        const collapseToggle = document.createElement('button');
+        collapseToggle.type = 'button';
+        collapseToggle.className = 'w-4 text-left text-xs opacity-60';
+        if (childCount > 0) {
+          collapseToggle.textContent = row.collapsed ? '▸' : '▾';
+          collapseToggle.title = row.collapsed ? t('listActionExpand') : t('listActionCollapse');
+          collapseToggle.setAttribute('aria-label', collapseToggle.title);
+          collapseToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            row.collapsed = !row.collapsed;
+            renderListShellRows();
+            focusListShellRowById(row.id, true);
+          });
+        } else {
+          collapseToggle.textContent = '•';
+          collapseToggle.disabled = true;
+        }
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = row.content;
+        input.dataset.rowId = row.id;
+        input.className = 'w-full bg-transparent text-sm outline-none';
+        if (listShellActiveRowId === row.id) {
+          input.classList.add('font-medium');
+        }
+
+        input.addEventListener('input', () => {
+          row.content = input.value;
+          if (listShellActiveRowId === row.id) updateListShellActiveHint();
+        });
+
+        input.addEventListener('focus', () => {
+          listShellActiveRowId = row.id;
+          updateQuickAddModeUI();
+        });
+
+        input.addEventListener('blur', () => {
+          commitListShellRowFromInput(row.id, input);
+        });
+
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commitListShellRowFromInput(row.id, input);
+            const insertIndex = listShellRows.findIndex((item) => item.id === row.id) + 1;
+            const nextRow = createListShellRow('', row.depth);
+            listShellRows.splice(insertIndex, 0, nextRow);
+            renderListShellRows();
+            focusListShellRowById(nextRow.id, false);
+            return;
+          }
+
+          if (event.key === 'Backspace' && input.value.length === 0) {
+            event.preventDefault();
+            const rowIndex = listShellRows.findIndex((item) => item.id === row.id);
+            if (rowIndex < 0) return;
+            if (row.depth > 0) {
+              row.depth -= 1;
+              renderListShellRows();
+              focusListShellRowById(row.id, false);
+              return;
+            }
+            if (listShellRows.length <= 1) return;
+            const focusTargetId = rowIndex > 0 ? listShellRows[rowIndex - 1].id : listShellRows[1].id;
+            listShellRows.splice(rowIndex, 1);
+            renderListShellRows();
+            focusListShellRowById(focusTargetId, true);
+          }
+        });
+
+        const actions = document.createElement('div');
+        actions.className = 'ml-1 flex items-center gap-1';
+
+        const makeActionButton = (symbol, title, onClick) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'rounded border border-base-300/80 px-1.5 py-0.5 text-[10px] opacity-70 hover:opacity-100';
+          button.textContent = symbol;
+          button.title = title;
+          button.setAttribute('aria-label', title);
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            onClick();
+          });
+          return button;
+        };
+
+        actions.appendChild(makeActionButton('→', t('listActionIndent'), () => adjustListShellRowDepth(row.id, 1)));
+        actions.appendChild(makeActionButton('←', t('listActionOutdent'), () => adjustListShellRowDepth(row.id, -1)));
+        actions.appendChild(makeActionButton('↑', t('listActionUp'), () => moveListShellRow(row.id, -1)));
+        actions.appendChild(makeActionButton('↓', t('listActionDown'), () => moveListShellRow(row.id, 1)));
+        actions.appendChild(makeActionButton('◌', t('listActionScope'), () => {
+          row.scope = nextListShellScope(normalizeListShellScope(row.scope));
+          renderListShellRows();
+          focusListShellRowById(row.id, true);
+        }));
+        actions.appendChild(makeActionButton('↘', t('listActionZoomIn'), () => {
+          if (listShellZoomRootId === row.id) return;
+          listShellZoomRootId = row.id;
+          renderListShellRows();
+          focusListShellRowById(row.id, true);
+        }));
+        actions.appendChild(makeActionButton('×', t('listActionDelete'), () => deleteListShellRow(row.id)));
+
+        wrap.appendChild(collapseToggle);
+        wrap.appendChild(input);
+        const scopeBadge = document.createElement('span');
+        const scopeValue = normalizeListShellScope(row.scope);
+        const scopeTone = scopeValue === 'portal'
+          ? 'border-warning/70 text-warning'
+          : (scopeValue === 'shared' ? 'border-info/70 text-info' : 'border-base-300/80 opacity-70');
+        scopeBadge.className = `rounded border px-1.5 py-0.5 text-[10px] ${scopeTone}`;
+        if (scopeValue === 'portal') {
+          scopeBadge.textContent = t('scopePortal');
+        } else if (scopeValue === 'shared') {
+          scopeBadge.textContent = t('scopeShared');
+        } else {
+          scopeBadge.textContent = t('scopeLocal');
+        }
+        wrap.appendChild(scopeBadge);
+        if (childCount > 0 && row.collapsed) {
+          const hiddenCount = document.createElement('span');
+          hiddenCount.className = 'rounded border border-base-300/70 px-1.5 py-0.5 text-[10px] opacity-70';
+          hiddenCount.textContent = `+${childCount}`;
+          wrap.appendChild(hiddenCount);
+        }
+        wrap.appendChild(actions);
+        li.appendChild(wrap);
+        listEl.appendChild(li);
+      }
+      updateListShellZoomHeader();
+      updateQuickAddModeUI();
     }
 
     function runtimeNoticeTextForKey(key) {
@@ -647,6 +1181,12 @@
         'noticeNoTree',
         'noticeSyncIssue',
         'noticeSyncOk',
+        'noticeFriendPlanetUnavailable',
+        'noticeFriendSelectRequired',
+        'noticeFriendBackUnavailable',
+        'noticeFriendPlanetLoading',
+        'noticeFriendBackFallbackHome',
+        'noticeFriendAlreadyViewing',
       ];
       if (known.includes(key)) return t(key);
       return key;
@@ -791,10 +1331,32 @@
     }
 
     function applyWallpaperMode() {
-      if (sidebarEl) {
-        sidebarEl.classList.toggle('hidden', !runtimeTravelMode);
+      if (IS_WALLPAPER_MODE) {
+        if (sidebarEl) {
+          sidebarEl.classList.toggle('hidden', !runtimeTravelMode);
+        }
+        if (listShellEl) {
+          listShellEl.classList.add('hidden');
+        }
+        if (canvasEl) {
+          canvasEl.classList.remove('opacity-0', 'pointer-events-none');
+        }
+        applySidebarLayerState();
+        if (mobileControlsEl) {
+          mobileControlsEl.classList.add('hidden');
+        }
+        if (hudEl) {
+          hudEl.classList.add('hidden');
+        }
+        if (hudControlsEl) {
+          hudControlsEl.classList.add('hidden');
+        }
+        return;
       }
-      applySidebarLayerState();
+
+      if (sidebarEl) {
+        sidebarEl.classList.add('hidden');
+      }
       if (mobileControlsEl) {
         mobileControlsEl.classList.add('hidden');
       }
@@ -804,12 +1366,21 @@
       if (hudControlsEl) {
         hudControlsEl.classList.add('hidden');
       }
+      if (listShellEl) {
+        listShellEl.classList.remove('hidden');
+      }
+      if (canvasEl) {
+        canvasEl.classList.add('opacity-0', 'pointer-events-none');
+      }
     }
 
     function setRuntimeTravelMode(enabled) {
       const next = Boolean(enabled);
       if (runtimeTravelMode === next) return;
       runtimeTravelMode = next;
+      if (runtimeTravelMode) {
+        runtimeSidebarOverlayForeground = false;
+      }
       applyWallpaperMode();
       if (runtimeAppInstance && typeof runtimeAppInstance.setTravelMode === 'function') {
         runtimeAppInstance.setTravelMode(runtimeTravelMode);
@@ -818,6 +1389,8 @@
 
     applyWallpaperMode();
     setLanguage('en');
+    seedListShellRowsIfNeeded();
+    renderListShellRows();
 
     window.addEventListener('message', (event) => {
       const data = event && event.data ? event.data : null;
@@ -853,6 +1426,63 @@
       if (sidebarState.currentPlanet === next) return;
       sidebarState.currentPlanet = next;
       if (sidebarCurrentPlanetEl) sidebarCurrentPlanetEl.textContent = next;
+      if (listShellCurrentValueEl) listShellCurrentValueEl.textContent = next;
+    }
+
+    if (listShellQuickAddEl) {
+      listShellQuickAddEl.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        const text = listShellQuickAddEl.value.trim();
+        if (!text) return;
+        const activeIndex = listShellIndexById(listShellActiveRowId);
+        let insertIndex = listShellRows.length;
+        let nextDepth = 0;
+        let nextScope = 'local';
+        if (activeIndex >= 0) {
+          const activeRow = listShellRows[activeIndex];
+          if (listShellQuickAddMode === 'child') {
+            insertIndex = listShellChildRangeStart(activeIndex);
+            nextDepth = activeRow.depth + 1;
+          } else {
+            insertIndex = activeIndex + 1;
+            nextDepth = activeRow.depth;
+          }
+          nextScope = normalizeListShellScope(activeRow.scope);
+        }
+        const row = createListShellRow(text, nextDepth);
+        row.scope = nextScope;
+        listShellRows.splice(insertIndex, 0, row);
+        listShellActiveRowId = row.id;
+        listShellQuickAddEl.value = '';
+        renderListShellRows();
+        focusListShellRowById(row.id, true);
+      });
+    }
+
+    if (listShellAddSiblingEl) {
+      listShellAddSiblingEl.addEventListener('click', () => {
+        listShellQuickAddMode = 'sibling';
+        updateQuickAddModeUI();
+        if (listShellQuickAddEl) listShellQuickAddEl.focus();
+      });
+    }
+
+    if (listShellAddChildEl) {
+      listShellAddChildEl.addEventListener('click', () => {
+        listShellQuickAddMode = 'child';
+        updateQuickAddModeUI();
+        if (listShellQuickAddEl) listShellQuickAddEl.focus();
+      });
+    }
+
+    if (listShellZoomOutEl) {
+      listShellZoomOutEl.addEventListener('click', () => {
+        if (!listShellZoomRootId) return;
+        const parentId = listShellGetParentId(listShellZoomRootId);
+        listShellZoomRootId = parentId || '';
+        renderListShellRows();
+      });
     }
 
     function setSidebarNearestPlanet(name) {
@@ -869,17 +1499,134 @@
       if (sidebarSpaceNameEl) sidebarSpaceNameEl.textContent = next;
     }
 
+    function setSidebarFriendSelection(friendUid, friendLabel) {
+      const uid = typeof friendUid === 'string' ? friendUid.trim() : '';
+      const label = typeof friendLabel === 'string' ? friendLabel.trim() : '';
+      sidebarState.friendUid = uid;
+      sidebarState.friendLabel = label;
+      updateSidebarFriendActionsUI();
+    }
+
+    function setSidebarFriendNavigationState(state) {
+      const source = state && typeof state === 'object' ? state : {};
+      sidebarState.friendViewActive = source.active === true;
+      sidebarState.friendViewUid = typeof source.friendUid === 'string' ? source.friendUid.trim() : '';
+      sidebarState.friendViewLabel = typeof source.friendLabel === 'string' ? source.friendLabel.trim() : '';
+      sidebarState.friendReturnPlanetLabel = typeof source.returnPlanetLabel === 'string'
+        ? source.returnPlanetLabel.trim()
+        : '';
+      updateSidebarFriendActionsUI();
+    }
+
+    function setSidebarFriendJumpingState(active) {
+      sidebarState.friendJumping = active === true;
+      updateSidebarFriendActionsUI();
+    }
+
+    function triggerSidebarGoToFriendPlanet() {
+      if (!runtimeAppInstance || typeof runtimeAppInstance.jumpToFriendPlanet !== 'function') {
+        setRuntimeNotice('noticeFriendPlanetUnavailable', 'warning', { ttlMs: 1800 });
+        return;
+      }
+      const target = getSidebarEffectiveFriendTarget();
+      const isSameFriendAsCurrentView = sidebarState.friendViewActive
+        && Boolean(target.uid)
+        && target.uid === sidebarState.friendViewUid;
+      if (isSameFriendAsCurrentView) {
+        setSidebarFriendJumpingState(false);
+        setRuntimeNotice('noticeFriendAlreadyViewing', 'info', { ttlMs: 1400 });
+        return;
+      }
+      setSidebarFriendJumpingState(true);
+      void runtimeAppInstance.jumpToFriendPlanet(target.uid, target.label);
+    }
+
+    function triggerSidebarBackFromFriend() {
+      if (!runtimeAppInstance || typeof runtimeAppInstance.returnFromFriendPlanet !== 'function') {
+        setRuntimeNotice('noticeFriendBackUnavailable', 'warning', { ttlMs: 1800 });
+        return;
+      }
+      setSidebarFriendJumpingState(true);
+      void runtimeAppInstance.returnFromFriendPlanet();
+    }
+
+    function isTypingContextTarget(eventTarget) {
+      if (!eventTarget || !(eventTarget instanceof HTMLElement)) return false;
+      const tag = eventTarget.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (eventTarget.isContentEditable) return true;
+      return false;
+    }
+
+    function getSidebarEffectiveFriendTarget() {
+      const selectedFriendUid = sidebarState.friendUid;
+      const selectedFriendLabel = sidebarState.friendLabel || selectedFriendUid || '';
+      const viewingFriendUid = sidebarState.friendViewUid;
+      const viewingFriendLabel = sidebarState.friendViewLabel || viewingFriendUid || '';
+      const effectiveFriendUid = selectedFriendUid || (sidebarState.friendViewActive ? viewingFriendUid : '');
+      const effectiveFriendLabel = selectedFriendLabel || (sidebarState.friendViewActive ? viewingFriendLabel : '');
+      return {
+        uid: effectiveFriendUid,
+        label: effectiveFriendLabel,
+        viewingUid: viewingFriendUid,
+      };
+    }
+
+    function updateSidebarFriendActionsUI() {
+      const target = getSidebarEffectiveFriendTarget();
+      const effectiveFriendUid = target.uid;
+      const effectiveFriendLabel = target.label;
+      const viewingFriendUid = target.viewingUid;
+      const selectedFriendText = effectiveFriendLabel || t('sidebarFriendTargetNone');
+      if (sidebarFriendTargetEl) {
+        sidebarFriendTargetEl.textContent = `${t('sidebarFriendTarget')}: ${selectedFriendText}`;
+      }
+      if (sidebarFriendViewBadgeEl) {
+        sidebarFriendViewBadgeEl.textContent = t('sidebarViewingFriendPlanet');
+        sidebarFriendViewBadgeEl.classList.toggle('hidden', !sidebarState.friendViewActive);
+      }
+      if (sidebarOpenFriendPlanetBtnEl) {
+        const openLabel = sidebarState.friendJumping ? t('sidebarFriendOpening') : t('sidebarGoToFriendPlanet');
+        sidebarOpenFriendPlanetBtnEl.textContent = effectiveFriendLabel
+          ? `${openLabel}: ${effectiveFriendLabel}`
+          : openLabel;
+        const isSameFriendAsCurrentView = sidebarState.friendViewActive
+          && Boolean(effectiveFriendUid)
+          && effectiveFriendUid === viewingFriendUid;
+        const openDisabled = !effectiveFriendUid || sidebarState.friendJumping || isSameFriendAsCurrentView;
+        sidebarOpenFriendPlanetBtnEl.disabled = openDisabled;
+        sidebarOpenFriendPlanetBtnEl.classList.toggle('btn-disabled', openDisabled);
+      }
+      if (sidebarBackFromFriendBtnEl) {
+        const backLabel = t('sidebarBackFromFriendPlanet');
+        const returnPlanetLabel = sidebarState.friendReturnPlanetLabel;
+        sidebarBackFromFriendBtnEl.textContent = returnPlanetLabel
+          ? `${backLabel}: ${returnPlanetLabel}`
+          : backLabel;
+        const backDisabled = !sidebarState.friendViewActive || sidebarState.friendJumping;
+        sidebarBackFromFriendBtnEl.disabled = backDisabled;
+        sidebarBackFromFriendBtnEl.classList.toggle('btn-disabled', backDisabled);
+      }
+    }
+
     function setSidebarRecord(record, spaceName) {
       const safeSpaceName = normalizeSidebarText(spaceName);
       setSidebarSpaceName(safeSpaceName);
 
       if (!record || typeof record !== 'object') {
         sidebarState.recordKey = '';
+        setSidebarFriendSelection('', '');
         if (sidebarContextEl) sidebarContextEl.classList.remove('hidden');
         if (sidebarRecordContentEl) sidebarRecordContentEl.classList.add('hidden');
         if (sidebarRecordEmptyEl) sidebarRecordEmptyEl.classList.remove('hidden');
         return;
       }
+
+      const recordFriendUid = typeof record.friendUid === 'string' ? record.friendUid.trim() : '';
+      setSidebarFriendSelection(
+        recordFriendUid,
+        recordFriendUid ? normalizeSidebarText(record.title, t('friendRecordFallbackName')) : '',
+      );
 
       const key = [
         safeSpaceName,
@@ -905,6 +1652,34 @@
       if (sidebarRecordEmptyEl) sidebarRecordEmptyEl.classList.add('hidden');
       if (sidebarRecordContentEl) sidebarRecordContentEl.classList.remove('hidden');
     }
+
+    if (sidebarOpenFriendPlanetBtnEl) {
+      sidebarOpenFriendPlanetBtnEl.addEventListener('click', () => {
+        triggerSidebarGoToFriendPlanet();
+      });
+    }
+
+    if (sidebarBackFromFriendBtnEl) {
+      sidebarBackFromFriendBtnEl.addEventListener('click', () => {
+        triggerSidebarBackFromFriend();
+      });
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (!event || event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingContextTarget(event.target)) return;
+      if (!runtimeTravelMode) return;
+
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+      if (key === 'g') {
+        event.preventDefault();
+        triggerSidebarGoToFriendPlanet();
+      } else if (key === 'b') {
+        event.preventDefault();
+        triggerSidebarBackFromFriend();
+      }
+    });
 
     function showError(message, details) {
       if (details) {
@@ -1352,6 +2127,7 @@
             ? row.permission
             : 'private',
           order: Number.isFinite(Number(row.order)) ? Number(row.order) : ((i + 1) * 10),
+          deletedAt: typeof row.deletedAt === 'string' && row.deletedAt.trim().length > 0 ? row.deletedAt.trim() : '',
         });
       }
       return nodes;
@@ -1383,14 +2159,15 @@
     function mapTeeezerqTreeToScope(treeState) {
       const rawTree = treeState && typeof treeState === 'object' ? treeState.tree : null;
       const nodes = normalizeTreeNodes(rawTree);
-      if (nodes.length === 0) {
+      const activeNodes = nodes.filter((item) => !item.deletedAt);
+      if (activeNodes.length === 0) {
         return {
           homePlanetName: '',
           planetEntries: [],
         };
       }
 
-      const pathNodes = nodes.filter((item) => item.kind === 'path');
+      const pathNodes = activeNodes.filter((item) => item.kind === 'path');
       if (pathNodes.length === 0) {
         return {
           homePlanetName: '',
@@ -1411,7 +2188,7 @@
         childrenPathsByParent.get(parentId).push(pathNode);
       });
 
-      nodes
+      activeNodes
         .filter((item) => item.kind === 'file')
         .forEach((fileNode) => {
           const rawParentId = typeof fileNode.parentId === 'string' ? fileNode.parentId : '';
@@ -1579,6 +2356,8 @@
           planetId: safePlanetId,
           // Backward-compatible aliases until the runtime field names are fully migrated.
           spaceId: safePlanetId,
+          ownerUserId: typeof planetEntry.ownerUserId === 'string' ? planetEntry.ownerUserId.trim() : '',
+          legacySpaceId: typeof planetEntry.legacySpaceId === 'string' ? planetEntry.legacySpaceId.trim() : '',
           spaceName: normalizeSpaceName(planetEntry),
           spaceDescription: typeof planetEntry.description === 'string' ? planetEntry.description : '',
           portalKind,
@@ -1604,6 +2383,236 @@
           rotationAxis: axisFromHash(hash),
         };
       });
+    }
+
+    function normalizeFriendsRows(raw) {
+      if (Array.isArray(raw)) return raw;
+      if (raw && typeof raw === 'object' && Array.isArray(raw.friends)) return raw.friends;
+      return [];
+    }
+
+    function resolveFriendDisplayName(row, profile, peerUid, index) {
+      const profileSource = profile && typeof profile === 'object' ? profile : {};
+      const rowSource = row && typeof row === 'object' ? row : {};
+      const shortUid = (typeof peerUid === 'string' && peerUid.trim().length > 12)
+        ? `${peerUid.trim().slice(0, 6)}…${peerUid.trim().slice(-4)}`
+        : (typeof peerUid === 'string' ? peerUid.trim() : '');
+      return (
+        (typeof profileSource.displayName === 'string' && profileSource.displayName.trim())
+        || (typeof profileSource.username === 'string' && profileSource.username.trim())
+        || (typeof rowSource.displayName === 'string' && rowSource.displayName.trim())
+        || (typeof rowSource.username === 'string' && rowSource.username.trim())
+        || (typeof rowSource.name === 'string' && rowSource.name.trim())
+        || (shortUid ? `${t('friendRecordFallbackName')} ${shortUid}` : '')
+        || `${t('friendRecordFallbackName')} ${index + 1}`
+      );
+    }
+
+    function hasConcreteFriendLabel(row, profile) {
+      const profileSource = profile && typeof profile === 'object' ? profile : {};
+      const rowSource = row && typeof row === 'object' ? row : {};
+      return Boolean(
+        (typeof profileSource.displayName === 'string' && profileSource.displayName.trim())
+        || (typeof profileSource.username === 'string' && profileSource.username.trim())
+        || (typeof rowSource.displayName === 'string' && rowSource.displayName.trim())
+        || (typeof rowSource.username === 'string' && rowSource.username.trim())
+        || (typeof rowSource.name === 'string' && rowSource.name.trim())
+      );
+    }
+
+    function getCachedFriendProfile(peerUid) {
+      const uid = typeof peerUid === 'string' ? peerUid.trim() : '';
+      if (!uid) return null;
+      const cached = friendProfileCache.get(uid);
+      if (!cached || typeof cached !== 'object') return null;
+      const expiresAt = Number(cached.expiresAt);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        friendProfileCache.delete(uid);
+        return null;
+      }
+      return cached.profile && typeof cached.profile === 'object' ? cached.profile : null;
+    }
+
+    function setCachedFriendProfile(peerUid, profile) {
+      const uid = typeof peerUid === 'string' ? peerUid.trim() : '';
+      if (!uid || !profile || typeof profile !== 'object') return;
+      friendProfileCache.set(uid, {
+        profile,
+        expiresAt: Date.now() + FRIENDS_PROFILE_CACHE_TTL_MS,
+      });
+    }
+
+    async function fetchFriendProfile(client, peerUid) {
+      const uid = typeof peerUid === 'string' ? peerUid.trim() : '';
+      if (!uid || !client) return null;
+      const cached = getCachedFriendProfile(uid);
+      if (cached) return cached;
+      const existingRequest = friendProfileInFlight.get(uid);
+      if (existingRequest && typeof existingRequest.then === 'function') {
+        return existingRequest;
+      }
+      const request = (async () => {
+        let profile = null;
+        try {
+          if (typeof client.socialProfileGet === 'function') {
+            profile = await client.socialProfileGet(uid);
+          } else {
+            profile = await sendPlanetRequest(client, {
+              kind: 'social.profile.get',
+              uid,
+            });
+          }
+        } catch {
+          profile = null;
+        }
+        if (!profile || typeof profile !== 'object') return null;
+        setCachedFriendProfile(uid, profile);
+        return profile;
+      })();
+      friendProfileInFlight.set(uid, request);
+      let profile = null;
+      try {
+        profile = await request;
+        return profile;
+      } finally {
+        friendProfileInFlight.delete(uid);
+      }
+    }
+
+    async function hydrateFriendProfiles(client, peerUids) {
+      const result = new Map();
+      const uniqueUids = [...new Set((Array.isArray(peerUids) ? peerUids : [])
+        .map((uid) => (typeof uid === 'string' ? uid.trim() : ''))
+        .filter(Boolean))]
+        .slice(0, FRIENDS_PROFILE_HYDRATE_LIMIT);
+      for (let i = 0; i < uniqueUids.length; i += 1) {
+        const uid = uniqueUids[i];
+        const profile = await fetchFriendProfile(client, uid);
+        if (profile) {
+          result.set(uid, profile);
+        }
+      }
+      return result;
+    }
+
+    function mapFriendRowToHubRecord(row, index, profileByUid) {
+      const source = row && typeof row === 'object' ? row : {};
+      const peerUidRaw = typeof source.peerUid === 'string' ? source.peerUid.trim() : '';
+      const peerUid = peerUidRaw || (typeof source.uid === 'string' ? source.uid.trim() : '');
+      const profile = profileByUid instanceof Map ? profileByUid.get(peerUid) : null;
+      const displayName = resolveFriendDisplayName(source, profile, peerUid, index);
+      const canWarnMissingLabel = (typeof IS_DEV !== 'undefined' && IS_DEV === true);
+      if (canWarnMissingLabel && peerUid && !hasConcreteFriendLabel(source, profile) && !warnedMissingFriendLabelUids.has(peerUid)) {
+        warnedMissingFriendLabelUids.add(peerUid);
+        console.warn('TeezerQ friends hub: missing profile label, falling back to uid', { peerUid });
+      }
+      const hint = t('friendRecordOpenHint');
+      const displayMatchesUid = Boolean(peerUid) && displayName.trim() === peerUid;
+      const markdown = (peerUid && !displayMatchesUid)
+        ? `# ${displayName}\n\nUID: \`${peerUid}\`\n\n${hint}`
+        : `# ${displayName}\n\n${hint}`;
+      const normalized = normalizeRecordEntry({
+        id: peerUid ? `friend-${peerUid}` : `friend-${index + 1}`,
+        title: displayName,
+        summary: (peerUid && !displayMatchesUid) ? `UID: ${peerUid}` : '',
+        content: markdown,
+      }, index, FRIENDS_HUB_PLANET_ID);
+      normalized.friendUid = peerUid;
+      return normalized;
+    }
+
+    function buildFriendsHubPlanetData(friendRows, isWallpaperMode, profileByUid) {
+      const rows = Array.isArray(friendRows) ? friendRows : [];
+      const records = rows
+        .map((row, index) => mapFriendRowToHubRecord(row, index, profileByUid))
+        .filter(Boolean);
+      const [hubPlanet] = mapPlanetScopeToPlanetData([{
+        id: FRIENDS_HUB_PLANET_ID,
+        name: t('friendsHubPlanet'),
+        description: t('friendsHubDescription'),
+        portalKind: 'planet',
+        treeDepth: 1,
+        treeOrder: FRIENDS_HUB_TREE_ORDER,
+        treeParentId: '',
+        treeBreadcrumb: t('friendsHubPlanet'),
+        recordCount: records.length,
+        records,
+      }], isWallpaperMode);
+      return hubPlanet || null;
+    }
+
+    async function fetchFriendsHubPlanetData(client, isWallpaperMode) {
+      if (!client) return null;
+      let rows = null;
+      try {
+        if (typeof client.friendsList === 'function') {
+          rows = normalizeFriendsRows(await client.friendsList({
+            scope: 'friends',
+            limit: FRIENDS_HUB_LIST_LIMIT,
+          }));
+        }
+      } catch (error) {
+        rows = null;
+      }
+      if (!rows) {
+        try {
+          rows = normalizeFriendsRows(await sendPlanetRequest(client, {
+            kind: 'friends.list',
+            scope: 'friends',
+            limit: FRIENDS_HUB_LIST_LIMIT,
+          }));
+        } catch (error) {
+          console.warn('Failed to load friends list for TeezerQ hub planet:', error);
+          return buildFriendsHubPlanetData([], isWallpaperMode, new Map());
+        }
+      }
+      if (!Array.isArray(rows)) {
+        return buildFriendsHubPlanetData([], isWallpaperMode, new Map());
+      }
+      const peerUids = rows
+        .map((row) => {
+          const source = row && typeof row === 'object' ? row : {};
+          if (typeof source.peerUid === 'string' && source.peerUid.trim()) return source.peerUid.trim();
+          if (typeof source.uid === 'string' && source.uid.trim()) return source.uid.trim();
+          return '';
+        })
+        .filter(Boolean);
+      const profileByUid = await hydrateFriendProfiles(client, peerUids);
+      return buildFriendsHubPlanetData(rows, isWallpaperMode, profileByUid);
+    }
+
+    function mergeFriendsHubPlanet(spacePlanets, hubPlanet) {
+      const source = Array.isArray(spacePlanets) ? spacePlanets : [];
+      const filtered = source.filter((entry) => !(
+        entry
+        && typeof entry.spaceId === 'string'
+        && entry.spaceId === FRIENDS_HUB_PLANET_ID
+      ));
+      if (hubPlanet) filtered.push(hubPlanet);
+      return filtered;
+    }
+
+    function mergeScopePlanetData(primaryPlanets, secondaryPlanets) {
+      const merged = [];
+      const seenKeys = new Set();
+      const appendUnique = (entries) => {
+        const list = Array.isArray(entries) ? entries : [];
+        list.forEach((entry) => {
+          if (!entry || typeof entry !== 'object') return;
+          const spaceId = typeof entry.spaceId === 'string' ? entry.spaceId.trim() : '';
+          const planetId = typeof entry.planetId === 'string' ? entry.planetId.trim() : '';
+          const fallbackKey = typeof entry.spaceName === 'string' ? entry.spaceName.trim() : '';
+          const key = spaceId || planetId || fallbackKey;
+          if (key) {
+            if (seenKeys.has(key)) return;
+            seenKeys.add(key);
+          }
+          merged.push(entry);
+        });
+      };
+      appendUnique(primaryPlanets);
+      appendUnique(secondaryPlanets);
+      return merged;
     }
 
     async function sendPlanetRequest(client, action) {
@@ -1709,25 +2718,45 @@
           spacePlanets: [],
         };
       }
+      let friendsHubPlanet = null;
+      try {
+        friendsHubPlanet = await fetchFriendsHubPlanetData(client, isWallpaperMode);
+      } catch (error) {
+        if (IS_DEV) {
+          console.warn('TeezerQ friends hub: failed to load friend planet data', error);
+        }
+      }
+      const safeFriendsHubPlanet = friendsHubPlanet || buildFriendsHubPlanetData([], isWallpaperMode, new Map());
 
       try {
         const treeScope = await fetchTeeezerqTreeScopeData(client, isWallpaperMode);
+        let graphScopePlanets = [];
+        try {
+          graphScopePlanets = await fetchPlanetScopeData(client, isWallpaperMode);
+        } catch {
+          graphScopePlanets = [];
+        }
+        const mergedScopePlanets = mergeScopePlanetData(treeScope.spacePlanets, graphScopePlanets);
+        const treeScopePlanets = mergeFriendsHubPlanet(mergedScopePlanets, safeFriendsHubPlanet);
         if (Array.isArray(treeScope.spacePlanets) && treeScope.spacePlanets.length > 0) {
           return {
             source: 'tree',
             ...treeScope,
+            spacePlanets: treeScopePlanets,
           };
         }
         if (typeof treeScope.homePlanetName === 'string' && treeScope.homePlanetName.trim().length > 0) {
           return {
             source: 'tree',
             ...treeScope,
+            spacePlanets: treeScopePlanets,
           };
         }
         if (treeScope.hasTreeState) {
           return {
             source: 'tree',
             ...treeScope,
+            spacePlanets: treeScopePlanets,
           };
         }
       } catch (error) {
@@ -1739,7 +2768,7 @@
         source: 'planet_fallback',
         hasTreeState: false,
         homePlanetName: '',
-        spacePlanets: fallbackSpacePlanets,
+        spacePlanets: mergeFriendsHubPlanet(fallbackSpacePlanets, safeFriendsHubPlanet),
       };
     }
 
@@ -1766,14 +2795,30 @@
         this.lastScopeSignature = '';
         this.scopeSyncIssueActive = false;
         this.globalSpacesListener = null;
+        this.friendsChangedUnsubscribe = null;
+        this.socialProfileUpdatedUnsubscribe = null;
         this.globalSpacesRefreshInFlight = false;
         this.globalSpacesRefreshPending = false;
         this.spaceRecordsCache = new Map();
         this.spaceRecordsInFlight = new Map();
         this.focusedRecordNode = null;
         this._recordNodeWorldPos = new THREE.Vector3();
+        this._planetTeleportCenter = new THREE.Vector3();
+        this._planetTeleportUp = new THREE.Vector3();
+        this._planetTeleportForward = new THREE.Vector3();
+        this._planetTeleportFallback = new THREE.Vector3();
         this.lastEnsuredPlanetId = 'main';
         this._motionGestureHandler = null;
+        this.friendPlanetJumpInFlight = false;
+        this.friendViewRestoreInFlight = false;
+        this.friendViewContext = {
+          active: false,
+          friendUid: '',
+          friendLabel: '',
+          friendPlanetNavId: '',
+          returnPlanetNavId: 'main',
+          returnPlanetLabel: '',
+        };
 
         this.setupRenderer();
         this.setupCamera();
@@ -1845,6 +2890,7 @@
         setSidebarCurrentPlanet(this.homePlanetName || t('homePlanet'));
         setSidebarNearestPlanet('-');
         setSidebarRecord(null, '-');
+        setSidebarFriendNavigationState({ active: false });
       }
 
       setTravelMode(enabled) {
@@ -1999,6 +3045,29 @@
           this.globalSpacesRefreshPending = true;
         };
         window.addEventListener('message', this.globalSpacesListener);
+
+        if (typeof this.client.onFriendsChanged === 'function') {
+          this.friendsChangedUnsubscribe = this.client.onFriendsChanged((payload) => {
+            const peerUid = typeof payload?.peerUid === 'string' ? payload.peerUid.trim() : '';
+            if (peerUid) {
+              friendProfileCache.delete(peerUid);
+              friendProfileInFlight.delete(peerUid);
+              warnedMissingFriendLabelUids.delete(peerUid);
+            }
+            this.globalSpacesRefreshPending = true;
+          });
+        }
+        if (typeof this.client.onSocialProfileUpdated === 'function') {
+          this.socialProfileUpdatedUnsubscribe = this.client.onSocialProfileUpdated((payload) => {
+            const uid = typeof payload?.uid === 'string' ? payload.uid.trim() : '';
+            if (uid) {
+              friendProfileCache.delete(uid);
+              friendProfileInFlight.delete(uid);
+              warnedMissingFriendLabelUids.delete(uid);
+            }
+            this.globalSpacesRefreshPending = true;
+          });
+        }
       }
 
       computeScopeSignature(spacePlanets, homePlanetName, source, hasTreeState) {
@@ -2037,7 +3106,10 @@
         this.lastLineTargetId = null;
         this.setFocusedRecordNode(null, this.getActivePlanetObject());
 
-        if (this.car.activePlanetId === 'main') return;
+        if (this.car.activePlanetId === 'main') {
+          this.updateSidebarFriendNavigationState();
+          return;
+        }
         const replacementPlanet = this.otherPlanets.planets.find((planet) => planet
           && planet.userData
           && planet.userData.navId === this.car.activePlanetId);
@@ -2059,6 +3131,7 @@
           this.car.syncMeshTransform();
           this.syncRecordNodeVisibilityByActivePlanet(replacementPlanet);
           void this.ensurePlanetRecordsLoaded(replacementPlanet);
+          this.updateSidebarFriendNavigationState();
           return;
         }
 
@@ -2073,6 +3146,7 @@
         this.car.snapToActiveSurface();
         this.car.syncMeshTransform();
         setSidebarCurrentPlanet(this.homePlanetName || t('homePlanet'));
+        this.updateSidebarFriendNavigationState();
       }
 
       async refreshPlanetScopePlanets() {
@@ -2355,6 +3429,348 @@
         return null;
       }
 
+      getNavIdFromPlanet(planet) {
+        if (!planet || planet === this.planet.mesh) return 'main';
+        if (!planet.userData) return '';
+        if (typeof planet.userData.navId === 'string' && planet.userData.navId.trim().length > 0) {
+          return planet.userData.navId.trim();
+        }
+        return '';
+      }
+
+      findPlanetByNavId(navId) {
+        const safeNavId = typeof navId === 'string' ? navId.trim() : '';
+        if (!safeNavId || safeNavId === 'main') return this.planet.mesh;
+        const planets = this.otherPlanets && Array.isArray(this.otherPlanets.planets) ? this.otherPlanets.planets : [];
+        for (let i = 0; i < planets.length; i += 1) {
+          const planet = planets[i];
+          if (!planet || !planet.userData) continue;
+          const planetNavId = typeof planet.userData.navId === 'string' ? planet.userData.navId.trim() : '';
+          if (planetNavId === safeNavId) {
+            return planet;
+          }
+        }
+        return null;
+      }
+
+      findFriendPlanetByUid(friendUid) {
+        const safeUid = typeof friendUid === 'string' ? friendUid.trim() : '';
+        if (!safeUid) return null;
+        const direct = this.findPlanetByNavId(`space:${safeUid}`);
+        if (direct) return direct;
+        const planets = this.otherPlanets && Array.isArray(this.otherPlanets.planets) ? this.otherPlanets.planets : [];
+        for (let i = 0; i < planets.length; i += 1) {
+          const planet = planets[i];
+          if (!planet || !planet.userData) continue;
+          const spaceId = typeof planet.userData.spaceId === 'string' ? planet.userData.spaceId.trim() : '';
+          const ownerUserId = typeof planet.userData.ownerUserId === 'string' ? planet.userData.ownerUserId.trim() : '';
+          const legacySpaceId = typeof planet.userData.legacySpaceId === 'string' ? planet.userData.legacySpaceId.trim() : '';
+          const portalFriendUid = typeof planet.userData.friendUid === 'string' ? planet.userData.friendUid.trim() : '';
+          if (spaceId === safeUid || ownerUserId === safeUid || legacySpaceId === safeUid || portalFriendUid === safeUid) {
+            return planet;
+          }
+        }
+        return null;
+      }
+
+      clearFriendViewContext() {
+        this.friendViewContext.active = false;
+        this.friendViewContext.friendUid = '';
+        this.friendViewContext.friendLabel = '';
+        this.friendViewContext.friendPlanetNavId = '';
+        this.friendViewContext.returnPlanetNavId = 'main';
+        this.friendViewContext.returnPlanetLabel = '';
+        this.saveFriendViewContextToSession();
+      }
+
+      setFriendViewContext(payload) {
+        const source = payload && typeof payload === 'object' ? payload : {};
+        const nextFriendUid = typeof source.friendUid === 'string' ? source.friendUid.trim() : '';
+        const nextFriendLabel = typeof source.friendLabel === 'string' ? source.friendLabel.trim() : '';
+        const nextFriendPlanetNavId = typeof source.friendPlanetNavId === 'string' ? source.friendPlanetNavId.trim() : '';
+        const nextReturnPlanetNavIdRaw = typeof source.returnPlanetNavId === 'string' ? source.returnPlanetNavId.trim() : '';
+        const nextReturnPlanetNavId = nextReturnPlanetNavIdRaw || 'main';
+        const nextReturnPlanetLabel = typeof source.returnPlanetLabel === 'string' ? source.returnPlanetLabel.trim() : '';
+        const canActivate = Boolean(nextFriendUid && nextFriendPlanetNavId);
+        if (!canActivate) {
+          this.clearFriendViewContext();
+          return;
+        }
+        this.friendViewContext.active = true;
+        this.friendViewContext.friendUid = nextFriendUid;
+        this.friendViewContext.friendLabel = nextFriendLabel;
+        this.friendViewContext.friendPlanetNavId = nextFriendPlanetNavId;
+        this.friendViewContext.returnPlanetNavId = nextReturnPlanetNavId;
+        this.friendViewContext.returnPlanetLabel = nextReturnPlanetLabel;
+        this.saveFriendViewContextToSession();
+      }
+
+      saveFriendViewContextToSession() {
+        try {
+          const payload = {
+            active: this.friendViewContext.active === true,
+            friendUid: typeof this.friendViewContext.friendUid === 'string' ? this.friendViewContext.friendUid : '',
+            friendLabel: typeof this.friendViewContext.friendLabel === 'string' ? this.friendViewContext.friendLabel : '',
+            friendPlanetNavId: typeof this.friendViewContext.friendPlanetNavId === 'string'
+              ? this.friendViewContext.friendPlanetNavId
+              : '',
+            returnPlanetNavId: typeof this.friendViewContext.returnPlanetNavId === 'string'
+              ? this.friendViewContext.returnPlanetNavId
+              : 'main',
+            returnPlanetLabel: typeof this.friendViewContext.returnPlanetLabel === 'string'
+              ? this.friendViewContext.returnPlanetLabel
+              : '',
+          };
+          window.sessionStorage.setItem(FRIEND_VIEW_SESSION_KEY, JSON.stringify(payload));
+        } catch {
+          // Ignore session storage failures in restricted environments.
+        }
+      }
+
+      loadFriendViewContextFromSession() {
+        try {
+          const raw = window.sessionStorage.getItem(FRIEND_VIEW_SESSION_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') return null;
+          return parsed;
+        } catch {
+          return null;
+        }
+      }
+
+      async restoreFriendViewFromSessionOnce() {
+        if (this.friendViewRestoreInFlight) return false;
+        this.friendViewRestoreInFlight = true;
+        try {
+          const saved = this.loadFriendViewContextFromSession();
+          if (!saved || saved.active !== true || typeof saved.friendUid !== 'string' || !saved.friendUid.trim()) {
+            return false;
+          }
+
+          const restoredFriendUid = saved.friendUid.trim();
+          const restoredFriendLabel = typeof saved.friendLabel === 'string' ? saved.friendLabel.trim() : '';
+          const restoredReturnNavId = typeof saved.returnPlanetNavId === 'string' && saved.returnPlanetNavId.trim().length > 0
+            ? saved.returnPlanetNavId.trim()
+            : 'main';
+          const restoredReturnLabel = typeof saved.returnPlanetLabel === 'string' ? saved.returnPlanetLabel.trim() : '';
+
+          let targetPlanet = this.findFriendPlanetByUid(restoredFriendUid);
+          if (!targetPlanet && this.client) {
+            await this.refreshPlanetScopePlanets().catch(() => { });
+            targetPlanet = this.findFriendPlanetByUid(restoredFriendUid);
+          }
+          if (!targetPlanet) {
+            this.clearFriendViewContext();
+            setSidebarFriendNavigationState({ active: false });
+            return false;
+          }
+
+          const targetNavId = this.getNavIdFromPlanet(targetPlanet);
+          if (!targetNavId || targetNavId === `space:${FRIENDS_HUB_PLANET_ID}`) {
+            this.clearFriendViewContext();
+            setSidebarFriendNavigationState({ active: false });
+            return false;
+          }
+
+          this.setFriendViewContext({
+            friendUid: restoredFriendUid,
+            friendLabel: restoredFriendLabel || this.getPlanetDisplayName(targetPlanet),
+            friendPlanetNavId: targetNavId,
+            returnPlanetNavId: restoredReturnNavId,
+            returnPlanetLabel: restoredReturnLabel || this.getPlanetDisplayName(this.findPlanetByNavId(restoredReturnNavId)),
+          });
+          if (!this.teleportToPlanet(targetPlanet)) {
+            this.clearFriendViewContext();
+            setSidebarFriendNavigationState({ active: false });
+            return false;
+          }
+          this.updateSidebarFriendNavigationState();
+          return true;
+        } finally {
+          this.friendViewRestoreInFlight = false;
+        }
+      }
+
+      updateSidebarFriendNavigationState() {
+        if (!this.friendViewContext || this.friendViewContext.active !== true) {
+          setSidebarFriendNavigationState({ active: false });
+          return;
+        }
+        const activePlanet = this.getActivePlanetObject();
+        const activeNavId = this.getNavIdFromPlanet(activePlanet);
+        if (!activeNavId || activeNavId !== this.friendViewContext.friendPlanetNavId) {
+          this.clearFriendViewContext();
+          setSidebarFriendNavigationState({ active: false });
+          return;
+        }
+        setSidebarFriendNavigationState({
+          active: true,
+          friendUid: this.friendViewContext.friendUid,
+          friendLabel: this.friendViewContext.friendLabel,
+          returnPlanetLabel: this.friendViewContext.returnPlanetLabel,
+        });
+      }
+
+      teleportToPlanet(planet) {
+        if (!planet) return false;
+        const targetNavId = this.getNavIdFromPlanet(planet);
+        if (!targetNavId) return false;
+        if (planet === this.planet.mesh) {
+          this._planetTeleportCenter.set(0, 0, 0);
+        } else if (typeof planet.getWorldPosition === 'function') {
+          planet.getWorldPosition(this._planetTeleportCenter);
+        } else {
+          return false;
+        }
+        const baseRadius = planet === this.planet.mesh
+          ? this.PLANET_RADIUS
+          : (Number.isFinite(planet.userData && planet.userData.radius) ? planet.userData.radius : 16);
+        const targetRadius = planet === this.planet.mesh
+          ? this.PLANET_RADIUS
+          : this.getEffectiveRadius(planet, baseRadius);
+
+        this._planetTeleportUp.copy(this.car.position).sub(this._planetTeleportCenter);
+        if (this._planetTeleportUp.lengthSq() < 1e-9) {
+          this._planetTeleportUp.copy(this.car.up);
+        }
+        if (this._planetTeleportUp.lengthSq() < 1e-9) {
+          this._planetTeleportUp.set(0, 1, 0);
+        }
+        this._planetTeleportUp.normalize();
+
+        this._planetTeleportForward.copy(this.car.forward);
+        this._planetTeleportForward.addScaledVector(
+          this._planetTeleportUp,
+          -this._planetTeleportForward.dot(this._planetTeleportUp),
+        );
+        if (this._planetTeleportForward.lengthSq() < 1e-9) {
+          this._planetTeleportForward.crossVectors(this._planetTeleportFallback.set(0, 1, 0), this._planetTeleportUp);
+          if (this._planetTeleportForward.lengthSq() < 1e-9) {
+            this._planetTeleportForward.crossVectors(this._planetTeleportFallback.set(1, 0, 0), this._planetTeleportUp);
+          }
+        }
+        this._planetTeleportForward.normalize();
+
+        this.car.setActivePlanet(
+          this._planetTeleportCenter,
+          targetRadius,
+          targetNavId,
+          planet,
+          baseRadius,
+        );
+        this.car.setPose(
+          this._planetTeleportCenter.clone().addScaledVector(this._planetTeleportUp, targetRadius + this.SURFACE_OFFSET),
+          this._planetTeleportUp,
+          this._planetTeleportForward,
+        );
+        this.car.speed = 0;
+        this.lastEnsuredPlanetId = '';
+        this.syncRecordNodeVisibilityByActivePlanet(planet);
+        this.setFocusedRecordNode(null, planet);
+        if (planet !== this.planet.mesh) {
+          void this.ensurePlanetRecordsLoaded(planet);
+        }
+        setSidebarCurrentPlanet(this.getPlanetDisplayName(planet));
+        return true;
+      }
+
+      async jumpToFriendPlanet(friendUid, friendLabel) {
+        const safeUid = typeof friendUid === 'string' ? friendUid.trim() : '';
+        if (!safeUid) {
+          setSidebarFriendJumpingState(false);
+          setRuntimeNotice('noticeFriendSelectRequired', 'warning', { ttlMs: 1800 });
+          return false;
+        }
+        if (this.friendPlanetJumpInFlight) {
+          return false;
+        }
+
+        this.friendPlanetJumpInFlight = true;
+        setSidebarFriendJumpingState(true);
+        try {
+          let targetPlanet = this.findFriendPlanetByUid(safeUid);
+          if (!targetPlanet && this.client) {
+            setRuntimeNotice('noticeFriendPlanetLoading', 'info', { ttlMs: 1400 });
+            await this.refreshPlanetScopePlanets().catch(() => { });
+            targetPlanet = this.findFriendPlanetByUid(safeUid);
+          }
+          if (!targetPlanet) {
+            setRuntimeNotice('noticeFriendPlanetUnavailable', 'warning', { ttlMs: 2000 });
+            return false;
+          }
+          const targetNavId = this.getNavIdFromPlanet(targetPlanet);
+          if (!targetNavId || targetNavId === `space:${FRIENDS_HUB_PLANET_ID}`) {
+            setRuntimeNotice('noticeFriendPlanetUnavailable', 'warning', { ttlMs: 2000 });
+            return false;
+          }
+
+          const activePlanet = this.getActivePlanetObject();
+          const activeNavId = this.getNavIdFromPlanet(activePlanet) || 'main';
+          const currentViewActive = this.friendViewContext.active === true;
+          const preservedReturnNavId = currentViewActive
+            ? (this.friendViewContext.returnPlanetNavId || 'main')
+            : activeNavId;
+          const preservedReturnPlanetLabel = currentViewActive
+            ? (this.friendViewContext.returnPlanetLabel || this.getPlanetDisplayName(this.findPlanetByNavId(this.friendViewContext.returnPlanetNavId || 'main')))
+            : this.getPlanetDisplayName(activePlanet);
+          const safeFriendLabel = (typeof friendLabel === 'string' ? friendLabel.trim() : '')
+            || this.getPlanetDisplayName(targetPlanet)
+            || safeUid;
+          this.setFriendViewContext({
+            friendUid: safeUid,
+            friendLabel: safeFriendLabel,
+            friendPlanetNavId: targetNavId,
+            returnPlanetNavId: preservedReturnNavId,
+            returnPlanetLabel: preservedReturnPlanetLabel,
+          });
+
+          if (!this.teleportToPlanet(targetPlanet)) {
+            this.clearFriendViewContext();
+            setSidebarFriendNavigationState({ active: false });
+            setRuntimeNotice('noticeFriendPlanetUnavailable', 'warning', { ttlMs: 2000 });
+            return false;
+          }
+          this.updateSidebarFriendNavigationState();
+          return true;
+        } finally {
+          this.friendPlanetJumpInFlight = false;
+          setSidebarFriendJumpingState(false);
+        }
+      }
+
+      async returnFromFriendPlanet() {
+        setSidebarFriendJumpingState(true);
+        if (!this.friendViewContext || this.friendViewContext.active !== true) {
+          setSidebarFriendJumpingState(false);
+          setRuntimeNotice('noticeFriendBackUnavailable', 'warning', { ttlMs: 1800 });
+          return false;
+        }
+        const returnNavId = this.friendViewContext.returnPlanetNavId || 'main';
+        let returnPlanet = this.findPlanetByNavId(returnNavId);
+        if (!returnPlanet && returnNavId !== 'main' && this.client) {
+          setRuntimeNotice('noticeFriendPlanetLoading', 'info', { ttlMs: 1200 });
+          await this.refreshPlanetScopePlanets().catch(() => { });
+          returnPlanet = this.findPlanetByNavId(returnNavId);
+        }
+        const usedFallbackHome = !returnPlanet;
+        if (!returnPlanet) {
+          returnPlanet = this.planet.mesh;
+        }
+        if (!this.teleportToPlanet(returnPlanet)) {
+          setSidebarFriendJumpingState(false);
+          setRuntimeNotice('noticeFriendBackUnavailable', 'warning', { ttlMs: 1800 });
+          return false;
+        }
+        this.clearFriendViewContext();
+        setSidebarFriendNavigationState({ active: false });
+        if (usedFallbackHome && returnNavId !== 'main') {
+          setRuntimeNotice('noticeFriendBackFallbackHome', 'warning', { ttlMs: 1800 });
+        }
+        setSidebarFriendJumpingState(false);
+        return true;
+      }
+
       getSpaceIdFromPlanet(planet) {
         if (!planet || !planet.userData) return '';
         if (planet === this.planet.mesh || planet.userData.navId === 'main') return '';
@@ -2495,6 +3911,7 @@
           return;
         }
         this.lastEnsuredPlanetId = activeId;
+        this.updateSidebarFriendNavigationState();
         if (!activePlanet || activeId === 'main') {
           return;
         }
@@ -2912,6 +4329,14 @@
         if (this.globalSpacesListener) {
           window.removeEventListener('message', this.globalSpacesListener);
           this.globalSpacesListener = null;
+        }
+        if (typeof this.friendsChangedUnsubscribe === 'function') {
+          this.friendsChangedUnsubscribe();
+          this.friendsChangedUnsubscribe = null;
+        }
+        if (typeof this.socialProfileUpdatedUnsubscribe === 'function') {
+          this.socialProfileUpdatedUnsubscribe();
+          this.socialProfileUpdatedUnsubscribe = null;
         }
         if (this.cameraController && typeof this.cameraController.dispose === 'function') {
           this.cameraController.dispose();
@@ -6128,6 +7553,7 @@
 
         app.startAnimationLoop();
         hideLoading();
+        void app.restoreFriendViewFromSessionOnce().catch(() => false);
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({
             type: 'hayos:wallpaperReady',
